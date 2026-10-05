@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-05",
+  "evidenceLayer": "local source, disposable PostgreSQL, sanitized built artifact",
+  "baseCommit": "a7cd069897ee46433f46816fece00a64688aa818",
+  "worker": "Codex direct in isolated task worktree",
+  "antigravityDispatch": "WORKER_UNAVAILABLE_BEFORE_DELIVERY; separate clean worker worktree preserved at exact base",
+  "reviewedCodeSubject": "9f113868af1688741add51dc963342b5708aabaf",
+  "canonicalCodeSubject": "9f113868af1688741add51dc963342b5708aabaf",
+  "migration": {
+    "file": "052_canonical_reservation_hold_finalization.sql",
+    "sha256": "7eaf74e71b15c6e1f6a0c6faf39edaeb7f2e0cebf76aa53ad9440ce684974102",
+    "appliedTo": "disposable PostgreSQL only",
+    "historicalMigrationsChanged": false
+  },
+  "contract": {
+    "directOrigin": "Current accepted W1 offer revision plus unchanged source facts, W2 server quote, exact active unexpired physical hold, matching holder/room/listing/itinerary/occupancy/currency/commercial subtotal; one transaction converts every held night into booked allocation.",
+    "resultStatus": "INVENTORY_COMMITTED; not payment capture, payable total or Guest booking confirmation",
+    "replay": "Durable command UUID and semantic fingerprint return the same reservation after response loss; different input conflicts.",
+    "security": "Only separately provisioned restricted encho_reservation_worker may execute the internal SECURITY DEFINER finalizer. Guest/web roles have no raw canonical reservation writes.",
+    "externalOrigin": "Same canonical entity permits future EXTERNAL_CHANNEL rows with null Encho quote/hold/offer; no adapter, provider reference or ingress is implemented."
+  },
+  "verification": {
+    "independentReview": {
+      "disposition": "PASS; no confirmed P0/P1 finding",
+      "sourceReviewed": ["migration 052", "canonicalReservationService.ts", "PostgreSQL adversarial suite", "legacy-order diagnostic diff"],
+      "decisiveRealPostgresRerun": "13/13 passed",
+      "legacyBuiltDiagnosticIndependentlyRerun": false
+    },
+    "canonicalFocused": "4/4 files, 49/49 tests passed",
+    "canonicalLegacyBoundary": "2/2 passed; legacy CONFIRMED order produced zero canonical reservations and zero booked units; mounted legacy routes remained contained",
+    "canonicalBuiltW2": "PASS; unquoted hold rejected; quote/hold desktop and 360px journeys passed",
+    "clientAndServerTypeScript": "PASS",
+    "repositoryLint": "PASS",
+    "gitDiffCheck": "PASS",
+    "sanitizedOfflineBuild": "PASS",
+    "fullNode24Regression": { "filesPassed": 292, "testsPassed": 3272, "testsFailed": 0, "exitCode": 0 }
+  },
+  "notEstablished": [
+    "Migration 052 or reservation worker role applied to Neon or deployed runtime",
+    "Hosted CI or production behavior",
+    "Public reservation finalization, payment capture or payable checkout",
+    "STAAH connection, external reservation ingestion or partner certification",
+    "Late-capture, cancellation, refund or tax policy"
+  ]
+}
