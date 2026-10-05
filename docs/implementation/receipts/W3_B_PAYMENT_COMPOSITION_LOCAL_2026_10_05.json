@@ -1,0 +1,48 @@
+{
+  "subject": "W3-B Task 3 internal verified payment -> canonical reservation composition authority",
+  "canonicalBase": "4e57226dd7b80eb5137a8cdcfd9ae57dc82cd801",
+  "workerBranch": "codex/antigravity-w3b-payment-composition",
+  "evidenceLevel": "local built application, disposable PostgreSQL",
+  "date": "2026-10-05",
+  "migration": {
+    "file": "054_canonical_payment_reservation_composition.sql",
+    "appliedTo": "disposable PostgreSQL only",
+    "historicalMigrationsChanged": false,
+    "migration053Modified": false
+  },
+  "service": "src/services/canonicalCompositionService.ts",
+  "testSuite": "src/test/harvo/w3b_canonical_composition_pg.test.ts",
+  "buildCommand": "npm run build:offline",
+  "testCommand": "node scripts/testing/run.mjs src/test/harvo/w3b_canonical_composition_pg.test.ts",
+  "results": {
+    "suite": "W3-B Task 3: Internal Verified Payment -> Canonical Reservation Composition Authority",
+    "testsPassed": 21,
+    "testsFailed": 0,
+    "invariantsVerified": [
+      "MATCHED_CAPTURE + valid active hold finalizes exactly one canonical reservation via W3-A canonical_finalize_direct_hold",
+      "Created reservation matches exact W3-A authority (origin_kind ENCHO_DIRECT, status INVENTORY_COMMITTED, matching quote, hold, offer, revision, itinerary, commercial snapshot)",
+      "All held inventory nights decrement held_units and increment booked_units exactly once",
+      "Booking hold status transitions atomically to CONSUMED",
+      "Exact command replay after successful finalization returns same reservation ID with replayed=true and zero second inventory effect",
+      "Two concurrent same-command executions serialize safely into one reservation and one inventory conversion",
+      "Two different command IDs racing on same payment attempt serialize safely into exactly one reservation while losing command receives PAYMENT_ALREADY_COMPOSED",
+      "INITIATED payment attempt cannot compose (fails closed with PAYMENT_STATE_NOT_CAPTURED)",
+      "AUTHORIZED payment attempt cannot compose (fails closed with PAYMENT_STATE_NOT_CAPTURED)",
+      "UNKNOWN payment attempt cannot compose (fails closed with PAYMENT_STATE_NOT_CAPTURED)",
+      "FAILED payment attempt cannot compose (fails closed with PAYMENT_STATE_NOT_CAPTURED)",
+      "RECONCILIATION_REQUIRED payment attempt cannot compose (fails closed with PAYMENT_STATE_NOT_CAPTURED)",
+      "Tampered payment_state without supporting normalized capture provider event fails closed with PAYMENT_CAPTURE_EVIDENCE_INVALID",
+      "Mismatched provider capture evidence fails closed with PAYMENT_CAPTURE_EVIDENCE_INVALID",
+      "Hold expiring after MATCHED_CAPTURE but before composition transitions attempt to RECONCILIATION_REQUIRED / HOLD_EXPIRED with zero reservation and preserved capture evidence",
+      "W3-A finalizer failure rolls back subtransaction, preserves capture evidence, and records RECONCILIATION_REQUIRED / FINALIZER_FAILURE",
+      "Response-loss replay after committed reservation recovers same reservation despite consumed hold by checking stored command before mutable eligibility checks",
+      "Same command ID with different payment attempt conflicts (COMPOSITION_COMMAND_CONFLICT)",
+      "Different command ID after payment attempt already composed rejects with PAYMENT_ALREADY_COMPOSED without creating second reservation",
+      "Guest/web role (encho_stays_web) and ordinary payment worker (encho_payment_worker) cannot invoke composition authority (permission denied)",
+      "Internal composition authority only; zero public checkout, booking activation, or confirmation routes added"
+    ]
+  },
+  "security": "Dedicated encho_composition_worker role with NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION; RLS forced on canonical_payment_reservations; web and payment workers have zero execute privileges on composition authority; composition runtime has zero raw DML on canonical tables; narrow SECURITY DEFINER procedures execute verified composition.",
+  "conclusion": "W3-B Task 3 composition authority is implemented and verified on real PostgreSQL. An eligible ENCHO_DIRECT payment attempt in MATCHED_CAPTURE state with supporting capture evidence finalizes its exact W3-A reservation exactly once, stores a durable bridge in canonical_payment_reservations, recovers lost-response command replays across consumed holds, serializes concurrent races safely, preserves capture evidence upon finalizer or expiry failures into typed reconciliation, maintains least privilege via restricted composition worker role, and preserves channel compatibility for external channel reservations.",
+  "limitations": "No real money movement, remote Neon mutation, live Razorpay API, STAAH integration or public checkout was executed. Current accepted-offer quotes retain total_paise NULL (gated by CA/tax policy); trusted MATCHED_CAPTURE payment state was established via test owner fixture for positive testing only."
+}
