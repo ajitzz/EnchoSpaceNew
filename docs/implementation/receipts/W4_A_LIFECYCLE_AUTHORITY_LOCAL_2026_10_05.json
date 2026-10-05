@@ -17,89 +17,68 @@
   "testCommand": "node scripts/testing/run.mjs src/test/harvo/w4a_canonical_lifecycle_pg.test.ts",
   "results": {
     "suite": "W4-A Task 2: Canonical Reservation Lifecycle Authority",
-    "testsPassed": 22,
+    "testsPassed": 28,
     "testsFailed": 0,
     "invariantsVerified": [
-      "No trusted transaction/session principal + caller declares reservation holder -> fails closed with LIFECYCLE_PRINCIPAL_REQUIRED (GPT-6 reproduced bypass resolved)",
-      "Trusted principal = reservation holder + own ENCHO_DIRECT reservation -> CANCELLATION_REQUESTED accepted (current_sequence = 1, replayed = false)",
-      "Trusted principal = foreign Guest -> denied fail-closed with LIFECYCLE_FORBIDDEN",
-      "Trusted principal = reservation holder but caller attempts different actor_principal text -> denied with LIFECYCLE_FORBIDDEN",
-      "Guest attempts lifecycle request for EXTERNAL_CHANNEL reservation -> denied fail-closed with LIFECYCLE_ORIGIN_NOT_SUPPORTED (GPT-6 reproduced bypass resolved)",
-      "Guest tries to submit origin_kind = EXTERNAL_CHANNEL -> denied by schema with LIFECYCLE_ORIGIN_NOT_SUPPORTED",
-      "Exact committed request with lost response replayed by same authenticated principal -> same event ID returned with replayed = true",
-      "Exact command replay attempted by foreign authenticated principal -> denied fail-closed with LIFECYCLE_FORBIDDEN before inspecting replay payload",
-      "Same command ID with changed reason semantics -> fails closed with LIFECYCLE_COMMAND_CONFLICT",
-      "Concurrent identical authenticated Guest requests serialize safely on locks -> exactly one lifecycle event inserted, one original and one replayed",
-      "Concurrent different commands for same ACTIVE -> CANCELLATION_REQUESTED transition serialize safely -> one succeeds, one conflicts with LIFECYCLE_STATE_CONFLICT",
-      "Canonical reservation with zero events projects initial derived state ACTIVE (current_sequence = 0, latest_event_id = NULL)",
-      "W3 canonical_reservations row remains immutable: status = 'INVENTORY_COMMITTED' is untouched allocation truth",
-      "inventory_days.booked_units and held_units remain completely unchanged after CANCELLATION_REQUESTED (zero inventory side effects)",
-      "Zero payment rows, ledger updates, gateway calls, or refund obligations are created (zero refund side effects; refunds deferred to W4-D)",
-      "Command ID reuse against a different reservation fails closed with LIFECYCLE_COMMAND_CONFLICT",
-      "Raw Guest/web role (encho_stays_web) cannot INSERT or UPDATE lifecycle events or command tables (permission denied via RLS and explicit revokes)",
-      "Direct UPDATE or DELETE on canonical_reservation_events is rejected by trigger with CANONICAL_RESERVATION_EVENT_IMMUTABLE",
-      "Direct UPDATE or DELETE on canonical_reservation_lifecycle_commands is rejected by trigger with CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE",
-      "Legacy bookings.status mutations (e.g. cancelled/completed) have zero effect on canonical reservation lifecycle projection",
-      "No public completed-cancellation API or CANCELLED status transition is added; inventory release deferred to W4-B",
-      "Role boundary enforcement: web, payment, and composition roles cannot execute lifecycle transitions (permission denied); lifecycle worker cannot execute W3-A direct hold finalizer or W3-B composition finalizer",
-      "assertLifecycleWorkerRole rejects broadened, superuser, or non-restricted roles with LIFECYCLE_ROLE_NOT_RESTRICTED"
+      "1. Lifecycle worker direct GUC forgery -> denied fail-closed (GPT-6 reproduced defect resolved; GUC is not authority root)",
+      "2. Lifecycle worker direct caller-principal forgery -> denied fail-closed without valid authorization",
+      "3. Lifecycle worker arbitrary capability/authority ID -> denied fail-closed with LIFECYCLE_AUTHORIZATION_NOT_FOUND",
+      "4. Lifecycle worker cannot issue authority (PostgreSQL permission denied 42501)",
+      "5. Valid authenticated Guest authority + own ENCHO_DIRECT reservation -> accepted (CANCELLATION_REQUESTED, sequence 1, replayed=false)",
+      "6. Foreign Guest authority -> denied fail-closed with LIFECYCLE_FORBIDDEN on issuance and LIFECYCLE_COMMAND_CONFLICT on mismatched consumption",
+      "7. Authority/reservation mismatch -> denied fail-closed with LIFECYCLE_COMMAND_CONFLICT",
+      "8. Authority/command semantic mismatch -> denied fail-closed with LIFECYCLE_COMMAND_CONFLICT",
+      "9. EXTERNAL_CHANNEL reservation -> denied fail-closed with LIFECYCLE_ORIGIN_NOT_SUPPORTED on issuance and consumption (GPT-6 reproduced defect resolved)",
+      "10. Guest tries to submit origin_kind = EXTERNAL_CHANNEL -> denied by schema validation with LIFECYCLE_ORIGIN_NOT_SUPPORTED",
+      "11. Exact committed replay by same authenticated Guest -> recovers same authorization and event with replayed=true",
+      "12. Unauthorized presentation of another command ID -> denied fail-closed with LIFECYCLE_COMMAND_CONFLICT",
+      "13. Same command ID + changed reason semantics -> fails closed with LIFECYCLE_COMMAND_CONFLICT",
+      "14. Concurrent use of same valid authority -> serializes safely, one original and one replayed=true, exactly one event row",
+      "15. Concurrent different commands for same ACTIVE -> CANCELLATION_REQUESTED -> serializes safely, one succeeds, one conflicts with LIFECYCLE_STATE_CONFLICT",
+      "16. Lifecycle event, command receipt, and authorization consumption remain atomic in single PostgreSQL transaction",
+      "17. Authorization capability cannot be mutated after issuance (immutability trigger rejects UPDATE and DELETE)",
+      "18. Raw web, public, and other worker roles cannot issue authority (permission denied 42501)",
+      "19. Canonical reservation with zero events projects initial derived state ACTIVE (sequence 0, latestEventId null)",
+      "20. W3 canonical_reservations row remains immutable: status = 'INVENTORY_COMMITTED' is untouched allocation truth",
+      "21. inventory_days.booked_units and held_units remain completely unchanged after CANCELLATION_REQUESTED (zero inventory side effects)",
+      "22. Zero payment rows, ledger updates, gateway calls, or refund obligations are created (zero refund side effects; refunds deferred to W4-D)",
+      "23. Raw Guest/web role (encho_stays_web) cannot INSERT or UPDATE lifecycle events, commands, or authorizations",
+      "24. Direct UPDATE or DELETE on canonical_reservation_events is rejected by trigger with CANONICAL_RESERVATION_EVENT_IMMUTABLE",
+      "25. Legacy bookings.status mutations do not alter canonical reservation lifecycle projection",
+      "26. No public completed-cancellation API or CANCELLED status transition is added; inventory release deferred to W4-B",
+      "27. Role boundary enforcement: worker cannot issue, issuer cannot transition, raw web cannot do either",
+      "28. assertLifecycleWorkerRole and assertLifecycleIssuerRole reject broadened or non-restricted roles with LIFECYCLE_ROLE_NOT_RESTRICTED"
     ]
   },
-  "trustedPrincipalAuthority": {
-    "mechanism": "current_setting('app.stays_principal', true)",
-    "enforcement": "Fail closed at database level with LIFECYCLE_PRINCIPAL_REQUIRED if missing or malformed; caller-supplied actor_principal cannot manufacture authority and must match trusted principal",
-    "serviceContext": "setStaysPrincipal(client, authenticatedPrincipal) inside transaction block"
-  },
-  "guestCommandScope": {
-    "originRestriction": "Strictly ENCHO_DIRECT; EXTERNAL_CHANNEL rejected fail-closed with LIFECYCLE_ORIGIN_NOT_SUPPORTED",
-    "eventOrigin": "Fixed to ENCHO_DIRECT",
-    "actorKind": "Fixed to GUEST; non-GUEST rejected with LIFECYCLE_ACTOR_NOT_SUPPORTED"
-  },
-  "authorityBeforeReplay": {
-    "rule": "Validate trusted principal, reservation ownership (holder_principal == trusted_principal), and origin (ENCHO_DIRECT) BEFORE inspecting command replay receipt",
-    "crossPrincipalDefense": "Existing command receipts verify existing_cmd.actor_principal == trusted_principal; foreign caller presenting valid command ID receives LIFECYCLE_FORBIDDEN without reading receipt"
+  "capabilityAuthorityArchitecture": {
+    "architecturePattern": "Preference B: Minimal command-bound capability ledger with strict separation of issuance and transition roles",
+    "authorizationTable": "canonical_reservation_lifecycle_authorizations",
+    "issuerRole": "encho_lifecycle_issuer (restricted role; granted EXECUTE on canonical_issue_cancellation_authorization only; zero table DML)",
+    "workerRole": "encho_lifecycle_worker (restricted role; granted EXECUTE on canonical_request_reservation_cancellation and SELECT on lifecycle views/authorizations; zero capability issuance; zero table DML)",
+    "forgeryDefense": "GUC setting app.stays_principal is completely removed from authority chain. Lifecycle worker direct SQL cannot forge authorizations. Issuance requires authenticated session principal matching canonical_reservations.holder_principal and ENCHO_DIRECT origin.",
+    "consumptionModel": "canonical_request_reservation_cancellation requires target_authorization_id, locks authorization row FOR UPDATE, validates exact match with reservation_id, command_id, origin_kind, reason semantics, and holder_principal, and atomically marks capability consumed (consumed_at, consumed_by_event_id).",
+    "replayModel": "Durable command receipt checked before replay. Re-issuing for same (reservation_id, command_id) recovers existing authorization. Consuming already-consumed authorization for exact same command returns original event with replayed=true; consumption by different event or command fails closed."
   },
   "eventModel": {
     "table": "canonical_reservation_events",
-    "supportedTypes": ["CANCELLATION_REQUESTED"],
-    "fields": [
-      "event_id",
-      "reservation_id",
-      "sequence_number",
-      "event_type",
-      "actor_kind",
-      "actor_principal",
-      "origin_kind",
-      "reason_code",
-      "reason_text",
-      "command_id",
-      "occurred_at",
-      "source_ref",
-      "metadata"
+    "supportedTypes": [
+      "CANCELLATION_REQUESTED"
     ],
     "immutability": "Append-only; trigger raises CANONICAL_RESERVATION_EVENT_IMMUTABLE on UPDATE or DELETE"
   },
   "commandAuthority": {
     "table": "canonical_reservation_lifecycle_commands",
     "idempotencyKey": "command_id",
-    "fingerprintAlgorithm": "sha256(jsonb_build_object(command_id, reservation_id, command_type, actor_kind, actor_principal, origin_kind, reason_code, reason_text))",
     "immutability": "Committed receipts reject UPDATE or DELETE with CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE"
   },
-  "concurrency": "Row-level lock on canonical_reservations (FOR UPDATE) serializes transitions per reservation; unique constraint on command_id catches cross-reservation collisions",
-  "actorScopeImplemented": {
-    "guest": "Enforced: exact match reservation.holder_principal == trusted_principal and origin_kind == 'ENCHO_DIRECT'",
-    "host": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending host ownership authority",
-    "staff": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending workforce IAM authority",
-    "externalChannel": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending external ingress authority"
-  },
+  "concurrency": "Row-level lock on canonical_reservations (FOR UPDATE) and canonical_reservation_lifecycle_authorizations (FOR UPDATE) serializes transitions per reservation and capability",
   "lifecycleProjection": {
     "view": "canonical_reservation_lifecycle_current",
     "function": "canonical_get_reservation_lifecycle(target_reservation_id UUID)",
     "initialDerivedState": "ACTIVE when count(events) == 0",
     "requestedState": "CANCELLATION_REQUESTED when latest event is CANCELLATION_REQUESTED"
   },
-  "zeroInventorySideEffect": "inventory_days.booked_units is not decremented; booking_holds is untouched; canonical_reservation_nights is untouched; physical allocation remains intact",
+  "zeroInventorySideEffect": "inventory_days.booked_units is not decremented; physical allocation remains intact",
   "zeroRefundSideEffect": "canonical_payment_attempts, canonical_payment_reconciliations, and gateway balances are untouched; zero refund rows created",
-  "security": "Restricted encho_lifecycle_worker role with NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION; RLS forced on events and command tables; public and web roles have zero table DML; narrow SECURITY DEFINER procedures execute verified lifecycle commands",
   "limitations": "No completed cancellation (CANCELLED) is implemented; no inventory is released (deferred to W4-B); no reservation modification is implemented (deferred to W4-C); no refund or payment ledger updates are implemented (deferred to W4-D); public checkout remains disabled; production payable authority issuer remains legally gated."
 }

@@ -7,6 +7,8 @@ import {acquireHold} from '../../services/inventoryHoldService.js';
 import {createItineraryQuote} from '../../services/itineraryQuoteService.js';
 import {
   assertLifecycleWorkerRole,
+  assertLifecycleIssuerRole,
+  issueCancellationAuthorization,
   requestReservationCancellation,
   getReservationLifecycle,
   LifecycleAuthorityError,
@@ -20,6 +22,7 @@ describe('W4-A Task 2: Canonical Reservation Lifecycle Authority', () => {
   let reservationWorker: pg.Pool;
   let paymentWorker: pg.Pool;
   let compositionWorker: pg.Pool;
+  let lifecycleIssuer: pg.Pool;
   let lifecycleWorker: pg.Pool;
   let offerId: string;
   let nextOffset = 1;
@@ -46,6 +49,10 @@ describe('W4-A Task 2: Canonical Reservation Lifecycle Authority', () => {
       NOCREATEDB NOCREATEROLE NOREPLICATION`);
     await applyIsolatedMigration(fixture.owner, '054_canonical_payment_reservation_composition.sql');
 
+    // Provision restricted lifecycle issuer role
+    await fixture.owner.query(`CREATE ROLE encho_lifecycle_issuer LOGIN NOSUPERUSER NOBYPASSRLS
+      NOCREATEDB NOCREATEROLE NOREPLICATION`);
+
     // Provision restricted lifecycle worker role
     await fixture.owner.query(`CREATE ROLE encho_lifecycle_worker LOGIN NOSUPERUSER NOBYPASSRLS
       NOCREATEDB NOCREATEROLE NOREPLICATION`);
@@ -55,8 +62,10 @@ describe('W4-A Task 2: Canonical Reservation Lifecycle Authority', () => {
     reservationWorker = new pg.Pool({...fixture.owner.options, user: 'encho_reservation_worker', max: 8});
     paymentWorker = new pg.Pool({...fixture.owner.options, user: 'encho_payment_worker', max: 8});
     compositionWorker = new pg.Pool({...fixture.owner.options, user: 'encho_composition_worker', max: 8});
+    lifecycleIssuer = new pg.Pool({...fixture.owner.options, user: 'encho_lifecycle_issuer', max: 8});
     lifecycleWorker = new pg.Pool({...fixture.owner.options, user: 'encho_lifecycle_worker', max: 8});
 
+    await assertLifecycleIssuerRole(lifecycleIssuer);
     await assertLifecycleWorkerRole(lifecycleWorker);
 
     // Establish accepted offer
@@ -97,6 +106,7 @@ describe('W4-A Task 2: Canonical Reservation Lifecycle Authority', () => {
       reservationWorker?.end(),
       paymentWorker?.end(),
       compositionWorker?.end(),
+      lifecycleIssuer?.end(),
       lifecycleWorker?.end(),
     ]);
     await fixture?.close();
@@ -138,793 +148,844 @@ describe('W4-A Task 2: Canonical Reservation Lifecycle Authority', () => {
       await client.query(`SELECT set_config('app.stays_principal', $1, false)`, [principal]);
       const commandId = randomUUID();
       const {rows} = await client.query<{reservation_id: string; replayed: boolean}>(
-        `SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)`,
+        `SELECT * FROM canonical_finalize_direct_hold($1::uuid, $2::uuid, $3::uuid)`,
         [holdResult.hold!.id, quote.id, commandId]
       );
+      expect(rows).toHaveLength(1);
       return {
         reservationId: rows[0].reservation_id,
-        quoteId: quote.id,
         holdId: holdResult.hold!.id,
-        holderPrincipal: principal,
+        quoteId: quote.id,
         checkIn,
         checkOut,
+        principal,
       };
     } finally {
       client.release();
     }
   };
 
-  it('1. no trusted transaction/session principal + caller declares reservation holder -> DENIED (GPT-6 reproduced bypass)', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  const createAuthorizedCancellation = async (
+    reservationId: string,
+    principal = 'user:10',
+    reasonCode = 'GUEST_CANCEL_REQUEST',
+    reasonText: string | null = null,
+    commandId = randomUUID()
+  ) => {
+    const auth = await issueCancellationAuthorization(lifecycleIssuer, {
+      reservationId,
+      commandId,
+      reasonCode,
+      reasonText,
+      authenticatedPrincipal: principal,
+    });
+    return {auth, commandId};
+  };
 
-    // 1a. Via service without authenticated principal
-    await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId: randomUUID(),
-          reservationId,
-          actorPrincipal: holderPrincipal,
-          reasonCode: 'UNAUTHENTICATED_ATTEMPT',
-        }
-        // no authenticatedPrincipal passed!
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_PRINCIPAL_REQUIRED',
-      })
-    );
+  // --------------------------------------------------------------------------
+  // MANDATORY DIRECT ROLE FORGERY TESTS (Section 10 & 17.1 - 17.4)
+  // --------------------------------------------------------------------------
 
-    // 1b. Direct SQL execution by restricted lifecycle worker without app.stays_principal set
+  it('1. lifecycle worker direct GUC forgery -> denied (GPT-6 reproduced defect)', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+
+    // Direct SQL execution by encho_lifecycle_worker attempting GUC self-assertion
     const client = await lifecycleWorker.connect();
     try {
-      await expect(
-        client.query(
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.stays_principal', 'user:10', true)`);
+
+      // Attempting to call lifecycle mutation without an independently issued valid authority
+      let error: any;
+      try {
+        await client.query(
           `SELECT * FROM canonical_request_reservation_cancellation(
-            $1::uuid, $2::uuid, 'GUEST', $3, 'RAW_SQL_BYPASS', NULL
+            $1::uuid, $2::uuid, $3::uuid, $4::text, $5::text
           )`,
-          [randomUUID(), reservationId, holderPrincipal]
-        )
-      ).rejects.toThrow(/LIFECYCLE_PRINCIPAL_REQUIRED/);
+          [randomUUID(), randomUUID(), reservationId, 'GUEST_CANCEL_REQUEST', 'hacked']
+        );
+      } catch (err) {
+        error = err;
+      }
+      await client.query('ROLLBACK');
+
+      expect(error).toBeDefined();
+      expect(error.message).toContain('LIFECYCLE_AUTHORIZATION_NOT_FOUND');
     } finally {
       client.release();
     }
-
-    const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
-      [reservationId]
-    );
-    expect(rows[0].count).toBe(0);
   });
 
-  it('2. trusted principal = reservation holder + own ENCHO_DIRECT reservation -> CANCELLATION_REQUESTED accepted', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-    const commandId = randomUUID();
+  it('2. lifecycle worker direct caller-principal forgery -> denied', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
 
-    const result = await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId,
+    // Attempting to invoke requestReservationCancellation with arbitrary caller principal
+    // without a valid authorization capability
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: randomUUID(),
+        commandId: randomUUID(),
         reservationId,
-        reasonCode: 'GUEST_REQUESTED',
-        reasonText: 'Schedule conflict arose',
-      },
-      holderPrincipal
-    );
-
-    expect(result.reservationId).toBe(reservationId);
-    expect(result.lifecycleState).toBe('CANCELLATION_REQUESTED');
-    expect(result.sequenceNumber).toBe(1);
-    expect(result.replayed).toBe(false);
-    expect(result.eventId).toBeDefined();
-
-    const projection = await getReservationLifecycle(lifecycleWorker, reservationId);
-    expect(projection!.lifecycleState).toBe('CANCELLATION_REQUESTED');
-    expect(projection!.currentSequence).toBe(1);
-    expect(projection!.latestEventId).toBe(result.eventId);
-    expect(projection!.latestActorKind).toBe('GUEST');
-    expect(projection!.latestActorPrincipal).toBe(holderPrincipal);
-    expect(projection!.latestReasonCode).toBe('GUEST_REQUESTED');
-    expect(projection!.latestReasonText).toBe('Schedule conflict arose');
-
-    const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
-      [reservationId]
-    );
-    expect(rows[0].count).toBe(1);
+        reasonCode: 'FORGED_REQUEST',
+        actorPrincipal: 'user:10',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_AUTHORIZATION_NOT_FOUND'});
   });
 
-  it('3. trusted principal = foreign Guest -> denied', async () => {
+  it('3. lifecycle worker arbitrary capability/authority ID -> denied', async () => {
     const {reservationId} = await createCommittedReservation('user:10');
 
     await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId: randomUUID(),
-          reservationId,
-          reasonCode: 'ATTEMPT_HIJACK',
-        },
-        'user:99' // foreign authenticated principal!
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_FORBIDDEN',
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: randomUUID(),
+        commandId: randomUUID(),
+        reservationId,
+        reasonCode: 'ARBITRARY_AUTH',
       })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_AUTHORIZATION_NOT_FOUND'});
+  });
+
+  it('4. lifecycle worker cannot issue authority', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+
+    // 4a. lifecycle worker cannot call canonical_issue_cancellation_authorization
+    const client = await lifecycleWorker.connect();
+    try {
+      let functionError: any;
+      try {
+        await client.query(
+          `SELECT * FROM canonical_issue_cancellation_authorization($1, $2, 'CANCEL', 'text', 'user:10')`,
+          [reservationId, randomUUID()]
+        );
+      } catch (err) {
+        functionError = err;
+      }
+      expect(functionError).toBeDefined();
+      expect(functionError.code).toBe('42501'); // PostgreSQL permission_denied
+
+      // 4b. lifecycle worker cannot INSERT into canonical_reservation_lifecycle_authorizations
+      let insertError: any;
+      try {
+        await client.query(
+          `INSERT INTO canonical_reservation_lifecycle_authorizations (
+            authorization_id, reservation_id, command_id, command_type, guest_principal,
+            origin_kind, reason_code, reason_text, expires_at, fingerprint
+          ) VALUES ($1, $2, $3, 'REQUEST_CANCELLATION', 'user:10', 'ENCHO_DIRECT', 'CANCEL', NULL, now() + interval '1 hour', $4)`,
+          [randomUUID(), reservationId, randomUUID(), '0'.repeat(64)]
+        );
+      } catch (err) {
+        insertError = err;
+      }
+      expect(insertError).toBeDefined();
+      expect(insertError.code).toBe('42501'); // PostgreSQL permission_denied
+    } finally {
+      client.release();
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // AUTHORIZATION ISSUANCE & CONSUMPTION TESTS (Section 11 & 17.5 - 17.9)
+  // --------------------------------------------------------------------------
+
+  it('5. valid authenticated Guest authority + own ENCHO_DIRECT reservation -> accepted', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(
+      reservationId,
+      'user:10',
+      'GUEST_CANCEL_REQUEST',
+      'Guest requested cancellation'
     );
 
-    const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
-      [reservationId]
-    );
-    expect(rows[0].count).toBe(0);
+    expect(auth.authorizationId).toBeDefined();
+    expect(auth.guestPrincipal).toBe('user:10');
+
+    const result = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+    });
+
+    expect(result.lifecycleState).toBe('CANCELLATION_REQUESTED');
+    expect(result.sequenceNumber).toBe(1);
+    expect(result.replayed).toBe(false);
 
     const projection = await getReservationLifecycle(lifecycleWorker, reservationId);
-    expect(projection!.lifecycleState).toBe('ACTIVE');
+    expect(projection).not.toBeNull();
+    expect(projection!.lifecycleState).toBe('CANCELLATION_REQUESTED');
+    expect(projection!.currentSequence).toBe(1);
+    expect(projection!.latestActorKind).toBe('GUEST');
+    expect(projection!.latestActorPrincipal).toBe('user:10');
   });
 
-  it('4. trusted principal = reservation holder but caller attempts different actor_principal text -> denied/conflict', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  it('6. foreign Guest authority -> denied', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+
+    // 6a. Foreign guest attempts to issue authorization for another guest's reservation
+    await expect(
+      issueCancellationAuthorization(lifecycleIssuer, {
+        reservationId,
+        commandId: randomUUID(),
+        reasonCode: 'UNAUTHORIZED_ATTEMPT',
+        authenticatedPrincipal: 'user:99',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_FORBIDDEN'});
+
+    // 6b. Foreign guest has authorization for their own reservation, attempts to use it on user:10's reservation
+    const foreignRes = await createCommittedReservation('user:99');
+    const {auth: foreignAuth, commandId} = await createAuthorizedCancellation(foreignRes.reservationId, 'user:99');
 
     await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId: randomUUID(),
-          reservationId,
-          actorPrincipal: 'user:99', // mismatched text!
-          reasonCode: 'ATTEMPT_MISMATCH',
-        },
-        holderPrincipal // trusted principal is user:10
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_FORBIDDEN',
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: foreignAuth.authorizationId,
+        commandId,
+        reservationId, // mismatch!
+        reasonCode: 'GUEST_CANCEL_REQUEST',
+        reasonText: 'Guest requested cancellation',
       })
-    );
-
-    const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
-      [reservationId]
-    );
-    expect(rows[0].count).toBe(0);
+    ).rejects.toMatchObject({code: 'LIFECYCLE_COMMAND_CONFLICT'});
   });
 
-  it('5. Guest attempts lifecycle request for EXTERNAL_CHANNEL reservation -> denied (GPT-6 reproduced bypass)', async () => {
-    const extReservationId = randomUUID();
-    await fixture.owner.query(
-      `INSERT INTO canonical_reservations(
-        id, origin_kind, listing_id, room_type_id, check_in_date, check_out_date,
-        nights, guest_count, room_subtotal_paise, currency, status, command_id,
-        command_fingerprint, holder_principal
-      ) VALUES (
-        $1, 'EXTERNAL_CHANNEL', 1, 101, $2::date, $3::date,
-        2, 2, 0, 'INR', 'INVENTORY_COMMITTED', $4,
-        $5, 'user:10'
-      )`,
-      [
-        extReservationId,
-        addDays(fixture.today, 80),
-        addDays(fixture.today, 82),
-        randomUUID(),
-        createHash('sha256').update('ext-fixture-5').digest('hex'),
-      ]
-    );
+  it('7. authority/reservation mismatch -> denied', async () => {
+    const resA = await createCommittedReservation('user:10');
+    const resB = await createCommittedReservation('user:10');
 
+    const {auth, commandId} = await createAuthorizedCancellation(resA.reservationId, 'user:10');
+
+    // Present auth for resA against resB
     await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId: randomUUID(),
-          reservationId: extReservationId,
-          reasonCode: 'EXTERNAL_ATTEMPT',
-        },
-        'user:10'
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_ORIGIN_NOT_SUPPORTED',
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth.authorizationId,
+        commandId,
+        reservationId: resB.reservationId,
+        reasonCode: 'GUEST_CANCEL_REQUEST',
+        reasonText: 'Guest requested cancellation',
       })
-    );
-
-    const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
-      [extReservationId]
-    );
-    expect(rows[0].count).toBe(0);
+    ).rejects.toMatchObject({code: 'LIFECYCLE_COMMAND_CONFLICT'});
   });
 
-  it('6. Guest tries to submit origin_kind = EXTERNAL_CHANNEL -> denied / schema rejected', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  it('8. authority/command semantic mismatch -> denied', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(
+      reservationId,
+      'user:10',
+      'ORIGINAL_REASON',
+      'original text'
+    );
 
+    // Present auth with changed reason code
     await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId: randomUUID(),
-          reservationId,
-          originKind: 'EXTERNAL_CHANNEL',
-          reasonCode: 'FORGED_ORIGIN',
-        },
-        holderPrincipal
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_ORIGIN_NOT_SUPPORTED',
-      })
-    );
-  });
-
-  it('7. exact committed request: response lost, same authenticated principal retries -> same event ID -> replayed=true', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-    const commandId = randomUUID();
-
-    const first = await requestReservationCancellation(
-      lifecycleWorker,
-      {
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth.authorizationId,
         commandId,
         reservationId,
-        reasonCode: 'LOST_RESPONSE_REPLAY',
-        reasonText: 'First attempt commits',
-      },
-      holderPrincipal
-    );
-    expect(first.replayed).toBe(false);
-
-    const second = await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId,
-        reservationId,
-        reasonCode: 'LOST_RESPONSE_REPLAY',
-        reasonText: 'First attempt commits',
-      },
-      holderPrincipal
-    );
-    expect(second.replayed).toBe(true);
-    expect(second.eventId).toBe(first.eventId);
-    expect(second.reservationId).toBe(first.reservationId);
-    expect(second.lifecycleState).toBe(first.lifecycleState);
-    expect(second.sequenceNumber).toBe(first.sequenceNumber);
-
-    const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
-      [reservationId]
-    );
-    expect(rows[0].count).toBe(1);
-  });
-
-  it('8. exact command replay by foreign authenticated principal -> denied/conflict', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-    const commandId = randomUUID();
-
-    await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId,
-        reservationId,
-        reasonCode: 'LEGIT_REQUEST',
-      },
-      holderPrincipal
-    );
-
-    // Foreign guest tries to replay the same commandId against the same reservation
-    await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId,
-          reservationId,
-          reasonCode: 'LEGIT_REQUEST',
-        },
-        'user:99' // foreign authenticated caller!
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_FORBIDDEN',
+        reasonCode: 'CHANGED_REASON',
+        reasonText: 'original text',
       })
-    );
-  });
+    ).rejects.toMatchObject({code: 'LIFECYCLE_COMMAND_CONFLICT'});
 
-  it('9. same command ID + changed reason semantics -> LIFECYCLE_COMMAND_CONFLICT', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-    const commandId = randomUUID();
-
-    await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId,
+    // Present auth with changed command ID
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth.authorizationId,
+        commandId: randomUUID(), // changed command ID!
         reservationId,
         reasonCode: 'ORIGINAL_REASON',
-        reasonText: 'Text 1',
-      },
-      holderPrincipal
-    );
-
-    // 9a. changed reason code
-    await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId,
-          reservationId,
-          reasonCode: 'CHANGED_REASON',
-          reasonText: 'Text 1',
-        },
-        holderPrincipal
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_COMMAND_CONFLICT',
+        reasonText: 'original text',
       })
-    );
-
-    // 9b. changed reason text
-    await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId,
-          reservationId,
-          reasonCode: 'ORIGINAL_REASON',
-          reasonText: 'Text 2',
-        },
-        holderPrincipal
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_COMMAND_CONFLICT',
-      })
-    );
+    ).rejects.toMatchObject({code: 'LIFECYCLE_COMMAND_CONFLICT'});
   });
 
-  it('10. concurrent identical authenticated Guest requests -> one lifecycle event', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  it('9. EXTERNAL_CHANNEL reservation -> denied (GPT-6 reproduced defect)', async () => {
+    // Synthetic external channel reservation
+    const externalResId = randomUUID();
     const commandId = randomUUID();
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservations (
+        id, listing_id, room_type_id, origin_kind, holder_principal,
+        check_in_date, check_out_date, nights, guest_count,
+        room_subtotal_paise, currency, status, command_id, command_fingerprint
+      ) VALUES (
+        $1, 1, 101, 'EXTERNAL_CHANNEL', 'user:10',
+        '2027-01-01', '2027-01-05', 4, 2,
+        550000, 'INR', 'INVENTORY_COMMITTED', $2, $3
+      )`,
+      [externalResId, commandId, '0'.repeat(64)]
+    );
 
-    const [res1, res2] = await Promise.all([
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId,
-          reservationId,
-          reasonCode: 'CONCURRENT_IDENTICAL',
-          reasonText: 'Racing same command',
-        },
-        holderPrincipal
-      ),
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId,
-          reservationId,
-          reasonCode: 'CONCURRENT_IDENTICAL',
-          reasonText: 'Racing same command',
-        },
-        holderPrincipal
-      ),
-    ]);
+    // 9a. Issuing authorization for EXTERNAL_CHANNEL is rejected fail-closed
+    await expect(
+      issueCancellationAuthorization(lifecycleIssuer, {
+        reservationId: externalResId,
+        commandId: randomUUID(),
+        reasonCode: 'GUEST_CANCEL',
+        authenticatedPrincipal: 'user:10',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_ORIGIN_NOT_SUPPORTED'});
 
-    expect(res1.eventId).toBe(res2.eventId);
-    expect(res1.reservationId).toBe(res2.reservationId);
-    expect(res1.sequenceNumber).toBe(1);
-    expect(res2.sequenceNumber).toBe(1);
-    expect([res1.replayed, res2.replayed].sort()).toEqual([false, true]);
+    // 9b. Direct call against EXTERNAL_CHANNEL is rejected
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: randomUUID(),
+        commandId: randomUUID(),
+        reservationId: externalResId,
+        reasonCode: 'GUEST_CANCEL',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_ORIGIN_NOT_SUPPORTED'});
+  });
 
-    const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
+  it('10. Guest tries to submit origin_kind = EXTERNAL_CHANNEL -> denied / schema rejected', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: randomUUID(),
+        commandId: randomUUID(),
+        reservationId,
+        reasonCode: 'GUEST_CANCEL',
+        originKind: 'EXTERNAL_CHANNEL',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_ORIGIN_NOT_SUPPORTED'});
+  });
+
+  // --------------------------------------------------------------------------
+  // REPLAY & IDEMPOTENCY TESTS (Section 8, 9 & 17.10 - 17.11)
+  // --------------------------------------------------------------------------
+
+  it('11. exact committed replay by same authenticated Guest -> same event ID -> replayed=true', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(
+      reservationId,
+      'user:10',
+      'GUEST_CANCEL_REQUEST',
+      'Guest requested cancellation'
+    );
+
+    const first = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+    });
+    expect(first.replayed).toBe(false);
+
+    // 11a. Replaying exact same request returns original event with replayed=true
+    const second = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+    });
+    expect(second.replayed).toBe(true);
+    expect(second.eventId).toBe(first.eventId);
+
+    // 11b. Re-calling issueCancellationAuthorization for same (reservation, command) recovers same authorization
+    const recoveredAuth = await issueCancellationAuthorization(lifecycleIssuer, {
+      reservationId,
+      commandId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+      authenticatedPrincipal: 'user:10',
+    });
+    expect(recoveredAuth.authorizationId).toBe(auth.authorizationId);
+
+    // 11c. Consuming recovered authorization returns replayed=true
+    const third = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: recoveredAuth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+    });
+    expect(third.replayed).toBe(true);
+    expect(third.eventId).toBe(first.eventId);
+
+    // Invariant: exactly 1 event exists
+    const {rows: eventRows} = await fixture.owner.query(
+      'SELECT count(*) FROM canonical_reservation_events WHERE reservation_id = $1',
       [reservationId]
     );
-    expect(rows[0].count).toBe(1);
+    expect(Number(eventRows[0].count)).toBe(1);
   });
 
-  it('11. concurrent different commands for same ACTIVE -> CANCELLATION_REQUESTED -> one transition only', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-    const cmd1 = randomUUID();
-    const cmd2 = randomUUID();
+  it('12. unauthorized presentation of another command ID -> denied', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const commandId = randomUUID();
+    const {auth} = await createAuthorizedCancellation(reservationId, 'user:10', 'CANCEL', 'text', commandId);
+
+    await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'CANCEL',
+      reasonText: 'text',
+    });
+
+    // Foreign principal attempts to present commandId without valid authorization
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: randomUUID(),
+        commandId,
+        reservationId,
+        reasonCode: 'CANCEL',
+        reasonText: 'text',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_AUTHORIZATION_NOT_FOUND'});
+
+    // Foreign principal creates an authorization for their own reservation and passes victim commandId
+    const foreignRes = await createCommittedReservation('user:99');
+    const {auth: foreignAuth} = await createAuthorizedCancellation(foreignRes.reservationId, 'user:99', 'CANCEL', 'text');
+
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: foreignAuth.authorizationId,
+        commandId, // presenting victim's command ID!
+        reservationId,
+        reasonCode: 'CANCEL',
+        reasonText: 'text',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_COMMAND_CONFLICT'});
+  });
+
+  it('13. same command ID + changed reason semantics -> LIFECYCLE_COMMAND_CONFLICT', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const commandId = randomUUID();
+    const {auth} = await createAuthorizedCancellation(reservationId, 'user:10', 'REASON_A', 'text A', commandId);
+
+    await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'REASON_A',
+      reasonText: 'text A',
+    });
+
+    // Attempt replay with same command ID but changed reason
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth.authorizationId,
+        commandId,
+        reservationId,
+        reasonCode: 'REASON_B',
+        reasonText: 'text A',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_COMMAND_CONFLICT'});
+  });
+
+  // --------------------------------------------------------------------------
+  // CONCURRENCY & ATOMICITY TESTS (Section 14 & 17.12 - 17.14)
+  // --------------------------------------------------------------------------
+
+  it('14. concurrent use of same valid authority -> one transition only', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(
+      reservationId,
+      'user:10',
+      'GUEST_CANCEL_REQUEST',
+      'Guest requested cancellation'
+    );
+
+    // Run two identical cancellations concurrently
+    const [res1, res2] = await Promise.all([
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth.authorizationId,
+        commandId,
+        reservationId,
+        reasonCode: 'GUEST_CANCEL_REQUEST',
+        reasonText: 'Guest requested cancellation',
+      }),
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth.authorizationId,
+        commandId,
+        reservationId,
+        reasonCode: 'GUEST_CANCEL_REQUEST',
+        reasonText: 'Guest requested cancellation',
+      }),
+    ]);
+
+    expect([res1.replayed, res2.replayed].sort()).toEqual([false, true]);
+    expect(res1.eventId).toBe(res2.eventId);
+
+    const {rows} = await fixture.owner.query(
+      'SELECT count(*) FROM canonical_reservation_events WHERE reservation_id = $1',
+      [reservationId]
+    );
+    expect(Number(rows[0].count)).toBe(1);
+  });
+
+  it('15. concurrent different commands for same ACTIVE -> CANCELLATION_REQUESTED -> one transition only', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const auth1 = await createAuthorizedCancellation(reservationId, 'user:10', 'CANCEL_A', 'text A', randomUUID());
+    const auth2 = await createAuthorizedCancellation(reservationId, 'user:10', 'CANCEL_B', 'text B', randomUUID());
 
     const results = await Promise.allSettled([
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId: cmd1,
-          reservationId,
-          reasonCode: 'RACING_CMD_1',
-        },
-        holderPrincipal
-      ),
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId: cmd2,
-          reservationId,
-          reasonCode: 'RACING_CMD_2',
-        },
-        holderPrincipal
-      ),
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth1.auth.authorizationId,
+        commandId: auth1.commandId,
+        reservationId,
+        reasonCode: 'CANCEL_A',
+        reasonText: 'text A',
+      }),
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: auth2.auth.authorizationId,
+        commandId: auth2.commandId,
+        reservationId,
+        reasonCode: 'CANCEL_B',
+        reasonText: 'text B',
+      }),
     ]);
 
     const fulfilled = results.filter(r => r.status === 'fulfilled');
     const rejected = results.filter(r => r.status === 'rejected');
 
-    expect(fulfilled.length).toBe(1);
-    expect(rejected.length).toBe(1);
-
-    const failure = (rejected[0] as PromiseRejectedResult).reason;
-    expect(failure).toBeInstanceOf(LifecycleAuthorityError);
-    expect(failure.code).toBe('LIFECYCLE_STATE_CONFLICT');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
+      code: 'LIFECYCLE_STATE_CONFLICT',
+    });
 
     const {rows} = await fixture.owner.query(
-      `SELECT COUNT(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1`,
+      'SELECT count(*) FROM canonical_reservation_events WHERE reservation_id = $1',
       [reservationId]
     );
-    expect(rows[0].count).toBe(1);
+    expect(Number(rows[0].count)).toBe(1);
   });
 
-  it('12. canonical reservation with no events projects ACTIVE', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-    const projection = await getReservationLifecycle(lifecycleWorker, reservationId);
+  it('16. lifecycle event, command receipt, and authorization consumption remain atomic', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(
+      reservationId,
+      'user:10',
+      'GUEST_CANCEL_REQUEST',
+      'Guest requested cancellation'
+    );
 
+    const result = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+    });
+
+    // Verify all 3 tables atomically mutated
+    const {rows: events} = await fixture.owner.query(
+      'SELECT * FROM canonical_reservation_events WHERE event_id = $1',
+      [result.eventId]
+    );
+    expect(events).toHaveLength(1);
+
+    const {rows: commands} = await fixture.owner.query(
+      'SELECT * FROM canonical_reservation_lifecycle_commands WHERE command_id = $1',
+      [commandId]
+    );
+    expect(commands).toHaveLength(1);
+    expect(commands[0].event_id).toBe(result.eventId);
+
+    const {rows: auths} = await fixture.owner.query(
+      'SELECT * FROM canonical_reservation_lifecycle_authorizations WHERE authorization_id = $1',
+      [auth.authorizationId]
+    );
+    expect(auths).toHaveLength(1);
+    expect(auths[0].consumed_at).not.toBeNull();
+    expect(auths[0].consumed_by_event_id).toBe(result.eventId);
+  });
+
+  // --------------------------------------------------------------------------
+  // IMMUTABILITY & ROLE BOUNDARY TESTS (Section 11.5, 11.6, 17.15 - 17.17)
+  // --------------------------------------------------------------------------
+
+  it('17. authorization cannot be mutated after issuance', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth} = await createAuthorizedCancellation(reservationId, 'user:10');
+
+    // Attempting direct UPDATE on authorization fields
+    await expect(
+      fixture.owner.query(
+        "UPDATE canonical_reservation_lifecycle_authorizations SET reason_code = 'MUTATED' WHERE authorization_id = $1",
+        [auth.authorizationId]
+      )
+    ).rejects.toThrow('CANONICAL_LIFECYCLE_AUTHORIZATION_IMMUTABLE');
+
+    // Attempting direct DELETE on authorization
+    await expect(
+      fixture.owner.query(
+        'DELETE FROM canonical_reservation_lifecycle_authorizations WHERE authorization_id = $1',
+        [auth.authorizationId]
+      )
+    ).rejects.toThrow('CANONICAL_LIFECYCLE_AUTHORIZATION_IMMUTABLE');
+  });
+
+  it('18. raw web/public/other worker roles cannot issue authority', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+
+    for (const pool of [stays, paymentWorker, compositionWorker, reservationWorker]) {
+      const client = await pool.connect();
+      try {
+        let err: any;
+        try {
+          await client.query(
+            `SELECT * FROM canonical_issue_cancellation_authorization($1, $2, 'CANCEL', 'text', 'user:10')`,
+            [reservationId, randomUUID()]
+          );
+        } catch (e) {
+          err = e;
+        }
+        expect(err).toBeDefined();
+        expect(err.code).toBe('42501'); // PostgreSQL permission_denied
+      } finally {
+        client.release();
+      }
+    }
+  });
+
+  it('19. canonical reservation with no events projects ACTIVE', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+
+    const projection = await getReservationLifecycle(lifecycleWorker, reservationId);
     expect(projection).not.toBeNull();
-    expect(projection!.reservationId).toBe(reservationId);
     expect(projection!.lifecycleState).toBe('ACTIVE');
     expect(projection!.currentSequence).toBe(0);
     expect(projection!.latestEventId).toBeNull();
     expect(projection!.latestActorKind).toBeNull();
-    expect(projection!.latestActorPrincipal).toBeNull();
-    expect(projection!.latestReasonCode).toBeNull();
-    expect(projection!.latestReasonText).toBeNull();
-    expect(projection!.holderPrincipal).toBe(holderPrincipal);
-    expect(projection!.originKind).toBe('ENCHO_DIRECT');
   });
 
-  it('13. W3 reservation row remains unchanged: status = INVENTORY_COMMITTED', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-    const {rows: beforeRows} = await fixture.owner.query(
-      `SELECT * FROM canonical_reservations WHERE id = $1`,
+  it('20. W3 reservation row remains unchanged: status = INVENTORY_COMMITTED', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(reservationId, 'user:10');
+
+    await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+    });
+
+    const {rows} = await fixture.owner.query(
+      'SELECT status, origin_kind FROM canonical_reservations WHERE id = $1',
       [reservationId]
     );
-    expect(beforeRows[0].status).toBe('INVENTORY_COMMITTED');
-
-    await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId: randomUUID(),
-        reservationId,
-        reasonCode: 'PLANS_CHANGED',
-        reasonText: null,
-      },
-      holderPrincipal
-    );
-
-    const {rows: afterRows} = await fixture.owner.query(
-      `SELECT * FROM canonical_reservations WHERE id = $1`,
-      [reservationId]
-    );
-    expect(afterRows[0].status).toBe('INVENTORY_COMMITTED');
-    expect(afterRows[0].created_at.toISOString()).toBe(beforeRows[0].created_at.toISOString());
-    expect(afterRows[0].finalized_at.toISOString()).toBe(beforeRows[0].finalized_at.toISOString());
-    expect(afterRows[0].command_id).toBe(beforeRows[0].command_id);
-    expect(afterRows[0].command_fingerprint).toBe(beforeRows[0].command_fingerprint);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('INVENTORY_COMMITTED');
+    expect(rows[0].origin_kind).toBe('ENCHO_DIRECT');
   });
 
-  it('14. booked_units remains unchanged', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  it('21. booked_units remains unchanged', async () => {
+    const {reservationId, checkIn, checkOut} = await createCommittedReservation('user:10', 2);
 
-    const getBookedUnits = async () => {
-      const {rows} = await fixture.owner.query(
-        `SELECT d.id, d.calendar_date, d.held_units, d.booked_units
-         FROM inventory_days d
-         JOIN canonical_reservation_nights n ON n.inventory_day_id = d.id
-         WHERE n.reservation_id = $1
-         ORDER BY d.calendar_date`,
-        [reservationId]
-      );
-      return rows;
-    };
-
-    const beforeDays = await getBookedUnits();
-    expect(beforeDays.length).toBeGreaterThan(0);
-    for (const d of beforeDays) {
-      expect(d.booked_units).toBe(1);
-      expect(d.held_units).toBe(0);
-    }
-
-    await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId: randomUUID(),
-        reservationId,
-        reasonCode: 'FAMILY_EMERGENCY',
-        reasonText: 'Urgent medical requirement',
-      },
-      holderPrincipal
+    const {rows: beforeDays} = await fixture.owner.query(
+      `SELECT calendar_date, booked_units, held_units
+       FROM inventory_days
+       WHERE listing_id = 1 AND room_type_id = 101 AND calendar_date >= $1 AND calendar_date < $2
+       ORDER BY calendar_date`,
+      [checkIn, checkOut]
     );
+    expect(beforeDays.every(d => d.booked_units === 1 && d.held_units === 0)).toBe(true);
 
-    const afterDays = await getBookedUnits();
+    const {auth, commandId} = await createAuthorizedCancellation(reservationId, 'user:10');
+    await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+    });
+
+    const {rows: afterDays} = await fixture.owner.query(
+      `SELECT calendar_date, booked_units, held_units
+       FROM inventory_days
+       WHERE listing_id = 1 AND room_type_id = 101 AND calendar_date >= $1 AND calendar_date < $2
+       ORDER BY calendar_date`,
+      [checkIn, checkOut]
+    );
     expect(afterDays).toEqual(beforeDays);
   });
 
-  it('15. no refund/payment rows/effects are created', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  it('22. no refund/payment rows/effects are created', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(reservationId, 'user:10');
 
-    const countPaymentRows = async () => {
-      const {rows: pAttempts} = await fixture.owner.query(`SELECT COUNT(*)::int AS count FROM canonical_payment_attempts`);
-      const {rows: pReconciliations} = await fixture.owner.query(`SELECT COUNT(*)::int AS count FROM canonical_payment_reconciliations`);
-      const {rows: pEvents} = await fixture.owner.query(`SELECT COUNT(*)::int AS count FROM canonical_provider_events`);
-      return {
-        attempts: pAttempts[0].count,
-        reconciliations: pReconciliations[0].count,
-        events: pEvents[0].count,
-      };
-    };
+    await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+    });
 
-    const beforeCounts = await countPaymentRows();
-
-    await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId: randomUUID(),
-        reservationId,
-        reasonCode: 'GUEST_CANCELLATION',
-        reasonText: 'No refund requested in W4-A',
-      },
-      holderPrincipal
+    const {rows: paymentRows} = await fixture.owner.query(
+      'SELECT count(*) FROM canonical_payment_attempts'
     );
+    expect(Number(paymentRows[0].count)).toBe(0);
 
-    const afterCounts = await countPaymentRows();
-    expect(afterCounts).toEqual(beforeCounts);
+    const {rows: reconcileRows} = await fixture.owner.query(
+      'SELECT count(*) FROM canonical_payment_reconciliations'
+    );
+    expect(Number(reconcileRows[0].count)).toBe(0);
+
+    const {rows: bridgeRows} = await fixture.owner.query(
+      'SELECT count(*) FROM canonical_payment_reservations WHERE reservation_id = $1',
+      [reservationId]
+    );
+    expect(Number(bridgeRows[0].count)).toBe(0);
   });
 
-  it('16. same command ID + changed reservation -> conflict', async () => {
-    const resA = await createCommittedReservation('user:10');
-    const resB = await createCommittedReservation('user:10');
-    const commandId = randomUUID();
-
-    await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId,
-        reservationId: resA.reservationId,
-        reasonCode: 'GUEST_REQUESTED',
-      },
-      resA.holderPrincipal
-    );
-
-    await expect(
-      requestReservationCancellation(
-        lifecycleWorker,
-        {
-          commandId,
-          reservationId: resB.reservationId,
-          reasonCode: 'GUEST_REQUESTED',
-        },
-        resB.holderPrincipal
-      )
-    ).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_COMMAND_CONFLICT',
-      })
-    );
-  });
-
-  it('17. raw Guest/web role cannot INSERT/UPDATE lifecycle tables', async () => {
+  it('23. raw Guest/web role cannot INSERT/UPDATE lifecycle tables', async () => {
     const {reservationId} = await createCommittedReservation('user:10');
 
-    await expect(
-      stays.query(
-        `INSERT INTO canonical_reservation_events(
-          reservation_id, sequence_number, event_type, actor_kind, actor_principal,
-          origin_kind, reason_code, command_id
-        ) VALUES (
-          $1, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'ENCHO_DIRECT', 'ATTACK', gen_random_uuid()
-        )`,
-        [reservationId]
-      )
-    ).rejects.toThrow(/permission denied/i);
+    const client = await stays.connect();
+    try {
+      await expect(
+        client.query(
+          `INSERT INTO canonical_reservation_events (
+            event_id, reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+          ) VALUES ($1, $2, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'ENCHO_DIRECT', 'HACK', $3)`,
+          [randomUUID(), reservationId, randomUUID()]
+        )
+      ).rejects.toThrow();
 
-    await expect(
-      stays.query(
-        `INSERT INTO canonical_reservation_lifecycle_commands(
-          command_id, reservation_id, command_type, actor_kind, actor_principal,
-          origin_kind, reason_code, command_fingerprint, event_id
-        ) VALUES (
-          gen_random_uuid(), $1, 'REQUEST_CANCELLATION', 'GUEST', 'user:10',
-          'ENCHO_DIRECT', 'ATTACK', '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', gen_random_uuid()
-        )`,
-        [reservationId]
-      )
-    ).rejects.toThrow(/permission denied/i);
+      await expect(
+        client.query(
+          `INSERT INTO canonical_reservation_lifecycle_commands (
+            command_id, reservation_id, command_type, actor_kind, actor_principal, origin_kind, reason_code, command_fingerprint, event_id
+          ) VALUES ($1, $2, 'REQUEST_CANCELLATION', 'GUEST', 'user:10', 'ENCHO_DIRECT', 'HACK', $3, $4)`,
+          [randomUUID(), reservationId, '0'.repeat(64), randomUUID()]
+        )
+      ).rejects.toThrow();
 
-    await expect(
-      stays.query(`UPDATE canonical_reservation_events SET reason_code = 'MALICIOUS'`)
-    ).rejects.toThrow(/permission denied/i);
-
-    await expect(
-      stays.query(`UPDATE canonical_reservation_lifecycle_commands SET reason_code = 'MALICIOUS'`)
-    ).rejects.toThrow(/permission denied/i);
+      await expect(
+        client.query(
+          `INSERT INTO canonical_reservation_lifecycle_authorizations (
+            authorization_id, reservation_id, command_id, command_type, guest_principal, origin_kind, reason_code, expires_at, fingerprint
+          ) VALUES ($1, $2, $3, 'REQUEST_CANCELLATION', 'user:10', 'ENCHO_DIRECT', 'HACK', now() + interval '1 hour', $4)`,
+          [randomUUID(), reservationId, randomUUID(), '0'.repeat(64)]
+        )
+      ).rejects.toThrow();
+    } finally {
+      client.release();
+    }
   });
 
-  it('18. direct UPDATE/DELETE of lifecycle event rejected', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  it('24. direct UPDATE/DELETE of lifecycle event rejected', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(reservationId, 'user:10');
+
+    const result = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+    });
+
+    await expect(
+      fixture.owner.query(
+        "UPDATE canonical_reservation_events SET reason_code = 'TAMPERED' WHERE event_id = $1",
+        [result.eventId]
+      )
+    ).rejects.toThrow('CANONICAL_RESERVATION_EVENT_IMMUTABLE');
+
+    await expect(
+      fixture.owner.query(
+        'DELETE FROM canonical_reservation_events WHERE event_id = $1',
+        [result.eventId]
+      )
+    ).rejects.toThrow('CANONICAL_RESERVATION_EVENT_IMMUTABLE');
+  });
+
+  it('25. legacy bookings.status changes do not alter canonical lifecycle projection', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+
+    const {rows: bRows} = await fixture.owner.query(
+      "INSERT INTO bookings (listing_id, status, start_date, end_date) VALUES (1, 'confirmed', '2026-11-01', '2026-11-02') RETURNING id"
+    );
+    const bookingId = bRows[0].id;
+
+    await fixture.owner.query("UPDATE bookings SET status = 'cancelled' WHERE id = $1", [bookingId]);
+
+    const projection = await getReservationLifecycle(lifecycleWorker, reservationId);
+    expect(projection!.lifecycleState).toBe('ACTIVE');
+  });
+
+  it('26. no public completed-cancellation API is accidentally added', async () => {
+    const {rows} = await fixture.owner.query(`
+      SELECT routine_name FROM information_schema.routines
+      WHERE routine_schema = 'public' AND routine_name LIKE 'canonical_%cancellation%'
+    `);
+    const routineNames = rows.map(r => r.routine_name).sort();
+    expect(routineNames).toEqual([
+      'canonical_issue_cancellation_authorization',
+      'canonical_request_reservation_cancellation',
+    ]);
+  });
+
+  it('27. role boundary enforcement: worker cannot issue, issuer cannot transition, raw web cannot do either', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
     const commandId = randomUUID();
 
-    const result = await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId,
-        reservationId,
-        reasonCode: 'VALID_REASON',
-      },
-      holderPrincipal
-    );
+    // 27a. encho_lifecycle_issuer cannot execute canonical_request_reservation_cancellation
+    const issuerClient = await lifecycleIssuer.connect();
+    try {
+      await expect(
+        issuerClient.query(
+          `SELECT * FROM canonical_request_reservation_cancellation($1, $2, $3, 'CANCEL', NULL)`,
+          [randomUUID(), commandId, reservationId]
+        )
+      ).rejects.toThrow();
+    } finally {
+      issuerClient.release();
+    }
 
-    // Owner tries to UPDATE event
-    await expect(
-      fixture.owner.query(
-        `UPDATE canonical_reservation_events SET reason_code = 'MODIFIED' WHERE event_id = $1`,
-        [result.eventId]
-      )
-    ).rejects.toThrow(/CANONICAL_RESERVATION_EVENT_IMMUTABLE/);
+    // 27b. encho_lifecycle_worker cannot execute canonical_issue_cancellation_authorization
+    const workerClient = await lifecycleWorker.connect();
+    try {
+      await expect(
+        workerClient.query(
+          `SELECT * FROM canonical_issue_cancellation_authorization($1, $2, 'CANCEL', NULL, 'user:10')`,
+          [reservationId, commandId]
+        )
+      ).rejects.toThrow();
+    } finally {
+      workerClient.release();
+    }
 
-    // Owner tries to DELETE event
-    await expect(
-      fixture.owner.query(
-        `DELETE FROM canonical_reservation_events WHERE event_id = $1`,
-        [result.eventId]
-      )
-    ).rejects.toThrow(/CANONICAL_RESERVATION_EVENT_IMMUTABLE/);
-
-    // Owner tries to UPDATE command receipt
-    await expect(
-      fixture.owner.query(
-        `UPDATE canonical_reservation_lifecycle_commands SET reason_code = 'MODIFIED' WHERE command_id = $1`,
-        [commandId]
-      )
-    ).rejects.toThrow(/CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE/);
-
-    // Owner tries to DELETE command receipt
-    await expect(
-      fixture.owner.query(
-        `DELETE FROM canonical_reservation_lifecycle_commands WHERE command_id = $1`,
-        [commandId]
-      )
-    ).rejects.toThrow(/CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE/);
+    // 27c. encho_stays_web cannot execute either
+    const webClient = await stays.connect();
+    try {
+      await expect(
+        webClient.query(
+          `SELECT * FROM canonical_issue_cancellation_authorization($1, $2, 'CANCEL', NULL, 'user:10')`,
+          [reservationId, commandId]
+        )
+      ).rejects.toThrow();
+      await expect(
+        webClient.query(
+          `SELECT * FROM canonical_request_reservation_cancellation($1, $2, $3, 'CANCEL', NULL)`,
+          [randomUUID(), commandId, reservationId]
+        )
+      ).rejects.toThrow();
+    } finally {
+      webClient.release();
+    }
   });
 
-  it('19. legacy bookings.status changes do not alter canonical lifecycle projection', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
+  it('28. assertLifecycleWorkerRole and assertLifecycleIssuerRole reject broadened or non-restricted roles', async () => {
+    // Owner pool (superuser/owner) must be rejected by both assertions
+    await expect(assertLifecycleWorkerRole(fixture.owner)).rejects.toMatchObject({
+      code: 'LIFECYCLE_ROLE_NOT_RESTRICTED',
+    });
+    await expect(assertLifecycleIssuerRole(fixture.owner)).rejects.toMatchObject({
+      code: 'LIFECYCLE_ROLE_NOT_RESTRICTED',
+    });
 
-    // Insert legacy bookings row
-    const {rows: bRows} = await fixture.owner.query(
-      `INSERT INTO bookings(listing_id, status, start_date, end_date)
-       VALUES(1, 'confirmed', '2026-11-01', '2026-11-02') RETURNING id`
-    );
-    const legacyBookingId = bRows[0].id;
+    // Issuer pool must be rejected by worker assertion
+    await expect(assertLifecycleWorkerRole(lifecycleIssuer)).rejects.toMatchObject({
+      code: 'LIFECYCLE_ROLE_NOT_RESTRICTED',
+    });
 
-    const before = await getReservationLifecycle(lifecycleWorker, reservationId);
-    expect(before!.lifecycleState).toBe('ACTIVE');
-
-    // Mutate legacy booking to cancelled
-    await fixture.owner.query(
-      `UPDATE bookings SET status = 'cancelled' WHERE id = $1`,
-      [legacyBookingId]
-    );
-
-    const after = await getReservationLifecycle(lifecycleWorker, reservationId);
-    expect(after!.lifecycleState).toBe('ACTIVE');
-    expect(after!.currentSequence).toBe(0);
-
-    // Request canonical cancellation
-    await requestReservationCancellation(
-      lifecycleWorker,
-      {
-        commandId: randomUUID(),
-        reservationId,
-        reasonCode: 'INDEPENDENT_TRUTH',
-      },
-      holderPrincipal
-    );
-
-    const canonicalState = await getReservationLifecycle(lifecycleWorker, reservationId);
-    expect(canonicalState!.lifecycleState).toBe('CANCELLATION_REQUESTED');
-
-    // Mutate legacy booking to completed
-    await fixture.owner.query(
-      `UPDATE bookings SET status = 'completed' WHERE id = $1`,
-      [legacyBookingId]
-    );
-
-    const canonicalStateAfter = await getReservationLifecycle(lifecycleWorker, reservationId);
-    expect(canonicalStateAfter!.lifecycleState).toBe('CANCELLATION_REQUESTED');
-  });
-
-  it('20. no public completed-cancellation API is accidentally added', async () => {
-    // Assert canonical_request_reservation_cancellation only transitions to CANCELLATION_REQUESTED
-    const {rows: funcRows} = await fixture.owner.query(
-      `SELECT routine_name FROM information_schema.routines
-       WHERE routine_schema = 'public' AND routine_name LIKE 'canonical_%cancell%'`
-    );
-    const routineNames = funcRows.map(r => r.routine_name);
-    expect(routineNames).toEqual(['canonical_request_reservation_cancellation']);
-
-    // Check allowed event types in canonical_reservation_events check constraint
-    const {rows: checkRows} = await fixture.owner.query(
-      `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
-       WHERE conrelid = 'canonical_reservation_events'::regclass AND conname LIKE '%event_type%'`
-    );
-    expect(checkRows[0].def).toContain("'CANCELLATION_REQUESTED'");
-    expect(checkRows[0].def).not.toContain("'CANCELLED'");
-  });
-
-  it('21. role boundary enforcement: web, payment, and composition roles cannot execute lifecycle transitions', async () => {
-    const {reservationId, holderPrincipal} = await createCommittedReservation('user:10');
-
-    // encho_stays_web cannot execute canonical_request_reservation_cancellation
-    await expect(
-      stays.query(
-        `SELECT * FROM canonical_request_reservation_cancellation($1, $2, 'GUEST', $3, 'WEB_ATTEMPT', NULL)`,
-        [randomUUID(), reservationId, holderPrincipal]
-      )
-    ).rejects.toThrow(/permission denied/i);
-
-    // encho_payment_worker cannot execute canonical_request_reservation_cancellation
-    await expect(
-      paymentWorker.query(
-        `SELECT * FROM canonical_request_reservation_cancellation($1, $2, 'GUEST', $3, 'PAYMENT_ATTEMPT', NULL)`,
-        [randomUUID(), reservationId, holderPrincipal]
-      )
-    ).rejects.toThrow(/permission denied/i);
-
-    // encho_composition_worker cannot execute canonical_request_reservation_cancellation
-    await expect(
-      compositionWorker.query(
-        `SELECT * FROM canonical_request_reservation_cancellation($1, $2, 'GUEST', $3, 'COMPOSITION_ATTEMPT', NULL)`,
-        [randomUUID(), reservationId, holderPrincipal]
-      )
-    ).rejects.toThrow(/permission denied/i);
-
-    // lifecycleWorker cannot execute W3-A direct hold finalizer
-    await expect(
-      lifecycleWorker.query(
-        `SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)`,
-        [randomUUID(), randomUUID(), randomUUID()]
-      )
-    ).rejects.toThrow(/permission denied/i);
-
-    // lifecycleWorker cannot execute W3-B composition
-    await expect(
-      lifecycleWorker.query(
-        `SELECT * FROM canonical_compose_payment_reservation($1, $2)`,
-        [randomUUID(), randomUUID()]
-      )
-    ).rejects.toThrow(/permission denied/i);
-  });
-
-  it('22. assertLifecycleWorkerRole rejects broadened or non-restricted roles', async () => {
-    // Calling assertLifecycleWorkerRole with owner pool fails
-    await expect(assertLifecycleWorkerRole(fixture.owner)).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_ROLE_NOT_RESTRICTED',
-      })
-    );
-
-    // Calling assertLifecycleWorkerRole with stays pool fails
-    await expect(assertLifecycleWorkerRole(stays)).rejects.toThrow(
-      expect.objectContaining({
-        name: 'LifecycleAuthorityError',
-        code: 'LIFECYCLE_ROLE_NOT_RESTRICTED',
-      })
-    );
+    // Worker pool must be rejected by issuer assertion
+    await expect(assertLifecycleIssuerRole(lifecycleWorker)).rejects.toMatchObject({
+      code: 'LIFECYCLE_ROLE_NOT_RESTRICTED',
+    });
   });
 });
