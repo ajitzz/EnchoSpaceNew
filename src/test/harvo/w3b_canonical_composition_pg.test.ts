@@ -884,8 +884,8 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     }
   });
 
-  // 19. real composition vs provider event race: composition wins lock first -> provider event processes after composition
-  it('19. real composition vs provider event race: composition wins lock first -> provider event processes after composition', async () => {
+  // 19. real composition vs provider event race: composition wins lock first -> late conflicting provider event enters reconciliation while reservation remains intact
+  it('19. real composition vs provider event race: composition wins lock first -> late conflicting provider event enters reconciliation while reservation remains intact', async () => {
     const fixtureData = await createTestOnlyMatchedCaptureFixture();
     const commandId = randomUUID();
 
@@ -905,7 +905,8 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
       expect(compRows[0].composition_state).toBe('COMMITTED');
       expect(compRows[0].reservation_id).not.toBeNull();
 
-      // Connection A launches provider event ingestion on the same payment attempt -> blocks
+      // Connection A launches provider event ingestion with a DIFFERENT non-empty provider payment ref on the same payment attempt -> blocks
+      const conflictingLatePaymentRef = 'pay_conflicting_late_' + randomUUID();
       let ingestCompleted = false;
       const ingestPromise = ingestProviderEvent(paymentWorker, {
         attemptId: fixtureData.attemptId,
@@ -914,9 +915,9 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
         normalizedEventType: 'PAYMENT_CAPTURED',
         reportedAmountPaise: fixtureData.expectedAmount,
         reportedCurrency: 'INR',
-        providerPaymentRef: fixtureData.paymentRef, // redundant identical payment ref
+        providerPaymentRef: conflictingLatePaymentRef, // DIFFERENT non-empty provider payment ref
         providerOrderRef: fixtureData.orderRef,
-        evidencePayload: {redundant: true},
+        evidencePayload: {conflicting: true, pay_id: conflictingLatePaymentRef},
       }).finally(() => {
         ingestCompleted = true;
       });
@@ -931,24 +932,66 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
       // Connection A unblocks and finishes processing
       const ingestRes = await ingestPromise;
       expect(ingestRes.ingestStatus).toBe('PROCESSED');
+      expect(ingestRes.paymentState).toBe('RECONCILIATION_REQUIRED');
+      expect(ingestRes.reconciliationReason).toBe('CAPTURE_CONFLICT');
 
-      // Verify composition committed exactly 1 reservation
-      const {rows: resCount} = await fixture.owner.query(
-        'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+      // 1. Payment enters RECONCILIATION_REQUIRED / CAPTURE_CONFLICT
+      const dbAttempt = await getPaymentAttempt(paymentWorker, fixtureData.attemptId);
+      expect(dbAttempt?.paymentState).toBe('RECONCILIATION_REQUIRED');
+      expect(dbAttempt?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+
+      // 2. Reconciliation row is recorded
+      const reconciliations = await getPaymentReconciliations(paymentWorker, fixtureData.attemptId);
+      expect(reconciliations.some(r => r.reason === 'CAPTURE_CONFLICT')).toBe(true);
+
+      // 3. Exactly one canonical reservation remains with unchanged identity and commercial snapshot
+      const {rows: resRows} = await fixture.owner.query(
+        'SELECT * FROM canonical_reservations WHERE hold_id = $1',
         [fixtureData.holdId]
       );
-      expect(resCount[0].count).toBe(1);
+      expect(resRows.length).toBe(1);
+      const res = resRows[0];
+      expect(res.id).toBe(compRows[0].reservation_id);
+      expect(res.origin_kind).toBe('ENCHO_DIRECT');
+      expect(res.status).toBe('INVENTORY_COMMITTED');
+      expect(res.room_subtotal_paise).toBe('550000');
+      expect(res.currency).toBe('INR');
+      expect(res.nights).toBe(fixtureData.nights);
+      expect(res.guest_count).toBe(2);
+      expect(res.command_id).toBe(commandId);
+      expect(res.quote_id).toBe(fixtureData.quoteId);
+      expect(res.hold_id).toBe(fixtureData.holdId);
+      expect(res.offer_id).toBe(offerId);
+      expect(res.offer_revision).toBe(1);
 
-      // Bridge is committed
+      // 4. Exactly one payment-reservation bridge remains committed
       const bridge = await getPaymentReservation(compositionWorker, fixtureData.attemptId);
+      expect(bridge).not.toBeNull();
       expect(bridge?.status).toBe('COMMITTED');
+      expect(bridge?.reservationId).toBe(compRows[0].reservation_id);
+      expect(bridge?.paymentAttemptId).toBe(fixtureData.attemptId);
+      expect(bridge?.commandId).toBe(commandId);
 
-      // Hold is CONSUMED
+      // 5. Hold remains CONSUMED
       const {rows: holdRows} = await fixture.owner.query(
         'SELECT status FROM booking_holds WHERE id = $1',
         [fixtureData.holdId]
       );
       expect(holdRows[0].status).toBe('CONSUMED');
+
+      // 6. Every inventory night remains booked exactly once
+      const {rows: dayRows} = await fixture.owner.query(
+        `SELECT d.held_units, d.booked_units
+         FROM inventory_days d
+         JOIN booking_hold_nights hn ON hn.inventory_day_id = d.id
+         WHERE hn.hold_id = $1`,
+        [fixtureData.holdId]
+      );
+      expect(dayRows.length).toBe(fixtureData.nights);
+      for (const day of dayRows) {
+        expect(day.held_units).toBe(0);
+        expect(day.booked_units).toBe(1);
+      }
     } catch (err) {
       await connB.query('ROLLBACK').catch(() => {});
       throw err;
