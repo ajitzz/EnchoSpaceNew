@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS canonical_payable_authorities (
   payable_amount_paise BIGINT NOT NULL CHECK (payable_amount_paise > 0),
   authority_kind TEXT NOT NULL,
   contract_hash TEXT NOT NULL CHECK (contract_hash ~ '^[a-f0-9]{64}$'),
-  status TEXT NOT NULL CHECK (status IN ('APPROVED', 'SUPERSEDED', 'REVOKED')),
+  status TEXT NOT NULL DEFAULT 'APPROVED' CHECK (status = 'APPROVED'),
   created_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp()
 );
 
@@ -292,8 +292,11 @@ BEGIN
   END IF;
 
   IF payable_auth.id::text IS DISTINCT FROM attempt.expected_authority_ref
+    OR payable_auth.authority_kind IS DISTINCT FROM attempt.expected_authority_kind
+    OR payable_auth.contract_hash IS DISTINCT FROM attempt.expected_authority_hash
     OR payable_auth.payable_amount_paise IS DISTINCT FROM attempt.expected_amount_paise
-    OR payable_auth.currency IS DISTINCT FROM attempt.expected_currency THEN
+    OR payable_auth.currency IS DISTINCT FROM attempt.expected_currency
+    OR payable_auth.quote_id IS DISTINCT FROM attempt.quote_id THEN
     RAISE EXCEPTION 'PAYMENT_PAYABLE_AUTHORITY_MISMATCH';
   END IF;
 

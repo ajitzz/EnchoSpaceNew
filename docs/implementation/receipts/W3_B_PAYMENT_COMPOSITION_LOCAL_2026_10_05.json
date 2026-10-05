@@ -19,9 +19,14 @@
   "testCommand": "node scripts/testing/run.mjs src/test/harvo/w3b_canonical_composition_pg.test.ts",
   "results": {
     "suite": "W3-B Task 3: Internal Verified Payment -> Canonical Reservation Composition Authority",
-    "testsPassed": 23,
+    "testsPassed": 28,
     "testsFailed": 0,
     "invariantsVerified": [
+      "Payable authority lifecycle is exactly one immutable APPROVED authority per quote; check constraint restricts status to 'APPROVED'; UPDATE and DELETE are rejected",
+      "Second payable authority insert for the same quote_id is rejected by unique constraint",
+      "Payment attempt exact authority kind, ref, hash, amount, and currency all match the payable authority in DB",
+      "Equal amount/currency but different authority contract hash fails closed with PAYMENT_PAYABLE_AUTHORITY_MISMATCH",
+      "Equal amount/currency but different authority ref/id fails closed with PAYMENT_PAYABLE_AUTHORITY_MISMATCH",
       "Unchanged W2 quote cannot itself provide payable authority (total_paise and tax_paise remain NULL, attempt derives PAYABLE_AUTHORITY_MISSING)",
       "Positive test payable authority inserted into separate canonical_payable_authorities leaves stays_quotes completely unchanged and immutable",
       "Quote total_paise and tax_paise remain NULL before, during, and after composition",
@@ -37,7 +42,8 @@
       "Hold expiring after MATCHED_CAPTURE but before composition transitions attempt to RECONCILIATION_REQUIRED / HOLD_EXPIRED with zero reservation and preserved capture evidence",
       "W3-A inner finalizer failure rolls back subtransaction, preserves capture evidence, and records RECONCILIATION_REQUIRED / FINALIZER_FAILURE",
       "Post-finalizer outer failure (bridge insert failure injection) triggers full atomic transaction rollback: W3-A reservation, reservation nights, inventory units, and hold state are fully rolled back while pre-existing payment capture evidence is preserved",
-      "Independent-connection concurrency test proves row-level serialization on canonical_payment_attempts prevents composition from reading stale MATCHED_CAPTURE while a conflicting provider event moves the attempt to reconciliation",
+      "Real two-connection race between canonical_ingest_provider_event and canonical_compose_payment_reservation: conflicting provider capture event locks attempt first, commits RECONCILIATION_REQUIRED, and composition wakes and refuses (zero reservations, hold ACTIVE)",
+      "Inverse real two-connection race: composition acquires lock first, commits reservation, and provider event processes after composition deterministically",
       "Restricted encho_composition_worker role has zero direct EXECUTE privilege on W3-A canonical_finalize_direct_hold (permission denied) and zero table privileges on canonical_payable_authorities",
       "Ordinary payment worker (encho_payment_worker) and Guest/web role (encho_stays_web) cannot invoke composition authority (permission denied)",
       "Zero duplicate reservations across concurrent same-command and competing different-command executions",
@@ -48,6 +54,6 @@
     ]
   },
   "security": "Dedicated encho_composition_worker role with NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION; RLS forced on canonical_payable_authorities and canonical_payment_reservations; runtime roles explicitly revoked from canonical_payable_authorities; encho_composition_worker denied direct EXECUTE on canonical_finalize_direct_hold; web and payment workers denied EXECUTE on canonical_compose_payment_reservation; composition runtime has zero raw DML on canonical tables; narrow SECURITY DEFINER procedures execute verified composition.",
-  "conclusion": "W3-B Task 3 composition authority is repaired and verified on real PostgreSQL. The authority model separates W2 accepted-offer quotes (which strictly retain total_paise and tax_paise NULL) from final payable amount authority (owned by canonical_payable_authorities). In production, payable authority remains legally gated (PAYABLE_AUTHORITY_MISSING). In isolated tests, owner inserts a DISPOSABLE TEST FIXTURE ONLY payable authority row, allowing canonical_create_payment_attempt to derive expected amount and reach MATCHED_CAPTURE with matching provider evidence. Composition atomically executes W3-A canonical_finalize_direct_hold and records a durable bridge in canonical_payment_reservations. Post-finalizer outer failures roll back all W3-A effects completely. Row locks on payment attempts serialize conflicting provider events and composition across independent connections. Role privileges enforce strict least privilege without backdoor execution.",
+  "conclusion": "W3-B Task 3 composition authority is repaired and verified on real PostgreSQL. The authority model separates W2 accepted-offer quotes (which strictly retain total_paise and tax_paise NULL) from final payable amount authority (owned by canonical_payable_authorities). In this contract, payable authority lifecycle is simplified to exactly one immutable APPROVED authority per quote, with quote_id UNIQUE, status check enforced to 'APPROVED', and UPDATE/DELETE blocked. In production, payable authority remains legally gated (PAYABLE_AUTHORITY_MISSING). In isolated tests, owner inserts a DISPOSABLE TEST FIXTURE ONLY payable authority row, allowing canonical_create_payment_attempt to derive expected amount and reach MATCHED_CAPTURE with matching provider evidence. Composition strictly requires exact authority identity match (ref, kind, hash, amount, currency, and quote_id); equal-amount different-contract authorities fail closed. Real two-connection races verify row-level serialization between canonical_ingest_provider_event and canonical_compose_payment_reservation in both directions without raw updates. Role privileges enforce strict least privilege without backdoor execution.",
   "limitations": "No real money movement, remote Neon mutation, live Razorpay API, STAAH integration or public checkout was executed. Production payable authority issuer remains missing and legally gated pending written Indian CA/tax-lawyer sign-off. Test-only payable authority fixture was used exclusively for internal verification testing."
 }
