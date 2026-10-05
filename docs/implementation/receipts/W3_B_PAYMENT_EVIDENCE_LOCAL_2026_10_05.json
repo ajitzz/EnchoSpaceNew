@@ -1,7 +1,7 @@
 {
   "subject": "W3-B Task 2 provider-independent payment evidence and reconciliation authority (repaired)",
   "canonicalBase": "19231cb6e8ee206e1e31d08c62df7d697d5d9a46",
-  "reviewedWorkerCommit": "45202b8451dcba46a741a3ce742adee810ea61e1",
+  "reviewedWorkerCommit": "c50f5a23f6a75b923c885c1f1d781f478e3553b0",
   "evidenceLevel": "local built application, disposable PostgreSQL",
   "date": "2026-10-05",
   "workerBranch": "codex/antigravity-w3b-payment-boundary",
@@ -16,7 +16,7 @@
   "testCommand": "node scripts/testing/run.mjs src/test/harvo/w3b_canonical_payment_pg.test.ts",
   "results": {
     "suite": "W3-B Task 2: Provider-independent payment evidence and reconciliation authority on real PostgreSQL",
-    "testsPassed": 23,
+    "testsPassed": 32,
     "testsFailed": 0,
     "invariantsVerified": [
       "Payment worker cannot select synthetic monetary authority (SYNTHETIC_TEST eliminated from deployable schemas and SQL procedures)",
@@ -41,10 +41,18 @@
       "Foreign runtime roles denied execution without restricted worker privileges",
       "Guest/web role (encho_stays_web) has zero raw DML permissions on canonical payment tables",
       "Identical provider event replayed against same attempt returns DUPLICATE_IGNORED with replayed=true",
-      "DISPOSABLE TEST FIXTURE ONLY: trusted test fixture authority amount Y + provider evidence Y -> MATCHED_CAPTURE"
+      "DISPOSABLE TEST FIXTURE ONLY: trusted test fixture authority amount Y + provider evidence Y -> MATCHED_CAPTURE",
+      "Committed exact command replay recovered across hold expiry before mutable eligibility checks (replayed=true)",
+      "New command against expired hold fails closed with PAYMENT_HOLD_NOT_ACTIVE",
+      "Retrying committed command with mutated parameters after hold expiry conflicts (PAYMENT_COMMAND_CONFLICT)",
+      "Provider event origin mismatch quarantined with PROVIDER_ORIGIN_MISMATCH without advancing attempt state",
+      "Provider event order ref mismatch quarantined with PROVIDER_ORDER_REF_MISMATCH without advancing attempt state",
+      "Matching provider event order ref processes normally",
+      "Case A: Redundant second capture evidence with same underlying provider payment identity preserves MATCHED_CAPTURE without duplicate effect or state regression",
+      "Case B: Conflicting second capture identity enters RECONCILIATION_REQUIRED / CAPTURE_CONFLICT while preserving matched_at timestamp"
     ]
   },
   "security": "Dedicated encho_payment_worker role with NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION; RLS forced on all canonical payment tables; web and guest roles have zero raw DML permissions; narrow SECURITY DEFINER procedures execute verified mutations.",
-  "conclusion": "Provider-independent payment evidence and reconciliation authority is repaired. Deployable synthetic authority has been eliminated, monetary authority is database-derived, quote/hold/principal binding is strictly enforced, command identity and event semantic hashes are SHA-256 validated, state transitions are monotonic and capture-preserving, and exactly zero reservations are created.",
+  "conclusion": "Provider-independent payment evidence and reconciliation authority is repaired. Lost-response command replays are recovered before mutable quote/hold checks across hold expiry, incoming provider events are strictly bound to attempt origin and order reference with fail-closed quarantine for mismatches, redundant second captures preserve MATCHED_CAPTURE without duplicate effect, conflicting second captures trigger CAPTURE_CONFLICT reconciliation while preserving matched_at truth, and zero reservations are created.",
   "limitations": "No real money movement, remote Neon mutation, live Razorpay API, STAAH integration or public checkout was executed. W3-A reservation finalization was intentionally not composed with payment capture in this task."
 }

@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS canonical_payment_attempts (
   expected_authority_ref TEXT NOT NULL,
   expected_authority_hash TEXT,
   payment_state TEXT NOT NULL CHECK (payment_state IN ('INITIATED', 'AUTHORIZED', 'EVIDENCE_CAPTURED', 'MATCHED_CAPTURE', 'FAILED', 'UNKNOWN', 'RECONCILIATION_REQUIRED')),
-  reconciliation_reason TEXT CHECK (reconciliation_reason IS NULL OR reconciliation_reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE')),
+  reconciliation_reason TEXT CHECK (reconciliation_reason IS NULL OR reconciliation_reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE', 'CAPTURE_CONFLICT', 'MULTIPLE_CAPTURE_EVIDENCE')),
   matched_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS canonical_payment_reconciliations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payment_attempt_id UUID NOT NULL REFERENCES canonical_payment_attempts(id) ON DELETE RESTRICT,
   provider_event_id TEXT,
-  reason TEXT NOT NULL CHECK (reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE')),
+  reason TEXT NOT NULL CHECK (reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE', 'CAPTURE_CONFLICT', 'MULTIPLE_CAPTURE_EVIDENCE')),
   details JSONB NOT NULL DEFAULT '{}'::jsonb,
   resolved BOOLEAN NOT NULL DEFAULT false,
   resolution_notes TEXT,
@@ -151,15 +151,29 @@ BEGIN
     RAISE EXCEPTION 'PAYMENT_INPUT_INVALID';
   END IF;
 
-  -- 1. Validate quote exists
+  -- 1. Replay check on command_id: recover committed attempt before mutable checks
+  SELECT * INTO existing FROM public.canonical_payment_attempts WHERE command_id = target_command FOR UPDATE;
+  IF FOUND THEN
+    IF existing.holder_principal IS DISTINCT FROM target_holder_principal
+      OR existing.origin_kind IS DISTINCT FROM target_origin_kind
+      OR existing.quote_id IS DISTINCT FROM target_quote
+      OR existing.hold_id IS DISTINCT FROM target_hold
+      OR existing.provider_order_ref IS DISTINCT FROM target_provider_order_ref THEN
+      RAISE EXCEPTION 'PAYMENT_COMMAND_CONFLICT';
+    END IF;
+    RETURN QUERY SELECT existing.id, existing.payment_state, TRUE;
+    RETURN;
+  END IF;
+
+  -- 2. Validate quote exists
   SELECT * INTO quote_row FROM public.stays_quotes WHERE id = target_quote;
   IF NOT FOUND THEN RAISE EXCEPTION 'PAYMENT_QUOTE_NOT_FOUND'; END IF;
 
-  -- 2. Validate hold exists
+  -- 3. Validate hold exists
   SELECT * INTO hold_row FROM public.booking_holds WHERE id = target_hold;
   IF NOT FOUND THEN RAISE EXCEPTION 'PAYMENT_HOLD_NOT_FOUND'; END IF;
 
-  -- 3. Strict Quote + Hold + Principal + Itinerary Binding
+  -- 4. Strict Quote + Hold + Principal + Itinerary Binding
   IF hold_row.quote_id IS DISTINCT FROM quote_row.id THEN
     RAISE EXCEPTION 'PAYMENT_QUOTE_HOLD_MISMATCH';
   END IF;
@@ -183,14 +197,14 @@ BEGIN
     RAISE EXCEPTION 'PAYMENT_QUOTE_KIND_INVALID';
   END IF;
 
-  -- 4. Derive monetary authority exclusively from trusted database quote
+  -- 5. Derive monetary authority exclusively from trusted database quote
   derived_authority_kind := quote_row.quote_kind;
   derived_authority_ref := quote_row.id::text;
   derived_authority_hash := quote_row.source_hash;
   derived_expected_currency := quote_row.currency;
   derived_expected_amount := quote_row.total_paise; -- NULL for current accepted-offer quotes!
 
-  -- 5. Full durable command identity fingerprint
+  -- 6. Full durable command identity fingerprint
   fingerprint_input := jsonb_build_object(
     'holder_principal', target_holder_principal,
     'origin_kind', target_origin_kind,
@@ -204,16 +218,6 @@ BEGIN
     'expected_currency', derived_expected_currency
   );
   fingerprint := encode(sha256(convert_to(fingerprint_input::text, 'UTF8')), 'hex');
-
-  -- Replay check on command_id
-  SELECT * INTO existing FROM public.canonical_payment_attempts WHERE command_id = target_command FOR UPDATE;
-  IF FOUND THEN
-    IF existing.command_fingerprint IS DISTINCT FROM fingerprint THEN
-      RAISE EXCEPTION 'PAYMENT_COMMAND_CONFLICT';
-    END IF;
-    RETURN QUERY SELECT existing.id, existing.payment_state, TRUE;
-    RETURN;
-  END IF;
 
   -- Insert new attempt
   INSERT INTO public.canonical_payment_attempts(
@@ -265,6 +269,7 @@ DECLARE
   next_reason TEXT;
   saved_event_id UUID;
   mutation_detail TEXT;
+  matched_event RECORD;
 BEGIN
   IF target_attempt_id IS NULL OR target_origin_kind NOT IN ('RAZORPAY', 'STRIPE')
     OR target_event_id IS NULL
@@ -291,6 +296,38 @@ BEGIN
   -- Lock attempt first to prevent concurrent state corruption
   SELECT * INTO attempt FROM public.canonical_payment_attempts WHERE id = target_attempt_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'PAYMENT_ATTEMPT_NOT_FOUND'; END IF;
+
+  -- Verify provider evidence is compatible with the payment attempt
+  IF target_origin_kind <> attempt.origin_kind THEN
+    INSERT INTO public.canonical_quarantined_events(
+      origin_kind, provider_event_id, target_payment_attempt_id,
+      conflicting_evidence_hash, conflicting_details,
+      original_event_id, original_evidence_hash, quarantine_reason
+    ) VALUES (
+      target_origin_kind, target_event_id, attempt.id,
+      computed_hash, semantic_identity,
+      NULL, NULL, 'PROVIDER_ORIGIN_MISMATCH'
+    );
+    RETURN QUERY SELECT NULL::UUID, attempt.id, 'QUARANTINED'::TEXT,
+      attempt.payment_state, attempt.reconciliation_reason, FALSE;
+    RETURN;
+  END IF;
+
+  IF target_provider_order_ref IS NOT NULL AND target_provider_order_ref <> ''
+     AND target_provider_order_ref <> attempt.provider_order_ref THEN
+    INSERT INTO public.canonical_quarantined_events(
+      origin_kind, provider_event_id, target_payment_attempt_id,
+      conflicting_evidence_hash, conflicting_details,
+      original_event_id, original_evidence_hash, quarantine_reason
+    ) VALUES (
+      target_origin_kind, target_event_id, attempt.id,
+      computed_hash, semantic_identity,
+      NULL, NULL, 'PROVIDER_ORDER_REF_MISMATCH'
+    );
+    RETURN QUERY SELECT NULL::UUID, attempt.id, 'QUARANTINED'::TEXT,
+      attempt.payment_state, attempt.reconciliation_reason, FALSE;
+    RETURN;
+  END IF;
 
   -- Check existing provider event by (origin_kind, provider_event_id)
   SELECT * INTO existing_event FROM public.canonical_provider_events
@@ -369,8 +406,60 @@ BEGIN
   -- Monotonic State Normalization & Reconciliation Evaluation
   IF target_event_type = 'PAYMENT_CAPTURED' THEN
     IF attempt.payment_state = 'MATCHED_CAPTURE' THEN
-      -- Terminal matched capture: preserve without mutation
-      NULL;
+      -- An attempt was already matched to capture. Distinguish redundant capture vs conflicting second capture.
+      SELECT * INTO matched_event FROM public.canonical_provider_events
+        WHERE payment_attempt_id = attempt.id
+          AND normalized_event_type = 'PAYMENT_CAPTURED'
+          AND status = 'PROCESSED'
+          AND id <> saved_event_id
+        ORDER BY received_at ASC LIMIT 1;
+
+      IF FOUND AND (
+        matched_event.provider_payment_ref IS NOT DISTINCT FROM target_provider_payment_ref
+        AND matched_event.provider_order_ref IS NOT DISTINCT FROM target_provider_order_ref
+        AND matched_event.reported_amount_paise = target_reported_amount
+        AND matched_event.reported_currency = target_reported_currency
+      ) THEN
+        -- Case A: Redundant capture evidence for the SAME underlying provider payment identity
+        -- Preserve MATCHED_CAPTURE, no duplicate effect, no state regression
+        next_state := attempt.payment_state;
+        next_reason := attempt.reconciliation_reason;
+      ELSE
+        -- Case B: Conflicting / possible second capture identity
+        -- Preserve matched_at, enter explicit reconciliation / CAPTURE_CONFLICT
+        next_state := 'RECONCILIATION_REQUIRED';
+        next_reason := 'CAPTURE_CONFLICT';
+        INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
+          VALUES (
+            attempt.id,
+            target_event_id,
+            'CAPTURE_CONFLICT',
+            jsonb_build_object(
+              'matched_payment_ref', matched_event.provider_payment_ref,
+              'conflicting_payment_ref', target_provider_payment_ref,
+              'matched_amount', matched_event.reported_amount_paise,
+              'conflicting_amount', target_reported_amount,
+              'matched_currency', matched_event.reported_currency,
+              'conflicting_currency', target_reported_currency
+            )
+          );
+      END IF;
+    ELSIF attempt.payment_state = 'RECONCILIATION_REQUIRED' THEN
+      -- Monotonic: already in reconciliation, do not silently clear conflict or regress
+      next_state := attempt.payment_state;
+      next_reason := attempt.reconciliation_reason;
+      IF attempt.reconciliation_reason = 'CAPTURE_CONFLICT' THEN
+        INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
+          VALUES (
+            attempt.id,
+            target_event_id,
+            'MULTIPLE_CAPTURE_EVIDENCE',
+            jsonb_build_object(
+              'conflicting_payment_ref', target_provider_payment_ref,
+              'conflicting_amount', target_reported_amount
+            )
+          );
+      END IF;
     ELSE
       -- Check hold status
       SELECT * INTO held FROM public.booking_holds WHERE id = attempt.hold_id;
