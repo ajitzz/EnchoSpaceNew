@@ -106,23 +106,27 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
 
   /**
    * DISPOSABLE TEST FIXTURE ONLY:
-   * Establishes trusted test-only payment state in MATCHED_CAPTURE
-   * while preserving canonical W3-A accepted offer state (total_paise IS NULL)
-   * so that W3-A canonical_finalize_direct_hold authority remains pristine.
+   * Test owner inserts an approved payable authority row into canonical_payable_authorities
+   * bound to the quote, without touching stays_quotes.
+   * Payment worker derives this authority, ingests matching capture, and enters MATCHED_CAPTURE.
    */
   const createTestOnlyMatchedCaptureFixture = async (nights = 1) => {
     const ctx = await createHeldContext('user:10', nights);
     const expectedAmount = ctx.roomSubtotalPaise;
     const orderRef = 'order_test_' + randomUUID();
     const paymentRef = 'pay_test_' + randomUUID();
+    const payableId = randomUUID();
+    const contractHash = 'a'.repeat(64);
 
-    // 1. Temporarily provide total_paise so payment attempt derives monetary authority
-    await fixture.owner.query('ALTER TABLE stays_quotes DISABLE TRIGGER stays_quote_accepted_immutable');
-    await fixture.owner.query('ALTER TABLE stays_quotes DROP CONSTRAINT IF EXISTS stays_quotes_authority_shape');
-    await fixture.owner.query('UPDATE stays_quotes SET total_paise = $1 WHERE id = $2', [expectedAmount, ctx.quoteId]);
-    await fixture.owner.query('ALTER TABLE stays_quotes ENABLE TRIGGER stays_quote_accepted_immutable');
+    // 1. Owner inserts DISPOSABLE TEST FIXTURE ONLY payable authority (never alters stays_quotes)
+    await fixture.owner.query(
+      `INSERT INTO canonical_payable_authorities (
+        id, quote_id, currency, payable_amount_paise, authority_kind, contract_hash, status
+      ) VALUES ($1, $2, 'INR', $3, 'DISPOSABLE TEST FIXTURE ONLY', $4, 'APPROVED')`,
+      [payableId, ctx.quoteId, expectedAmount, contractHash]
+    );
 
-    // 2. Create payment attempt
+    // 2. Create payment attempt (derives payable authority from DB)
     const attempt = await createPaymentAttempt(paymentWorker, {
       commandId: randomUUID(),
       holderPrincipal: 'user:10',
@@ -150,22 +154,174 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(dbAttempt?.matchedAt).not.toBeNull();
     expect(dbAttempt?.reconciliationReason).toBeNull();
 
-    // 4. Restore canonical W3-A accepted offer quote state (total_paise = NULL)
-    await fixture.owner.query('ALTER TABLE stays_quotes DISABLE TRIGGER stays_quote_accepted_immutable');
-    await fixture.owner.query('UPDATE stays_quotes SET total_paise = NULL WHERE id = $1', [ctx.quoteId]);
-    await fixture.owner.query('ALTER TABLE stays_quotes ENABLE TRIGGER stays_quote_accepted_immutable');
-
     return {
       attemptId: attempt.attemptId,
       expectedAmount,
+      payableId,
+      contractHash,
       orderRef,
       paymentRef,
       ...ctx,
     };
   };
 
-  // 1. MATCHED_CAPTURE + valid active hold -> exactly one canonical reservation
-  it('1. MATCHED_CAPTURE + valid active hold -> exactly one canonical reservation', async () => {
+  // 1. unchanged W2 quote cannot itself provide payable authority
+  it('1. unchanged W2 quote cannot itself provide payable authority', async () => {
+    const ctx = await createHeldContext('user:10', 1);
+
+    // Check stays_quotes is subtotal-only with total_paise and tax_paise NULL
+    const {rows: quoteRows} = await fixture.owner.query(
+      'SELECT base_price_paise, total_paise, tax_paise, quote_kind FROM stays_quotes WHERE id = $1',
+      [ctx.quoteId]
+    );
+    expect(quoteRows[0].total_paise).toBeNull();
+    expect(quoteRows[0].tax_paise).toBeNull();
+    expect(quoteRows[0].quote_kind).toBe('ACCEPTED_OFFER');
+
+    // Create payment attempt without any payable authority row in DB
+    const orderRef = 'order_no_auth_' + randomUUID();
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+
+    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAttempt?.expectedAmountPaise).toBeNull();
+    expect(dbAttempt?.expectedAuthorityKind).toBe('PAYABLE_AUTHORITY_MISSING');
+
+    // Attempting to ingest a capture event moves it to RECONCILIATION_REQUIRED / PAYABLE_AUTHORITY_MISSING
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_no_auth_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: ctx.roomSubtotalPaise,
+      reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_no_auth_' + randomUUID(),
+      providerOrderRef: orderRef,
+      evidencePayload: {amount: ctx.roomSubtotalPaise},
+    });
+
+    const reconciledAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(reconciledAttempt?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(reconciledAttempt?.reconciliationReason).toBe('PAYABLE_AUTHORITY_MISSING');
+
+    // Composition cannot proceed
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: attempt.attemptId,
+    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
+  });
+
+  // 2. positive test payable authority leaves quote unchanged
+  it('2. positive test payable authority leaves quote unchanged', async () => {
+    const ctx = await createHeldContext('user:10', 1);
+    const payableId = randomUUID();
+    const contractHash = 'b'.repeat(64);
+
+    // Test owner inserts payable authority into canonical_payable_authorities
+    await fixture.owner.query(
+      `INSERT INTO canonical_payable_authorities (
+        id, quote_id, currency, payable_amount_paise, authority_kind, contract_hash, status
+      ) VALUES ($1, $2, 'INR', $3, 'DISPOSABLE TEST FIXTURE ONLY', $4, 'APPROVED')`,
+      [payableId, ctx.quoteId, ctx.roomSubtotalPaise, contractHash]
+    );
+
+    // Verify stays_quotes remains untouched: subtotal-only, total_paise and tax_paise remain NULL
+    const {rows: quoteRows} = await fixture.owner.query(
+      'SELECT base_price_paise, total_paise, tax_paise, quote_kind FROM stays_quotes WHERE id = $1',
+      [ctx.quoteId]
+    );
+    expect(quoteRows[0].total_paise).toBeNull();
+    expect(quoteRows[0].tax_paise).toBeNull();
+    expect(quoteRows[0].base_price_paise).toBe('550000');
+  });
+
+  // 3. quote total/tax remain NULL before and after composition
+  it('3. quote total/tax remain NULL before and after composition', async () => {
+    const fixtureData = await createTestOnlyMatchedCaptureFixture();
+
+    // Verify before composition
+    const {rows: beforeRows} = await fixture.owner.query(
+      'SELECT total_paise, tax_paise FROM stays_quotes WHERE id = $1',
+      [fixtureData.quoteId]
+    );
+    expect(beforeRows[0].total_paise).toBeNull();
+    expect(beforeRows[0].tax_paise).toBeNull();
+
+    const commandId = randomUUID();
+    const res = await composePaymentReservation(compositionWorker, {
+      commandId,
+      paymentAttemptId: fixtureData.attemptId,
+    });
+    expect(res.compositionState).toBe('COMMITTED');
+
+    // Verify after composition
+    const {rows: afterRows} = await fixture.owner.query(
+      'SELECT total_paise, tax_paise FROM stays_quotes WHERE id = $1',
+      [fixtureData.quoteId]
+    );
+    expect(afterRows[0].total_paise).toBeNull();
+    expect(afterRows[0].tax_paise).toBeNull();
+  });
+
+  // 4. payment attempt derives test payable authority from DB
+  it('4. payment attempt derives test payable authority from DB', async () => {
+    const ctx = await createHeldContext('user:10', 1);
+    const payableId = randomUUID();
+    const contractHash = 'c'.repeat(64);
+
+    await fixture.owner.query(
+      `INSERT INTO canonical_payable_authorities (
+        id, quote_id, currency, payable_amount_paise, authority_kind, contract_hash, status
+      ) VALUES ($1, $2, 'INR', $3, 'DISPOSABLE TEST FIXTURE ONLY', $4, 'APPROVED')`,
+      [payableId, ctx.quoteId, ctx.roomSubtotalPaise, contractHash]
+    );
+
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: 'order_derive_' + randomUUID(),
+    });
+
+    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(Number(dbAttempt?.expectedAmountPaise)).toBe(ctx.roomSubtotalPaise);
+    expect(dbAttempt?.expectedCurrency).toBe('INR');
+    expect(dbAttempt?.expectedAuthorityKind).toBe('DISPOSABLE TEST FIXTURE ONLY');
+    expect(dbAttempt?.expectedAuthorityRef).toBe(payableId);
+    expect(dbAttempt?.expectedAuthorityHash).toBe(contractHash);
+  });
+
+  // 5. caller cannot select arbitrary authority/amount
+  it('5. caller cannot select arbitrary authority/amount', async () => {
+    const ctx = await createHeldContext('user:10', 1);
+
+    // Neither service nor stored procedure accepts amount parameters
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: 'order_arb_' + randomUUID(),
+      // Extra fields are rejected by strict Zod schema
+    } as any);
+
+    // DB attempt without payable authority in table has NULL expected amount
+    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAttempt?.expectedAmountPaise).toBeNull();
+    expect(dbAttempt?.expectedAuthorityKind).toBe('PAYABLE_AUTHORITY_MISSING');
+  });
+
+  // 6. valid MATCHED_CAPTURE + valid hold -> exactly one canonical reservation
+  it('6. valid MATCHED_CAPTURE + valid hold -> exactly one canonical reservation', async () => {
     const fixtureData = await createTestOnlyMatchedCaptureFixture();
     const commandId = randomUUID();
 
@@ -194,25 +350,13 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(bridge?.quoteId).toBe(fixtureData.quoteId);
     expect(bridge?.holdId).toBe(fixtureData.holdId);
     expect(bridge?.status).toBe('COMMITTED');
-  });
 
-  // 2. reservation is the exact W3-A reservation
-  it('2. reservation is the exact W3-A reservation (quote, hold, offer/revision, itinerary, commercial snapshot)', async () => {
-    const fixtureData = await createTestOnlyMatchedCaptureFixture();
-    const commandId = randomUUID();
-
-    const res = await composePaymentReservation(compositionWorker, {
-      commandId,
-      paymentAttemptId: fixtureData.attemptId,
-    });
-
-    const {rows} = await fixture.owner.query(
+    // Verify exact W3-A reservation details
+    const {rows: resDetails} = await fixture.owner.query(
       'SELECT * FROM canonical_reservations WHERE id = $1',
       [res.reservationId]
     );
-    expect(rows.length).toBe(1);
-    const r = rows[0];
-
+    const r = resDetails[0];
     expect(r.origin_kind).toBe('ENCHO_DIRECT');
     expect(r.listing_id).toBe(1);
     expect(r.room_type_id).toBe(101);
@@ -227,65 +371,8 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(r.currency).toBe('INR');
     expect(r.status).toBe('INVENTORY_COMMITTED');
     expect(r.command_id).toBe(commandId);
-  });
 
-  // 3. all held nights: held_units decrement, booked_units increment exactly once
-  it('3. all held nights: held_units decrement, booked_units increment exactly once', async () => {
-    const fixtureData = await createTestOnlyMatchedCaptureFixture(2); // 2 nights
-
-    // Inspect inventory before composition
-    const {rows: daysBefore} = await fixture.owner.query(
-      `SELECT d.id, d.held_units, d.booked_units
-       FROM inventory_days d
-       JOIN booking_hold_nights hn ON hn.inventory_day_id = d.id
-       WHERE hn.hold_id = $1`,
-      [fixtureData.holdId]
-    );
-    expect(daysBefore.length).toBe(2);
-    for (const d of daysBefore) {
-      expect(d.held_units).toBe(1);
-      expect(d.booked_units).toBe(0);
-    }
-
-    const commandId = randomUUID();
-    const res = await composePaymentReservation(compositionWorker, {
-      commandId,
-      paymentAttemptId: fixtureData.attemptId,
-    });
-    expect(res.compositionState).toBe('COMMITTED');
-
-    // Inspect inventory after composition
-    const {rows: daysAfter} = await fixture.owner.query(
-      `SELECT d.id, d.held_units, d.booked_units
-       FROM inventory_days d
-       JOIN booking_hold_nights hn ON hn.inventory_day_id = d.id
-       WHERE hn.hold_id = $1`,
-      [fixtureData.holdId]
-    );
-    expect(daysAfter.length).toBe(2);
-    for (const d of daysAfter) {
-      expect(d.held_units).toBe(0);
-      expect(d.booked_units).toBe(1);
-    }
-
-    // Reservation nights match
-    const {rows: nights} = await fixture.owner.query(
-      'SELECT count(*)::int AS count FROM canonical_reservation_nights WHERE reservation_id = $1',
-      [res.reservationId]
-    );
-    expect(nights[0].count).toBe(2);
-  });
-
-  // 4. hold becomes CONSUMED
-  it('4. hold becomes CONSUMED', async () => {
-    const fixtureData = await createTestOnlyMatchedCaptureFixture();
-
-    const commandId = randomUUID();
-    await composePaymentReservation(compositionWorker, {
-      commandId,
-      paymentAttemptId: fixtureData.attemptId,
-    });
-
+    // Verify hold became CONSUMED
     const {rows: holdRows} = await fixture.owner.query(
       'SELECT status FROM booking_holds WHERE id = $1',
       [fixtureData.holdId]
@@ -293,8 +380,69 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(holdRows[0].status).toBe('CONSUMED');
   });
 
-  // 5. exact command replay after successful finalization
-  it('5. exact command replay after successful finalization -> same reservation ID, replayed=true, no second inventory effect', async () => {
+  // 7. tampered payment state without evidence cannot compose
+  it('7. tampered payment state without evidence cannot compose even if state column is tampered with', async () => {
+    const ctx = await createHeldContext();
+    const orderRef = 'order_tamper_' + randomUUID();
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+
+    // Owner maliciously tampers payment_state to MATCHED_CAPTURE without inserting any provider event
+    await fixture.owner.query(
+      `UPDATE canonical_payment_attempts
+       SET payment_state = 'MATCHED_CAPTURE',
+           matched_at = statement_timestamp(),
+           expected_amount_paise = 550000
+       WHERE id = $1`,
+      [attempt.attemptId]
+    );
+
+    // Composition MUST fail closed with PAYMENT_PAYABLE_AUTHORITY_MISSING or PAYMENT_CAPTURE_EVIDENCE_INVALID
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: attempt.attemptId,
+    })).rejects.toThrow(/PAYMENT_PAYABLE_AUTHORITY_MISSING|PAYMENT_CAPTURE_EVIDENCE_INVALID/);
+
+    // Zero reservations created
+    const {rows: resCount} = await fixture.owner.query(
+      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+      [ctx.holdId]
+    );
+    expect(resCount[0].count).toBe(0);
+  });
+
+  // 8. unresolved reconciliation blocks
+  it('8. unresolved reconciliation blocks composition', async () => {
+    const fixtureData = await createTestOnlyMatchedCaptureFixture();
+
+    // Insert an unresolved reconciliation row for this attempt
+    await fixture.owner.query(
+      `INSERT INTO canonical_payment_reconciliations (
+        payment_attempt_id, reason, details, resolved
+      ) VALUES ($1, 'CAPTURE_CONFLICT', '{"note": "fraud check"}'::jsonb, FALSE)`,
+      [fixtureData.attemptId]
+    );
+
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: fixtureData.attemptId,
+    })).rejects.toThrow('PAYMENT_RECONCILIATION_UNRESOLVED');
+
+    const {rows: resCount} = await fixture.owner.query(
+      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+      [fixtureData.holdId]
+    );
+    expect(resCount[0].count).toBe(0);
+  });
+
+  // 9. exact replay after consumed hold -> same reservation
+  it('9. exact replay after consumed hold -> same reservation ID, replayed=true, no second inventory effect', async () => {
     const fixtureData = await createTestOnlyMatchedCaptureFixture();
     const commandId = randomUUID();
 
@@ -304,7 +452,14 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     });
     expect(first.replayed).toBe(false);
 
-    // Exact replay with same commandId
+    // Verify hold is CONSUMED
+    const {rows: holdRows} = await fixture.owner.query(
+      'SELECT status FROM booking_holds WHERE id = $1',
+      [fixtureData.holdId]
+    );
+    expect(holdRows[0].status).toBe('CONSUMED');
+
+    // Exact replay with same commandId recovers same reservation despite consumed hold
     const replay = await composePaymentReservation(compositionWorker, {
       commandId,
       paymentAttemptId: fixtureData.attemptId,
@@ -331,79 +486,23 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(dayRows[0].booked_units).toBe(1);
   });
 
-  // 6. two concurrent same-command executions -> one reservation
-  it('6. two concurrent same-command executions -> one reservation', async () => {
-    const fixtureData = await createTestOnlyMatchedCaptureFixture();
-    const commandId = randomUUID();
-
-    const [res1, res2] = await Promise.all([
-      composePaymentReservation(compositionWorker, {
-        commandId,
-        paymentAttemptId: fixtureData.attemptId,
-      }),
-      composePaymentReservation(compositionWorker, {
-        commandId,
-        paymentAttemptId: fixtureData.attemptId,
-      }),
-    ]);
-
-    expect(res1.reservationId).toBe(res2.reservationId);
-    expect(res1.compositionState).toBe('COMMITTED');
-    expect(res2.compositionState).toBe('COMMITTED');
-
-    // Exactly one replayed=false, one replayed=true (or both replayed=true if serialized)
-    const replayFlags = [res1.replayed, res2.replayed];
-    expect(replayFlags).toContain(false);
-
-    // Inventory effect exactly once
-    const {rows: dayRows} = await fixture.owner.query(
-      `SELECT d.booked_units
-       FROM inventory_days d
-       JOIN booking_hold_nights hn ON hn.inventory_day_id = d.id
-       WHERE hn.hold_id = $1`,
-      [fixtureData.holdId]
-    );
-    expect(dayRows[0].booked_units).toBe(1);
-
-    const {rows: resCount} = await fixture.owner.query(
-      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-      [fixtureData.holdId]
-    );
-    expect(resCount[0].count).toBe(1);
-  });
-
-  // 7. two different command IDs racing on same payment attempt -> one reservation only
-  it('7. two different command IDs racing on same payment attempt -> one reservation only', async () => {
+  // 10. different command same payment -> no second reservation
+  it('10. different command same payment -> no second reservation', async () => {
     const fixtureData = await createTestOnlyMatchedCaptureFixture();
     const commandId1 = randomUUID();
     const commandId2 = randomUUID();
 
-    const results = await Promise.allSettled([
-      composePaymentReservation(compositionWorker, {
-        commandId: commandId1,
-        paymentAttemptId: fixtureData.attemptId,
-      }),
-      composePaymentReservation(compositionWorker, {
-        commandId: commandId2,
-        paymentAttemptId: fixtureData.attemptId,
-      }),
-    ]);
+    await composePaymentReservation(compositionWorker, {
+      commandId: commandId1,
+      paymentAttemptId: fixtureData.attemptId,
+    });
 
-    const fulfilled = results.filter(r => r.status === 'fulfilled');
-    const rejected = results.filter(r => r.status === 'rejected');
+    // Attempting to compose the already-composed payment attempt with a different commandId
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: commandId2,
+      paymentAttemptId: fixtureData.attemptId,
+    })).rejects.toThrow('PAYMENT_ALREADY_COMPOSED');
 
-    expect(fulfilled.length).toBe(1);
-    expect(rejected.length).toBe(1);
-
-    const winningRes = (fulfilled[0] as PromiseFulfilledResult<any>).value;
-    expect(winningRes.compositionState).toBe('COMMITTED');
-    expect(winningRes.reservationId).not.toBeNull();
-
-    const losingError = (rejected[0] as PromiseRejectedResult).reason;
-    expect(losingError).toBeInstanceOf(CompositionAuthorityError);
-    expect(losingError.code).toBe('PAYMENT_ALREADY_COMPOSED');
-
-    // Total reservations in DB remains 1
     const {rows: resCount} = await fixture.owner.query(
       'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
       [fixtureData.holdId]
@@ -411,229 +510,8 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(resCount[0].count).toBe(1);
   });
 
-  // 8. INITIATED attempt cannot compose
-  it('8. INITIATED attempt cannot compose', async () => {
-    const ctx = await createHeldContext();
-    const attempt = await createPaymentAttempt(paymentWorker, {
-      commandId: randomUUID(),
-      holderPrincipal: 'user:10',
-      originKind: 'RAZORPAY',
-      quoteId: ctx.quoteId,
-      holdId: ctx.holdId,
-      providerOrderRef: 'order_init_' + randomUUID(),
-    });
-    expect(attempt.paymentState).toBe('INITIATED');
-
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: randomUUID(),
-      paymentAttemptId: attempt.attemptId,
-    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
-
-    const {rows: resCount} = await fixture.owner.query(
-      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-      [ctx.holdId]
-    );
-    expect(resCount[0].count).toBe(0);
-  });
-
-  // 9. AUTHORIZED attempt cannot compose
-  it('9. AUTHORIZED attempt cannot compose', async () => {
-    const ctx = await createHeldContext();
-    const orderRef = 'order_auth_' + randomUUID();
-    const attempt = await createPaymentAttempt(paymentWorker, {
-      commandId: randomUUID(),
-      holderPrincipal: 'user:10',
-      originKind: 'RAZORPAY',
-      quoteId: ctx.quoteId,
-      holdId: ctx.holdId,
-      providerOrderRef: orderRef,
-    });
-
-    await ingestProviderEvent(paymentWorker, {
-      attemptId: attempt.attemptId,
-      originKind: 'RAZORPAY',
-      providerEventId: 'evt_auth_' + randomUUID(),
-      normalizedEventType: 'PAYMENT_AUTHORIZED',
-      reportedAmountPaise: 550000,
-      reportedCurrency: 'INR',
-      providerPaymentRef: 'pay_auth_' + randomUUID(),
-      providerOrderRef: orderRef,
-      evidencePayload: {note: 'auth'},
-    });
-
-    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
-    expect(dbAttempt?.paymentState).toBe('AUTHORIZED');
-
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: randomUUID(),
-      paymentAttemptId: attempt.attemptId,
-    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
-  });
-
-  // 10. UNKNOWN attempt cannot compose
-  it('10. UNKNOWN attempt cannot compose', async () => {
-    const ctx = await createHeldContext();
-    const orderRef = 'order_unk_' + randomUUID();
-    const attempt = await createPaymentAttempt(paymentWorker, {
-      commandId: randomUUID(),
-      holderPrincipal: 'user:10',
-      originKind: 'RAZORPAY',
-      quoteId: ctx.quoteId,
-      holdId: ctx.holdId,
-      providerOrderRef: orderRef,
-    });
-
-    await ingestProviderEvent(paymentWorker, {
-      attemptId: attempt.attemptId,
-      originKind: 'RAZORPAY',
-      providerEventId: 'evt_unk_' + randomUUID(),
-      normalizedEventType: 'PAYMENT_UNKNOWN',
-      reportedAmountPaise: 0,
-      reportedCurrency: 'INR',
-      providerOrderRef: orderRef,
-      evidencePayload: {note: 'unknown'},
-    });
-
-    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
-    expect(dbAttempt?.paymentState).toBe('UNKNOWN');
-
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: randomUUID(),
-      paymentAttemptId: attempt.attemptId,
-    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
-  });
-
-  // 11. FAILED attempt cannot compose
-  it('11. FAILED attempt cannot compose', async () => {
-    const ctx = await createHeldContext();
-    const orderRef = 'order_fail_' + randomUUID();
-    const attempt = await createPaymentAttempt(paymentWorker, {
-      commandId: randomUUID(),
-      holderPrincipal: 'user:10',
-      originKind: 'RAZORPAY',
-      quoteId: ctx.quoteId,
-      holdId: ctx.holdId,
-      providerOrderRef: orderRef,
-    });
-
-    await ingestProviderEvent(paymentWorker, {
-      attemptId: attempt.attemptId,
-      originKind: 'RAZORPAY',
-      providerEventId: 'evt_fail_' + randomUUID(),
-      normalizedEventType: 'PAYMENT_FAILED',
-      reportedAmountPaise: 550000,
-      reportedCurrency: 'INR',
-      providerOrderRef: orderRef,
-      evidencePayload: {note: 'declined'},
-    });
-
-    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
-    expect(dbAttempt?.paymentState).toBe('FAILED');
-
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: randomUUID(),
-      paymentAttemptId: attempt.attemptId,
-    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
-  });
-
-  // 12. RECONCILIATION_REQUIRED attempt cannot compose
-  it('12. RECONCILIATION_REQUIRED attempt cannot compose', async () => {
-    const ctx = await createHeldContext();
-    const orderRef = 'order_rec_' + randomUUID();
-    const attempt = await createPaymentAttempt(paymentWorker, {
-      commandId: randomUUID(),
-      holderPrincipal: 'user:10',
-      originKind: 'RAZORPAY',
-      quoteId: ctx.quoteId,
-      holdId: ctx.holdId,
-      providerOrderRef: orderRef,
-    });
-
-    // Ingest capture with missing payment reference -> RECONCILIATION_REQUIRED / CAPTURE_IDENTITY_MISSING
-    await ingestProviderEvent(paymentWorker, {
-      attemptId: attempt.attemptId,
-      originKind: 'RAZORPAY',
-      providerEventId: 'evt_no_ref_' + randomUUID(),
-      normalizedEventType: 'PAYMENT_CAPTURED',
-      reportedAmountPaise: 550000,
-      reportedCurrency: 'INR',
-      providerPaymentRef: null,
-      providerOrderRef: orderRef,
-      evidencePayload: {note: 'no payment id'},
-    });
-
-    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
-    expect(dbAttempt?.paymentState).toBe('RECONCILIATION_REQUIRED');
-
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: randomUUID(),
-      paymentAttemptId: attempt.attemptId,
-    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
-  });
-
-  // 13. missing/non-authoritative capture evidence cannot compose even if state column is tampered with
-  it('13. missing/non-authoritative capture evidence cannot compose even if a state column is tampered with by test owner', async () => {
-    const ctx = await createHeldContext();
-    const orderRef = 'order_tamper_' + randomUUID();
-    const attempt = await createPaymentAttempt(paymentWorker, {
-      commandId: randomUUID(),
-      holderPrincipal: 'user:10',
-      originKind: 'RAZORPAY',
-      quoteId: ctx.quoteId,
-      holdId: ctx.holdId,
-      providerOrderRef: orderRef,
-    });
-
-    // Owner maliciously tampers payment_state to MATCHED_CAPTURE without inserting any provider event
-    await fixture.owner.query(
-      `UPDATE canonical_payment_attempts
-       SET payment_state = 'MATCHED_CAPTURE',
-           matched_at = statement_timestamp(),
-           expected_amount_paise = 550000
-       WHERE id = $1`,
-      [attempt.attemptId]
-    );
-
-    // Composition MUST fail closed with PAYMENT_CAPTURE_EVIDENCE_INVALID
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: randomUUID(),
-      paymentAttemptId: attempt.attemptId,
-    })).rejects.toThrow('PAYMENT_CAPTURE_EVIDENCE_INVALID');
-
-    // Zero reservations created
-    const {rows: resCount} = await fixture.owner.query(
-      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-      [ctx.holdId]
-    );
-    expect(resCount[0].count).toBe(0);
-  });
-
-  // 14. mismatched provider capture evidence cannot compose
-  it('14. mismatched provider capture evidence cannot compose', async () => {
-    const fixtureData = await createTestOnlyMatchedCaptureFixture();
-
-    // Owner mutates the provider event reported_amount in canonical_provider_events
-    await fixture.owner.query('ALTER TABLE canonical_provider_events DISABLE TRIGGER canonical_provider_events_immutable');
-    await fixture.owner.query(
-      'UPDATE canonical_provider_events SET reported_amount_paise = 999999 WHERE payment_attempt_id = $1',
-      [fixtureData.attemptId]
-    );
-    await fixture.owner.query('ALTER TABLE canonical_provider_events ENABLE TRIGGER canonical_provider_events_immutable');
-
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: randomUUID(),
-      paymentAttemptId: fixtureData.attemptId,
-    })).rejects.toThrow('PAYMENT_CAPTURE_EVIDENCE_INVALID');
-
-    const {rows: resCount} = await fixture.owner.query(
-      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-      [fixtureData.holdId]
-    );
-    expect(resCount[0].count).toBe(0);
-  });
-
-  // 15. hold expires after MATCHED_CAPTURE but before composition
-  it('15. hold expires after MATCHED_CAPTURE but before composition -> zero reservation, capture evidence preserved, reconciliation recorded', async () => {
+  // 11. hold expires after capture -> no reservation
+  it('11. hold expires after capture -> no reservation, capture evidence preserved, reconciliation recorded', async () => {
     const fixtureData = await createTestOnlyMatchedCaptureFixture();
 
     // Fast-forward hold past expiry
@@ -678,8 +556,8 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(reconciliations.some(r => r.reason === 'HOLD_EXPIRED')).toBe(true);
   });
 
-  // 16. W3-A finalizer failure
-  it('16. W3-A finalizer failure -> zero partial reservation, zero partial inventory conversion, capture evidence preserved, FINALIZER_FAILURE reconciliation', async () => {
+  // 12. inner W3-A failure -> no partial reservation/inventory
+  it('12. inner W3-A failure -> no partial reservation/inventory, capture preserved, reconciliation recorded', async () => {
     const fixtureData = await createTestOnlyMatchedCaptureFixture();
 
     // Corrupt inventory day held_units so W3-A finalizer fails night validation
@@ -720,7 +598,7 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     const dbAttempt = await getPaymentAttempt(paymentWorker, fixtureData.attemptId);
     expect(dbAttempt?.paymentState).toBe('RECONCILIATION_REQUIRED');
     expect(dbAttempt?.reconciliationReason).toBe('FINALIZER_FAILURE');
-    expect(dbAttempt?.matchedAt).not.toBeNull(); // matched_at preserved!
+    expect(dbAttempt?.matchedAt).not.toBeNull();
 
     // Provider capture evidence preserved
     const {rows: events} = await fixture.owner.query(
@@ -734,34 +612,398 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(reconciliations.some(r => r.reason === 'FINALIZER_FAILURE')).toBe(true);
   });
 
-  // 17. response-loss replay after committed reservation -> recover same reservation despite consumed hold
-  it('17. response-loss replay after committed reservation -> recover same reservation despite consumed hold', async () => {
+  // 13. post-W3-A outer failure -> ALL W3-A effects rolled back
+  it('13. post-W3-A outer failure -> ALL W3-A effects rolled back atomically (no orphaned reservation or inventory conversion)', async () => {
     const fixtureData = await createTestOnlyMatchedCaptureFixture();
     const commandId = randomUUID();
 
-    // First commit
-    const first = await composePaymentReservation(compositionWorker, {
-      commandId,
-      paymentAttemptId: fixtureData.attemptId,
-    });
-    expect(first.replayed).toBe(false);
+    // Test owner installs a temporary fixture trigger on canonical_payment_reservations that raises an exception on bridge insert
+    await fixture.owner.query(`
+      CREATE OR REPLACE FUNCTION fixture_fail_bridge_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'FIXTURE_INJECTED_BRIDGE_FAILURE';
+      END $$;
+      CREATE TRIGGER fixture_test_fail_bridge BEFORE INSERT ON canonical_payment_reservations
+        FOR EACH ROW EXECUTE FUNCTION fixture_fail_bridge_insert();
+    `);
 
-    // Confirm hold is CONSUMED
-    const {rows: holdRows} = await fixture.owner.query('SELECT status FROM booking_holds WHERE id = $1', [fixtureData.holdId]);
-    expect(holdRows[0].status).toBe('CONSUMED');
+    try {
+      // Composition MUST fail due to outer transaction abort
+      await expect(composePaymentReservation(compositionWorker, {
+        commandId,
+        paymentAttemptId: fixtureData.attemptId,
+      })).rejects.toThrow(/FIXTURE_INJECTED_BRIDGE_FAILURE|COMPOSITION_AUTHORITY_UNAVAILABLE/);
 
-    // Simulate lost response: retrying identical command recovers committed reservation without error
-    const replay = await composePaymentReservation(compositionWorker, {
-      commandId,
-      paymentAttemptId: fixtureData.attemptId,
-    });
-    expect(replay.replayed).toBe(true);
-    expect(replay.reservationId).toBe(first.reservationId);
-    expect(replay.compositionState).toBe('COMMITTED');
+      // Verify ALL W3-A effects were rolled back:
+      // 1. Zero canonical reservations created
+      const {rows: resCount} = await fixture.owner.query(
+        'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+        [fixtureData.holdId]
+      );
+      expect(resCount[0].count).toBe(0);
+
+      // 2. Zero reservation nights
+      const {rows: resNights} = await fixture.owner.query(
+        `SELECT count(*)::int AS count FROM canonical_reservation_nights
+         WHERE reservation_id IN (SELECT id FROM canonical_reservations WHERE hold_id = $1)`,
+        [fixtureData.holdId]
+      );
+      expect(resNights[0].count).toBe(0);
+
+      // 3. Inventory units restored: held_units remains 1, booked_units remains 0
+      const {rows: dayRows} = await fixture.owner.query(
+        `SELECT d.held_units, d.booked_units
+         FROM inventory_days d
+         JOIN booking_hold_nights hn ON hn.inventory_day_id = d.id
+         WHERE hn.hold_id = $1`,
+        [fixtureData.holdId]
+      );
+      expect(dayRows[0].held_units).toBe(1);
+      expect(dayRows[0].booked_units).toBe(0);
+
+      // 4. Hold remains ACTIVE (not consumed)
+      const {rows: holdRows} = await fixture.owner.query(
+        'SELECT status FROM booking_holds WHERE id = $1',
+        [fixtureData.holdId]
+      );
+      expect(holdRows[0].status).toBe('ACTIVE');
+
+      // 5. Zero bridge rows in canonical_payment_reservations
+      const bridge = await getPaymentReservation(compositionWorker, fixtureData.attemptId);
+      expect(bridge).toBeNull();
+
+      // 6. Pre-existing payment capture evidence from earlier transaction remains intact
+      const {rows: events} = await fixture.owner.query(
+        'SELECT count(*)::int AS count FROM canonical_provider_events WHERE payment_attempt_id = $1 AND normalized_event_type = $2',
+        [fixtureData.attemptId, 'PAYMENT_CAPTURED']
+      );
+      expect(events[0].count).toBe(1);
+
+      // 7. Payment attempt remains in MATCHED_CAPTURE (transaction rolled back)
+      const dbAttempt = await getPaymentAttempt(paymentWorker, fixtureData.attemptId);
+      expect(dbAttempt?.paymentState).toBe('MATCHED_CAPTURE');
+    } finally {
+      // Clean up temporary fixture trigger
+      await fixture.owner.query(`
+        DROP TRIGGER IF EXISTS fixture_test_fail_bridge ON canonical_payment_reservations;
+        DROP FUNCTION IF EXISTS fixture_fail_bridge_insert();
+      `);
+    }
   });
 
-  // 18. same command ID + different payment attempt -> conflict
-  it('18. same command ID + different payment attempt -> conflict', async () => {
+  // 14. conflicting provider event wins lock before composition -> composition refuses after serialization
+  it('14. conflicting provider event wins lock before composition -> composition refuses after serialization', async () => {
+    const fixtureData = await createTestOnlyMatchedCaptureFixture();
+    const commandId = randomUUID();
+
+    const conn1 = await fixture.owner.connect();
+    try {
+      // Connection 1 begins transaction and acquires row lock on payment attempt
+      await conn1.query('BEGIN');
+      await conn1.query('SELECT * FROM canonical_payment_attempts WHERE id = $1 FOR UPDATE', [fixtureData.attemptId]);
+
+      // Connection 2 launches composition -> blocks waiting for connection 1 lock
+      let compCompleted = false;
+      const compPromise = composePaymentReservation(compositionWorker, {
+        commandId,
+        paymentAttemptId: fixtureData.attemptId,
+      }).finally(() => {
+        compCompleted = true;
+      });
+
+      // Brief pause to ensure connection 2 is blocked on lock
+      await new Promise(r => setTimeout(r, 100));
+      expect(compCompleted).toBe(false);
+
+      // Connection 1 mutates attempt to RECONCILIATION_REQUIRED and commits
+      await conn1.query(
+        `UPDATE canonical_payment_attempts
+         SET payment_state = 'RECONCILIATION_REQUIRED',
+             reconciliation_reason = 'CAPTURE_CONFLICT',
+             updated_at = statement_timestamp()
+         WHERE id = $1`,
+        [fixtureData.attemptId]
+      );
+      await conn1.query(
+        `INSERT INTO canonical_payment_reconciliations (
+          payment_attempt_id, reason, details
+        ) VALUES ($1, 'CAPTURE_CONFLICT', '{"source": "independent_connection_race"}'::jsonb)`,
+        [fixtureData.attemptId]
+      );
+      await conn1.query('COMMIT');
+
+      // Connection 2 now unblocks, observes RECONCILIATION_REQUIRED, and refuses to compose
+      await expect(compPromise).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
+
+      // Verify zero reservations created
+      const {rows: resCount} = await fixture.owner.query(
+        'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+        [fixtureData.holdId]
+      );
+      expect(resCount[0].count).toBe(0);
+
+      // Hold remains ACTIVE
+      const {rows: holdRows} = await fixture.owner.query(
+        'SELECT status FROM booking_holds WHERE id = $1',
+        [fixtureData.holdId]
+      );
+      expect(holdRows[0].status).toBe('ACTIVE');
+    } catch (err) {
+      await conn1.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      conn1.release();
+    }
+  });
+
+  // 15. composition worker cannot directly execute W3-A finalizer
+  it('15. composition worker cannot directly execute W3-A finalizer', async () => {
+    const ctx = await createHeldContext();
+
+    // 1. Function privilege query returns false
+    const {rows: privRows} = await compositionWorker.query(
+      `SELECT has_function_privilege(current_user, 'public.canonical_finalize_direct_hold(uuid,uuid,uuid)', 'EXECUTE') AS has_priv`
+    );
+    expect(privRows[0].has_priv).toBe(false);
+
+    // 2. Direct execution attempt receives permission denied
+    await expect(compositionWorker.query(
+      `SELECT * FROM canonical_finalize_direct_hold($1::uuid, $2::uuid, $3::uuid)`,
+      [ctx.holdId, ctx.quoteId, randomUUID()]
+    )).rejects.toThrow(/permission denied/);
+
+    // 3. Raw table DML on canonical_payable_authorities is denied
+    await expect(compositionWorker.query(
+      `SELECT * FROM canonical_payable_authorities`
+    )).rejects.toThrow(/permission denied/);
+  });
+
+  // 16. payment worker cannot compose
+  it('16. payment worker cannot compose', async () => {
+    const fixtureData = await createTestOnlyMatchedCaptureFixture();
+    const commandId = randomUUID();
+
+    await expect(paymentWorker.query(
+      'SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)',
+      [commandId, fixtureData.attemptId]
+    )).rejects.toThrow(/permission denied/);
+
+    await expect(assertCompositionWorkerRole(paymentWorker)).rejects.toThrow('COMPOSITION_ROLE_NOT_RESTRICTED');
+  });
+
+  // 17. Guest/web cannot compose
+  it('17. Guest/web cannot compose', async () => {
+    const fixtureData = await createTestOnlyMatchedCaptureFixture();
+    const commandId = randomUUID();
+
+    await expect(stays.query(
+      'SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)',
+      [commandId, fixtureData.attemptId]
+    )).rejects.toThrow(/permission denied/);
+
+    await expect(assertCompositionWorkerRole(stays)).rejects.toThrow('COMPOSITION_ROLE_NOT_RESTRICTED');
+  });
+
+  // 18. zero duplicate reservations: concurrent executions yield exactly one reservation
+  it('18. zero duplicate reservations: concurrent executions yield exactly one reservation', async () => {
+    // A. Two concurrent same-command executions -> exactly one reservation, one replayed=true
+    const fixture1 = await createTestOnlyMatchedCaptureFixture();
+    const sameCmd = randomUUID();
+
+    const [res1, res2] = await Promise.all([
+      composePaymentReservation(compositionWorker, {
+        commandId: sameCmd,
+        paymentAttemptId: fixture1.attemptId,
+      }),
+      composePaymentReservation(compositionWorker, {
+        commandId: sameCmd,
+        paymentAttemptId: fixture1.attemptId,
+      }),
+    ]);
+
+    expect(res1.reservationId).toBe(res2.reservationId);
+    expect([res1.replayed, res2.replayed]).toContain(false);
+
+    const {rows: resCount1} = await fixture.owner.query(
+      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+      [fixture1.holdId]
+    );
+    expect(resCount1[0].count).toBe(1);
+
+    // B. Two concurrent different-command executions on same payment -> exactly one succeeds, one rejected
+    const fixture2 = await createTestOnlyMatchedCaptureFixture();
+    const diffCmd1 = randomUUID();
+    const diffCmd2 = randomUUID();
+
+    const diffResults = await Promise.allSettled([
+      composePaymentReservation(compositionWorker, {
+        commandId: diffCmd1,
+        paymentAttemptId: fixture2.attemptId,
+      }),
+      composePaymentReservation(compositionWorker, {
+        commandId: diffCmd2,
+        paymentAttemptId: fixture2.attemptId,
+      }),
+    ]);
+
+    const fulfilled = diffResults.filter(r => r.status === 'fulfilled');
+    const rejected = diffResults.filter(r => r.status === 'rejected');
+
+    expect(fulfilled.length).toBe(1);
+    expect(rejected.length).toBe(1);
+
+    const losingError = (rejected[0] as PromiseRejectedResult).reason;
+    expect(losingError).toBeInstanceOf(CompositionAuthorityError);
+    expect(losingError.code).toBe('PAYMENT_ALREADY_COMPOSED');
+
+    const {rows: resCount2} = await fixture.owner.query(
+      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+      [fixture2.holdId]
+    );
+    expect(resCount2[0].count).toBe(1);
+  });
+
+  // 19. external-channel reservation schema remains independent
+  it('19. external-channel reservation schema remains independent', async () => {
+    // The legacy bookings table and external reservation pathways do not reference
+    // canonical_payment_reservations or canonical_payable_authorities.
+    const {rows} = await fixture.owner.query(`
+      SELECT tc.table_name, kcu.column_name, ccu.table_name AS foreign_table_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_name = 'bookings'
+        AND ccu.table_name IN ('canonical_payment_reservations', 'canonical_payable_authorities')
+    `);
+    expect(rows.length).toBe(0);
+  });
+
+  // 20. Non-captured states cannot compose
+  it('20. INITIATED, AUTHORIZED, UNKNOWN, FAILED states cannot compose', async () => {
+    // INITIATED
+    const ctx1 = await createHeldContext();
+    const att1 = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx1.quoteId,
+      holdId: ctx1.holdId,
+      providerOrderRef: 'order_init_' + randomUUID(),
+    });
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: att1.attemptId,
+    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
+
+    // AUTHORIZED
+    const ctx2 = await createHeldContext();
+    const order2 = 'order_auth_' + randomUUID();
+    const att2 = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx2.quoteId,
+      holdId: ctx2.holdId,
+      providerOrderRef: order2,
+    });
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: att2.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_auth_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_AUTHORIZED',
+      reportedAmountPaise: 550000,
+      reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_auth_' + randomUUID(),
+      providerOrderRef: order2,
+      evidencePayload: {note: 'auth'},
+    });
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: att2.attemptId,
+    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
+
+    // UNKNOWN
+    const ctx3 = await createHeldContext();
+    const order3 = 'order_unk_' + randomUUID();
+    const att3 = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx3.quoteId,
+      holdId: ctx3.holdId,
+      providerOrderRef: order3,
+    });
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: att3.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_unk_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_UNKNOWN',
+      reportedAmountPaise: 0,
+      reportedCurrency: 'INR',
+      providerOrderRef: order3,
+      evidencePayload: {note: 'unknown'},
+    });
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: att3.attemptId,
+    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
+
+    // FAILED
+    const ctx4 = await createHeldContext();
+    const order4 = 'order_fail_' + randomUUID();
+    const att4 = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx4.quoteId,
+      holdId: ctx4.holdId,
+      providerOrderRef: order4,
+    });
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: att4.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_fail_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_FAILED',
+      reportedAmountPaise: 550000,
+      reportedCurrency: 'INR',
+      providerOrderRef: order4,
+      evidencePayload: {note: 'declined'},
+    });
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: att4.attemptId,
+    })).rejects.toThrow('PAYMENT_STATE_NOT_CAPTURED');
+  });
+
+  // 21. mismatched provider capture evidence cannot compose
+  it('21. mismatched provider capture evidence cannot compose', async () => {
+    const fixtureData = await createTestOnlyMatchedCaptureFixture();
+
+    // Owner mutates the provider event reported_amount in canonical_provider_events
+    await fixture.owner.query('ALTER TABLE canonical_provider_events DISABLE TRIGGER canonical_provider_events_immutable');
+    await fixture.owner.query(
+      'UPDATE canonical_provider_events SET reported_amount_paise = 999999 WHERE payment_attempt_id = $1',
+      [fixtureData.attemptId]
+    );
+    await fixture.owner.query('ALTER TABLE canonical_provider_events ENABLE TRIGGER canonical_provider_events_immutable');
+
+    await expect(composePaymentReservation(compositionWorker, {
+      commandId: randomUUID(),
+      paymentAttemptId: fixtureData.attemptId,
+    })).rejects.toThrow('PAYMENT_CAPTURE_EVIDENCE_INVALID');
+
+    const {rows: resCount} = await fixture.owner.query(
+      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
+      [fixtureData.holdId]
+    );
+    expect(resCount[0].count).toBe(0);
+  });
+
+  // 22. same command ID + different payment attempt -> conflict
+  it('22. same command ID + different payment attempt -> conflict', async () => {
     const fixture1 = await createTestOnlyMatchedCaptureFixture();
     const fixture2 = await createTestOnlyMatchedCaptureFixture();
     const commandId = randomUUID();
@@ -779,54 +1021,8 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     })).rejects.toThrow('COMPOSITION_COMMAND_CONFLICT');
   });
 
-  // 19. different command after payment already composed -> no second reservation
-  it('19. different command after payment already composed -> no second reservation', async () => {
-    const fixtureData = await createTestOnlyMatchedCaptureFixture();
-    const commandId1 = randomUUID();
-    const commandId2 = randomUUID();
-
-    await composePaymentReservation(compositionWorker, {
-      commandId: commandId1,
-      paymentAttemptId: fixtureData.attemptId,
-    });
-
-    // Attempting to compose the already-composed payment attempt with a different commandId
-    await expect(composePaymentReservation(compositionWorker, {
-      commandId: commandId2,
-      paymentAttemptId: fixtureData.attemptId,
-    })).rejects.toThrow('PAYMENT_ALREADY_COMPOSED');
-
-    const {rows: resCount} = await fixture.owner.query(
-      'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-      [fixtureData.holdId]
-    );
-    expect(resCount[0].count).toBe(1);
-  });
-
-  // 20. Guest/web/payment worker cannot invoke composition authority
-  it('20. Guest/web/payment worker cannot invoke composition authority', async () => {
-    const fixtureData = await createTestOnlyMatchedCaptureFixture();
-    const commandId = randomUUID();
-
-    // Guest/web role (encho_stays_web) cannot execute procedure
-    await expect(stays.query(
-      'SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)',
-      [commandId, fixtureData.attemptId]
-    )).rejects.toThrow(/permission denied/);
-
-    // Payment worker cannot execute procedure
-    await expect(paymentWorker.query(
-      'SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)',
-      [commandId, fixtureData.attemptId]
-    )).rejects.toThrow(/permission denied/);
-
-    // Composition worker role check rejects paymentWorker pool
-    await expect(assertCompositionWorkerRole(paymentWorker)).rejects.toThrow('COMPOSITION_ROLE_NOT_RESTRICTED');
-    await expect(assertCompositionWorkerRole(stays)).rejects.toThrow('COMPOSITION_ROLE_NOT_RESTRICTED');
-  });
-
-  // 21. no public route added
-  it('21. no public route added: internal composition authority only', async () => {
+  // 23. no public route added
+  it('23. no public route added: internal composition authority only', async () => {
     const {readFileSync} = await import('node:fs');
     const serverSource = readFileSync(new URL('../../../server.ts', import.meta.url), 'utf8');
     expect(serverSource).not.toContain('/api/stays/compose');

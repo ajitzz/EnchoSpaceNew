@@ -17,6 +17,8 @@ const knownCodes = new Set([
   'PAYMENT_RECONCILIATION_UNRESOLVED',
   'PAYMENT_MATCHED_TIMESTAMP_MISSING',
   'PAYMENT_MONETARY_AUTHORITY_MISSING',
+  'PAYMENT_PAYABLE_AUTHORITY_MISSING',
+  'PAYMENT_PAYABLE_AUTHORITY_MISMATCH',
   'PAYMENT_CAPTURE_EVIDENCE_INVALID',
   'PAYMENT_QUOTE_NOT_FOUND',
   'PAYMENT_HOLD_NOT_FOUND',
@@ -69,16 +71,18 @@ export async function assertCompositionWorkerRole(pool: pg.Pool): Promise<void> 
     has_table_privilege(current_user, 'public.canonical_quarantined_events', 'INSERT,UPDATE,DELETE') AS raw_quarantined_events,
     has_table_privilege(current_user, 'public.canonical_payment_reconciliations', 'INSERT,UPDATE,DELETE') AS raw_reconciliations,
     has_table_privilege(current_user, 'public.canonical_payment_reservations', 'SELECT,INSERT,UPDATE,DELETE') AS raw_payment_reservations,
+    has_table_privilege(current_user, 'public.canonical_payable_authorities', 'SELECT,INSERT,UPDATE,DELETE') AS raw_payable_authorities,
     EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='public' AND c.relname IN ('canonical_reservations',
         'canonical_reservation_nights', 'canonical_reservation_commands', 'booking_holds',
         'booking_hold_nights', 'inventory_days', 'stays_quotes', 'canonical_payment_attempts',
         'canonical_provider_events', 'canonical_quarantined_events', 'canonical_payment_reconciliations',
-        'canonical_payment_reservations')
+        'canonical_payment_reservations', 'canonical_payable_authorities')
         AND pg_has_role(r.oid, c.relowner, 'MEMBER')) AS protected_owner_member,
     pg_has_role(r.oid, 'pg_read_all_data'::regrole, 'MEMBER') AS read_all_data,
     pg_has_role(r.oid, 'pg_write_all_data'::regrole, 'MEMBER') AS write_all_data,
-    has_function_privilege(current_user, 'public.canonical_compose_payment_reservation(uuid,uuid)', 'EXECUTE') AS compose_privilege
+    has_function_privilege(current_user, 'public.canonical_compose_payment_reservation(uuid,uuid)', 'EXECUTE') AS compose_privilege,
+    has_function_privilege(current_user, 'public.canonical_finalize_direct_hold(uuid,uuid,uuid)', 'EXECUTE') AS direct_finalize_privilege
     FROM pg_roles r WHERE r.rolname = current_user`);
 
   const r = rows[0];
@@ -86,8 +90,8 @@ export async function assertCompositionWorkerRole(pool: pg.Pool): Promise<void> 
     r.rolcreatedb || r.rolcreaterole || r.rolreplication || r.schema_create || r.database_create ||
     r.raw_reservations || r.raw_nights || r.raw_commands || r.raw_holds || r.raw_inventory ||
     r.raw_quotes || r.raw_payment_attempts || r.raw_provider_events || r.raw_quarantined_events ||
-    r.raw_reconciliations || r.raw_payment_reservations || r.protected_owner_member ||
-    r.read_all_data || r.write_all_data || !r.compose_privilege) {
+    r.raw_reconciliations || r.raw_payment_reservations || r.raw_payable_authorities || r.protected_owner_member ||
+    r.read_all_data || r.write_all_data || !r.compose_privilege || r.direct_finalize_privilege) {
     throw new CompositionAuthorityError('COMPOSITION_ROLE_NOT_RESTRICTED');
   }
 }
