@@ -250,9 +250,9 @@ BEGIN
     RAISE EXCEPTION 'LIFECYCLE_INPUT_INVALID';
   END IF;
 
-  -- 2. Validate reservation exists and check authority boundary
+  -- 2. Validate reservation exists and serialize on target reservation
   SELECT r.* INTO res_row FROM public.canonical_reservations r
-  WHERE r.id = target_reservation_id FOR SHARE;
+  WHERE r.id = target_reservation_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'LIFECYCLE_RESERVATION_NOT_FOUND';
   END IF;

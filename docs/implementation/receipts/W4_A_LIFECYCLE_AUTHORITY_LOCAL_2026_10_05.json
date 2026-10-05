@@ -17,13 +17,13 @@
   "testCommand": "node scripts/testing/run.mjs src/test/harvo/w4a_canonical_lifecycle_pg.test.ts",
   "results": {
     "suite": "W4-A Task 2: Canonical Reservation Lifecycle Authority",
-    "testsPassed": 28,
+    "testsPassed": 34,
     "testsFailed": 0,
     "invariantsVerified": [
       "1. Lifecycle worker direct GUC forgery -> denied fail-closed (GPT-6 reproduced defect resolved; GUC is not authority root)",
       "2. Lifecycle worker direct caller-principal forgery -> denied fail-closed without valid authorization",
       "3. Lifecycle worker arbitrary capability/authority ID -> denied fail-closed with LIFECYCLE_AUTHORIZATION_NOT_FOUND",
-      "4. Lifecycle worker cannot issue authority (PostgreSQL permission denied 42501)",
+      "4. Lifecycle worker cannot issue authority (PostgreSQL permission denied 42501 on routine and table)",
       "5. Valid authenticated Guest authority + own ENCHO_DIRECT reservation -> accepted (CANCELLATION_REQUESTED, sequence 1, replayed=false)",
       "6. Foreign Guest authority -> denied fail-closed with LIFECYCLE_FORBIDDEN on issuance and LIFECYCLE_COMMAND_CONFLICT on mismatched consumption",
       "7. Authority/reservation mismatch -> denied fail-closed with LIFECYCLE_COMMAND_CONFLICT",
@@ -36,10 +36,10 @@
       "14. Concurrent use of same valid authority -> serializes safely, one original and one replayed=true, exactly one event row",
       "15. Concurrent different commands for same ACTIVE -> CANCELLATION_REQUESTED -> serializes safely, one succeeds, one conflicts with LIFECYCLE_STATE_CONFLICT",
       "16. Lifecycle event, command receipt, and authorization consumption remain atomic in single PostgreSQL transaction",
-      "17. Authorization capability cannot be mutated after issuance (immutability trigger rejects UPDATE and DELETE)",
+      "17. Authorization cannot be mutated after issuance (immutability trigger rejects UPDATE of issuance fields and DELETE)",
       "18. Raw web, public, and other worker roles cannot issue authority (permission denied 42501)",
       "19. Canonical reservation with zero events projects initial derived state ACTIVE (sequence 0, latestEventId null)",
-      "20. W3 canonical_reservations row remains immutable: status = 'INVENTORY_COMMITTED' is untouched allocation truth",
+      "20. W3 reservation row remains immutable: status = 'INVENTORY_COMMITTED' is untouched allocation truth",
       "21. inventory_days.booked_units and held_units remain completely unchanged after CANCELLATION_REQUESTED (zero inventory side effects)",
       "22. Zero payment rows, ledger updates, gateway calls, or refund obligations are created (zero refund side effects; refunds deferred to W4-D)",
       "23. Raw Guest/web role (encho_stays_web) cannot INSERT or UPDATE lifecycle events, commands, or authorizations",
@@ -47,17 +47,37 @@
       "25. Legacy bookings.status mutations do not alter canonical reservation lifecycle projection",
       "26. No public completed-cancellation API or CANCELLED status transition is added; inventory release deferred to W4-B",
       "27. Role boundary enforcement: worker cannot issue, issuer cannot transition, raw web cannot do either",
-      "28. assertLifecycleWorkerRole and assertLifecycleIssuerRole reject broadened or non-restricted roles with LIFECYCLE_ROLE_NOT_RESTRICTED"
+      "28. assertLifecycleWorkerRole and assertLifecycleIssuerRole reject broadened or non-restricted roles with LIFECYCLE_ROLE_NOT_RESTRICTED",
+      "29. Worker authorization enumeration denied -> direct table SELECT on authorizations rejected with 42501",
+      "30. Concurrent identical issuance -> both succeed with same authorization ID -> exactly one durable row (idempotent serialization via FOR UPDATE on reservation)",
+      "31. Concurrent same command with changed semantics race -> one succeeds, second receives LIFECYCLE_COMMAND_CONFLICT (no 23505, no silent replacement)",
+      "32. Failure-injection atomicity -> consumption failure rolls back event, command receipt, and authorization consumption cleanly",
+      "33. Unused expired capability -> rejected with LIFECYCLE_AUTHORIZATION_EXPIRED",
+      "34. Exact replay after capability expiry -> succeeds and returns original event with replayed=true (expiry blocks new use only)"
     ]
   },
-  "capabilityAuthorityArchitecture": {
-    "architecturePattern": "Preference B: Minimal command-bound capability ledger with strict separation of issuance and transition roles",
-    "authorizationTable": "canonical_reservation_lifecycle_authorizations",
-    "issuerRole": "encho_lifecycle_issuer (restricted role; granted EXECUTE on canonical_issue_cancellation_authorization only; zero table DML)",
-    "workerRole": "encho_lifecycle_worker (restricted role; granted EXECUTE on canonical_request_reservation_cancellation and SELECT on lifecycle views/authorizations; zero capability issuance; zero table DML)",
-    "forgeryDefense": "GUC setting app.stays_principal is completely removed from authority chain. Lifecycle worker direct SQL cannot forge authorizations. Issuance requires authenticated session principal matching canonical_reservations.holder_principal and ENCHO_DIRECT origin.",
-    "consumptionModel": "canonical_request_reservation_cancellation requires target_authorization_id, locks authorization row FOR UPDATE, validates exact match with reservation_id, command_id, origin_kind, reason semantics, and holder_principal, and atomically marks capability consumed (consumed_at, consumed_by_event_id).",
-    "replayModel": "Durable command receipt checked before replay. Re-issuing for same (reservation_id, command_id) recovers existing authorization. Consuming already-consumed authorization for exact same command returns original event with replayed=true; consumption by different event or command fails closed."
+  "authorityBoundaries": {
+    "authenticationRoot": "trusted application/session tier, NOT proven/mounted in this W4-A worker batch",
+    "authenticatedGuestIngress": "NOT IMPLEMENTED / NOT MOUNTED IN W4-A",
+    "issuerStatus": "internal authority primitive; trusts authenticatedPrincipal supplied by calling application tier",
+    "workerAuthorizationTableAccess": "DENIED (PostgreSQL permission denied 42501; cannot SELECT, INSERT, UPDATE, or DELETE directly)",
+    "issuanceConcurrency": "idempotent under independent issuer connections; serializes on canonical_reservations FOR UPDATE row lock before inspection and insert",
+    "authorizationMutability": "immutable issuance fields + one monotonic consumption transition (UNCONSUMED -> CONSUMED exactly once)",
+    "rollbackProof": "failure injection proven via owner trigger raising during consumption UPDATE; verifies full atomicity and rollback of events, commands, and authorization consumption"
+  },
+  "roles": {
+    "encho_lifecycle_issuer": {
+      "type": "Restricted role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION)",
+      "privileges": "EXECUTE ON FUNCTION canonical_issue_cancellation_authorization only; zero table DML; zero transition execute"
+    },
+    "encho_lifecycle_worker": {
+      "type": "Restricted role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION)",
+      "privileges": "EXECUTE ON FUNCTION canonical_request_reservation_cancellation and canonical_get_reservation_lifecycle only; zero table DML; zero direct table SELECT; zero capability issuance"
+    },
+    "encho_stays_web": {
+      "type": "Restricted web application role",
+      "privileges": "Zero access to lifecycle procedures or lifecycle tables"
+    }
   },
   "eventModel": {
     "table": "canonical_reservation_events",
@@ -71,7 +91,7 @@
     "idempotencyKey": "command_id",
     "immutability": "Committed receipts reject UPDATE or DELETE with CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE"
   },
-  "concurrency": "Row-level lock on canonical_reservations (FOR UPDATE) and canonical_reservation_lifecycle_authorizations (FOR UPDATE) serializes transitions per reservation and capability",
+  "concurrency": "Row-level lock on canonical_reservations (FOR UPDATE) serializes both issuance and transition execution per reservation; lock ordering is strictly canonical_reservations FOR UPDATE -> canonical_reservation_lifecycle_authorizations FOR UPDATE",
   "lifecycleProjection": {
     "view": "canonical_reservation_lifecycle_current",
     "function": "canonical_get_reservation_lifecycle(target_reservation_id UUID)",

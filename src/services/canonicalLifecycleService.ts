@@ -27,6 +27,14 @@ const knownCodes = new Set([
   'CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE',
 ]);
 
+/**
+ * Schema for issuing a cancellation authorization capability.
+ *
+ * NOTE ON AUTHENTICATION ROOT:
+ * `authenticatedPrincipal` is trusted input received from an upstream authenticated application/session boundary.
+ * This internal service does NOT authenticate HTTP sessions or user credentials independently.
+ * Authenticated Guest ingress is NOT mounted/implemented in W4-A.
+ */
 export const issueCancellationAuthorizationSchema = z.object({
   reservationId: z.string().uuid(),
   commandId: z.string().uuid(),
@@ -174,6 +182,14 @@ export async function assertLifecycleWorkerRole(pool: pg.Pool): Promise<void> {
   }
 }
 
+/**
+ * Internal Authority Primitive: issueCancellationAuthorization
+ *
+ * Trust contract: The application tier calling the issuer is responsible for supplying
+ * a previously authenticated Guest principal (`authenticatedPrincipal`).
+ * This service operates as an internal authority primitive and does NOT independently authenticate
+ * caller sessions. Authenticated Guest ingress is NOT mounted/implemented in W4-A.
+ */
 export async function issueCancellationAuthorization(
   pool: pg.Pool,
   input: unknown

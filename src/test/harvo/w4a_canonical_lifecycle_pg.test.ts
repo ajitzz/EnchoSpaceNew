@@ -988,4 +988,294 @@ describe('W4-A Task 2: Canonical Reservation Lifecycle Authority', () => {
       code: 'LIFECYCLE_ROLE_NOT_RESTRICTED',
     });
   });
+
+  it('29. worker authorization enumeration denied -> direct table SELECT rejected with 42501', async () => {
+    const client = await lifecycleWorker.connect();
+    try {
+      let selectError: any;
+      try {
+        await client.query('SELECT * FROM canonical_reservation_lifecycle_authorizations');
+      } catch (err) {
+        selectError = err;
+      }
+      expect(selectError).toBeDefined();
+      expect(selectError.code).toBe('42501'); // PostgreSQL permission_denied
+    } finally {
+      client.release();
+    }
+  });
+
+  it('30. concurrent identical issuance -> both succeed with same authorization ID -> exactly one row', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const commandId = randomUUID();
+
+    const [auth1, auth2] = await Promise.all([
+      issueCancellationAuthorization(lifecycleIssuer, {
+        reservationId,
+        commandId,
+        reasonCode: 'GUEST_CANCEL_REQUEST',
+        reasonText: 'Identical concurrent issuance',
+        authenticatedPrincipal: 'user:10',
+      }),
+      issueCancellationAuthorization(lifecycleIssuer, {
+        reservationId,
+        commandId,
+        reasonCode: 'GUEST_CANCEL_REQUEST',
+        reasonText: 'Identical concurrent issuance',
+        authenticatedPrincipal: 'user:10',
+      }),
+    ]);
+
+    expect(auth1.authorizationId).toBe(auth2.authorizationId);
+    expect(auth1.fingerprint).toBe(auth2.fingerprint);
+    expect(auth1.reservationId).toBe(reservationId);
+    expect(auth1.commandId).toBe(commandId);
+    expect(auth1.guestPrincipal).toBe('user:10');
+
+    // Invariant: exactly 1 authorization row exists in database
+    const {rows} = await fixture.owner.query(
+      'SELECT count(*) FROM canonical_reservation_lifecycle_authorizations WHERE reservation_id = $1 AND command_id = $2',
+      [reservationId, commandId]
+    );
+    expect(Number(rows[0].count)).toBe(1);
+  });
+
+  it('31. concurrent same command with changed semantics race -> one succeeds, second gets LIFECYCLE_COMMAND_CONFLICT', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const commandId = randomUUID();
+
+    const results = await Promise.allSettled([
+      issueCancellationAuthorization(lifecycleIssuer, {
+        reservationId,
+        commandId,
+        reasonCode: 'REASON_A',
+        reasonText: 'Text A',
+        authenticatedPrincipal: 'user:10',
+      }),
+      issueCancellationAuthorization(lifecycleIssuer, {
+        reservationId,
+        commandId,
+        reasonCode: 'REASON_B',
+        reasonText: 'Text B',
+        authenticatedPrincipal: 'user:10',
+      }),
+    ]);
+
+    const fulfilled = results.filter(r => r.status === 'fulfilled');
+    const rejected = results.filter(r => r.status === 'rejected');
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const losingReason = (rejected[0] as PromiseRejectedResult).reason;
+    expect(losingReason).toMatchObject({code: 'LIFECYCLE_COMMAND_CONFLICT'});
+
+    // Invariant: exactly 1 authorization row exists in database
+    const {rows} = await fixture.owner.query(
+      'SELECT reason_code, reason_text FROM canonical_reservation_lifecycle_authorizations WHERE reservation_id = $1 AND command_id = $2',
+      [reservationId, commandId]
+    );
+    expect(rows).toHaveLength(1);
+    expect(['REASON_A', 'REASON_B']).toContain(rows[0].reason_code);
+  });
+
+  it('32. failure-injection atomicity -> consumption failure rolls back event, command receipt, and authorization consumption', async () => {
+    const {reservationId, checkIn, checkOut} = await createCommittedReservation('user:10', 2);
+    const commandId = randomUUID();
+    const {auth} = await createAuthorizedCancellation(
+      reservationId,
+      'user:10',
+      'GUEST_CANCEL_REQUEST',
+      'Failure injection test',
+      commandId
+    );
+
+    // Install disposable owner-only trigger that raises during consumption UPDATE
+    await fixture.owner.query(`
+      CREATE OR REPLACE FUNCTION _test_fail_consumption_injection()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'INJECTED_FAILURE_ON_CONSUMPTION';
+      END $$;
+    `);
+
+    await fixture.owner.query(`
+      CREATE TRIGGER _test_fail_consumption_trigger
+        BEFORE UPDATE ON canonical_reservation_lifecycle_authorizations
+        FOR EACH ROW EXECUTE FUNCTION _test_fail_consumption_injection();
+    `);
+
+    try {
+      // Transition execution hits event INSERT, command INSERT, then fails at authorization consumption UPDATE
+      let callError: any;
+      try {
+        await requestReservationCancellation(lifecycleWorker, {
+          authorizationId: auth.authorizationId,
+          commandId,
+          reservationId,
+          reasonCode: 'GUEST_CANCEL_REQUEST',
+          reasonText: 'Failure injection test',
+        });
+      } catch (err) {
+        callError = err;
+      }
+      expect(callError).toBeDefined();
+      expect(callError.cause?.message || callError.message).toContain('INJECTED_FAILURE_ON_CONSUMPTION');
+
+      // Assert post-rollback state:
+      // 1. Authorization row still exists, unconsumed
+      const {rows: authRows} = await fixture.owner.query(
+        'SELECT consumed_at, consumed_by_event_id FROM canonical_reservation_lifecycle_authorizations WHERE authorization_id = $1',
+        [auth.authorizationId]
+      );
+      expect(authRows).toHaveLength(1);
+      expect(authRows[0].consumed_at).toBeNull();
+      expect(authRows[0].consumed_by_event_id).toBeNull();
+
+      // 2. Zero events exist for this reservation/command
+      const {rows: eventRows} = await fixture.owner.query(
+        'SELECT count(*) FROM canonical_reservation_events WHERE command_id = $1',
+        [commandId]
+      );
+      expect(Number(eventRows[0].count)).toBe(0);
+
+      // 3. Zero command receipts exist for this command
+      const {rows: cmdRows} = await fixture.owner.query(
+        'SELECT count(*) FROM canonical_reservation_lifecycle_commands WHERE command_id = $1',
+        [commandId]
+      );
+      expect(Number(cmdRows[0].count)).toBe(0);
+
+      // 4. Reservation remains INVENTORY_COMMITTED
+      const {rows: resRows} = await fixture.owner.query(
+        'SELECT status FROM canonical_reservations WHERE id = $1',
+        [reservationId]
+      );
+      expect(resRows[0].status).toBe('INVENTORY_COMMITTED');
+
+      // 5. Booked units remain unchanged
+      const {rows: dayRows} = await fixture.owner.query(
+        `SELECT calendar_date, booked_units, held_units
+         FROM inventory_days
+         WHERE listing_id = 1 AND room_type_id = 101 AND calendar_date >= $1 AND calendar_date < $2`,
+        [checkIn, checkOut]
+      );
+      expect(dayRows.every(d => d.booked_units === 1 && d.held_units === 0)).toBe(true);
+
+      // 6. Zero payment/refund effects
+      const {rows: payRows} = await fixture.owner.query(
+        'SELECT count(*) FROM canonical_payment_attempts'
+      );
+      expect(Number(payRows[0].count)).toBe(0);
+    } finally {
+      // Remove disposable failure trigger
+      await fixture.owner.query('DROP TRIGGER IF EXISTS _test_fail_consumption_trigger ON canonical_reservation_lifecycle_authorizations');
+      await fixture.owner.query('DROP FUNCTION IF EXISTS _test_fail_consumption_injection()');
+    }
+
+    // Prove that after trigger removal, the same authorization can now be consumed successfully
+    const recoveryResult = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Failure injection test',
+    });
+    expect(recoveryResult.lifecycleState).toBe('CANCELLATION_REQUESTED');
+    expect(recoveryResult.replayed).toBe(false);
+
+    const {rows: finalAuth} = await fixture.owner.query(
+      'SELECT consumed_at, consumed_by_event_id FROM canonical_reservation_lifecycle_authorizations WHERE authorization_id = $1',
+      [auth.authorizationId]
+    );
+    expect(finalAuth[0].consumed_at).not.toBeNull();
+    expect(finalAuth[0].consumed_by_event_id).toBe(recoveryResult.eventId);
+  });
+
+  it('33. unused expired capability -> rejected with LIFECYCLE_AUTHORIZATION_EXPIRED', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const commandId = randomUUID();
+    const expiredAuthId = randomUUID();
+
+    const fingerprintInput = {
+      authorization_id: expiredAuthId,
+      reservation_id: reservationId,
+      command_id: commandId,
+      command_type: 'REQUEST_CANCELLATION',
+      guest_principal: 'user:10',
+      origin_kind: 'ENCHO_DIRECT',
+      reason_code: 'EXPIRED_TEST',
+      reason_text: null,
+      issued_at: new Date(Date.now() - 7200000).toISOString(),
+      expires_at: new Date(Date.now() - 3600000).toISOString(),
+    };
+    const fp = createHash('sha256').update(JSON.stringify(fingerprintInput)).digest('hex');
+
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_lifecycle_authorizations (
+        authorization_id, reservation_id, command_id, command_type, guest_principal,
+        origin_kind, reason_code, reason_text, issued_at, expires_at, fingerprint
+      ) VALUES (
+        $1, $2, $3, 'REQUEST_CANCELLATION', 'user:10',
+        'ENCHO_DIRECT', 'EXPIRED_TEST', NULL, now() - interval '2 hours', now() - interval '1 hour', $4
+      )`,
+      [expiredAuthId, reservationId, commandId, fp]
+    );
+
+    await expect(
+      requestReservationCancellation(lifecycleWorker, {
+        authorizationId: expiredAuthId,
+        commandId,
+        reservationId,
+        reasonCode: 'EXPIRED_TEST',
+      })
+    ).rejects.toMatchObject({code: 'LIFECYCLE_AUTHORIZATION_EXPIRED'});
+  });
+
+  it('34. exact replay after capability expiry -> succeeds and returns original event with replayed=true', async () => {
+    const {reservationId} = await createCommittedReservation('user:10');
+    const {auth, commandId} = await createAuthorizedCancellation(
+      reservationId,
+      'user:10',
+      'GUEST_CANCEL_REQUEST',
+      'Guest requested cancellation'
+    );
+
+    // 1. Initial consumption commits successfully
+    const first = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+    });
+    expect(first.replayed).toBe(false);
+
+    // 2. Synthetic backdating of authorization expires_at as owner (simulating subsequent expiry)
+    // Temporarily disable trigger as owner to backdate expires_at on committed row
+    await fixture.owner.query(
+      'ALTER TABLE canonical_reservation_lifecycle_authorizations DISABLE TRIGGER canonical_reservation_lifecycle_authorizations_immutable'
+    );
+    try {
+      await fixture.owner.query(
+        "UPDATE canonical_reservation_lifecycle_authorizations SET expires_at = now() - interval '1 hour' WHERE authorization_id = $1",
+        [auth.authorizationId]
+      );
+    } finally {
+      await fixture.owner.query(
+        'ALTER TABLE canonical_reservation_lifecycle_authorizations ENABLE TRIGGER canonical_reservation_lifecycle_authorizations_immutable'
+      );
+    }
+
+    // 3. Exact replay of committed request succeeds even though capability has subsequently expired
+    const replay = await requestReservationCancellation(lifecycleWorker, {
+      authorizationId: auth.authorizationId,
+      commandId,
+      reservationId,
+      reasonCode: 'GUEST_CANCEL_REQUEST',
+      reasonText: 'Guest requested cancellation',
+    });
+    expect(replay.replayed).toBe(true);
+    expect(replay.eventId).toBe(first.eventId);
+  });
 });
