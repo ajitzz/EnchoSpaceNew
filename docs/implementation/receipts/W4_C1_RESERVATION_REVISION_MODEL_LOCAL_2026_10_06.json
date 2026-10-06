@@ -1,93 +1,108 @@
 {
-  "task": "W4-C1 — IMMUTABLE RESERVATION REVISION / FULL SNAPSHOT MODEL",
+  "task": "W4-C1 — IMMUTABLE RESERVATION REVISION / FULL SNAPSHOT MODEL + STRUCTURAL SEAL",
   "canonicalBase": "03de9fc4ceb6bc170033db8fb8f09f100d2a5b35",
   "workerBranch": "codex/antigravity-w4c1-revision-model",
   "status": "LOCAL_VERIFICATION_COMPLETE",
   "scope": {
     "slice": "W4-C1: STRUCTURAL MODEL ONLY",
+    "v2Header": "ASSEMBLY DATA ONLY UNTIL SEALED",
+    "v2FullSnapshot": "AUTHORITATIVE ONLY AFTER SUCCESSFUL STRUCTURAL SEAL",
+    "currentEffectiveV2": "HIGHEST SEALED VALID REVISION ONLY",
+    "snapshotSet": "IMMUTABLE AFTER SEAL",
     "modificationWriter": "ABSENT",
     "physicalInventoryReplacement": "ABSENT",
     "w4bVersionAwareness": "NOT IMPLEMENTED",
-    "w4dFinancialClearance": "NOT IMPLEMENTED",
+    "financialClearance": "NOT IMPLEMENTED",
     "guestHostIngress": "ABSENT",
     "production": "NOT EVALUATED"
   },
   "migration": {
     "file": "src/migrations/057_canonical_reservation_revision_model.sql",
-    "sha256": "9f3aca94de12317244cbbac89f8a6a0fa6dc372a9c3c2e58226ed4114298cbcd"
+    "sha256": "2a8ad76f9ffd6f0f916d6ae3ae0e570bc75521f6b1c9a11a785ada8626c94045"
   },
   "newRelations": [
     {
       "tableName": "canonical_reservation_revisions",
-      "description": "Immutable V2+ reservation revision header table enforcing version >= 2, UNIQUE(reservation_id, version), status 'COMMITTED', and full commercial/model binding snapshot",
+      "description": "Immutable V2+ reservation revision header table (assembly data only until sealed; version >= 2, UNIQUE(reservation_id, version), UNIQUE(id, reservation_id, room_type_id), commercial snapshot)",
       "rlsEnabled": true,
       "rlsForced": true,
       "immutabilityTrigger": "canonical_reservation_revisions_immutable"
     },
     {
       "tableName": "canonical_reservation_revision_nights",
-      "description": "Immutable V2+ full effective allocation snapshot table enforcing complete allocation replacement (not deltas), UNIQUE(revision_id, stay_date), and composite FK to header",
+      "description": "Immutable V2+ full effective allocation snapshot table (complete stay allocation, UNIQUE(revision_id, stay_date), composite FK to header, append blocked post-seal)",
       "rlsEnabled": true,
       "rlsForced": true,
       "immutabilityTrigger": "canonical_reservation_revision_nights_immutable"
+    },
+    {
+      "tableName": "canonical_reservation_revision_seals",
+      "description": "Immutable V2+ structural seal authority table (authority fence; exactly one seal per revision; atomic validation of complete contiguous dates, counts, and identities)",
+      "rlsEnabled": true,
+      "rlsForced": true,
+      "immutabilityTrigger": "canonical_reservation_revision_seals_immutable"
     }
   ],
   "newViews": [
     {
       "viewName": "canonical_reservation_revisions_all",
-      "description": "Unified projection presenting V1 (projected from W3 canonical_reservations + nights) and committed V2+ revisions in identical logical shape"
+      "description": "Unified projection exposing truthful states: V1 = COMMITTED, sealed V2+ = SEALED, unsealed V2+ = ASSEMBLING"
     },
     {
       "viewName": "canonical_reservation_effective_revisions",
-      "description": "Deterministic current effective revision projection (yields V1 if no committed later revision exists, else highest valid committed revision)"
+      "description": "Deterministic current effective revision projection (selects ONLY COMMITTED V1 or highest SEALED V2+; unsealed revisions never mask lower sealed versions)"
     },
     {
       "viewName": "canonical_reservation_effective_allocations",
-      "description": "Deterministic current effective allocation projection (yields W3 canonical_reservation_nights for V1, or full replacement snapshot rows for V2+)"
+      "description": "Deterministic current effective allocation projection (yields W3 canonical_reservation_nights for V1, or full replacement snapshot rows for selected sealed V2+)"
     }
   ],
   "newFunctions": [
     {
-      "functionName": "canonical_reservation_revision_reject_mutation",
+      "functionName": "canonical_validate_reservation_revision_header",
       "signature": "() -> trigger",
-      "description": "Trigger procedure raising CANONICAL_RESERVATION_REVISION_IMMUTABLE on any UPDATE or DELETE"
+      "description": "BEFORE INSERT trigger validating root reservation existence, room-type belonging to root listing, and commercial integrity"
+    },
+    {
+      "functionName": "canonical_validate_reservation_revision_night",
+      "signature": "() -> trigger",
+      "description": "BEFORE INSERT trigger serializing via header lock, rejecting post-seal appends, and validating date bounds and inventory-day identity consistency"
+    },
+    {
+      "functionName": "canonical_validate_and_seal_reservation_revision",
+      "signature": "() -> trigger",
+      "description": "BEFORE INSERT trigger on seals enforcing atomic validation: row count == header.nights, all stay dates within range, contiguous coverage against generate_series with zero gaps"
+    },
+    {
+      "functionName": "canonical_seal_reservation_revision",
+      "signature": "(target_revision_id UUID) -> TABLE",
+      "description": "Owner-only SECURITY DEFINER function to seal a completed revision after validation"
     },
     {
       "functionName": "canonical_get_effective_reservation",
       "signature": "(target_reservation_id UUID) -> TABLE",
-      "description": "Read-only SECURITY DEFINER function querying current effective reservation terms"
+      "description": "Read-only SECURITY DEFINER function querying current effective sealed reservation terms"
     },
     {
       "functionName": "canonical_get_effective_reservation_allocation",
       "signature": "(target_reservation_id UUID) -> TABLE",
-      "description": "Read-only SECURITY DEFINER function querying current effective allocation rows"
+      "description": "Read-only SECURITY DEFINER function querying current effective sealed allocation rows"
     }
   ],
-  "v1ProjectionSemantics": {
-    "source": "canonical_reservations + canonical_reservation_nights",
-    "duplication": "ZERO - V1 rows are never duplicated or copied into revision tables",
-    "effectiveVersion": 1,
-    "effectiveRevisionId": null,
-    "commercialBinding": "Preserves original W3 quote_id, hold_id, offer_id, offer_revision, check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency"
+  "sealValidation": {
+    "authorityFence": "Revision header is ASSEMBLY_ONLY until sealed; seal existence creates canonical authority",
+    "exactDateCoverage": "Verified against generate_series(check_in_date, check_out_date - 1) with zero gaps",
+    "rowCount": "Verified exactly equal to header.nights",
+    "headerNightIdentity": "Enforced structurally via composite FK (revision_id, reservation_id, room_type_id)",
+    "inventoryDayIdentity": "Verified calendar_date == stay_date, room_type_id == night room_type_id, listing_id == root listing_id",
+    "rootReservationIdentity": "Root reservation is the single authority for origin_kind and listing_id (no competing duplicates)"
   },
-  "v2StructuralModel": {
-    "headerTable": "canonical_reservation_revisions",
-    "versionConstraint": "CHECK (version >= 2)",
-    "uniqueness": "UNIQUE (reservation_id, version), UNIQUE (id, reservation_id)",
-    "statusConstraint": "CHECK (status IN ('COMMITTED'))",
-    "snapshotTable": "canonical_reservation_revision_nights",
-    "replacementSemantics": "FULL REPLACEMENT - allocation rows represent entire effective stay for version, never deltas from V1",
-    "compositeForeignKey": "FOREIGN KEY (revision_id, reservation_id) REFERENCES canonical_reservation_revisions(id, reservation_id)"
-  },
-  "allocationCommercialLockstep": {
-    "enforced": true,
-    "mechanism": "Version number is reservation-level authority. Header owns commercial terms and revision identity; snapshot rows are strictly bound to that exact header via composite FK. Projections derive both from effective_version."
-  },
-  "immutability": {
-    "headerMutation": "REJECTED (CANONICAL_RESERVATION_REVISION_IMMUTABLE)",
-    "allocationRowMutation": "REJECTED (CANONICAL_RESERVATION_REVISION_IMMUTABLE)",
-    "commercialBindingMutation": "REJECTED (enforced by header immutability trigger)",
-    "rls": "ENABLED and FORCED on both tables with owner-only access policy"
+  "snapshotSetImmutability": {
+    "postSealAppend": "REJECTED (CANONICAL_RESERVATION_REVISION_SEALED via BEFORE INSERT trigger)",
+    "postSealUpdate": "REJECTED (CANONICAL_RESERVATION_REVISION_IMMUTABLE via BEFORE UPDATE trigger)",
+    "postSealDelete": "REJECTED (CANONICAL_RESERVATION_REVISION_IMMUTABLE via BEFORE DELETE trigger)",
+    "sealMutation": "REJECTED (CANONICAL_RESERVATION_REVISION_SEAL_IMMUTABLE via BEFORE UPDATE/DELETE trigger)",
+    "concurrencySerialization": "Revision header row lock (SELECT FOR UPDATE) serializes night append and seal validation transactions"
   },
   "roleGrantMatrix": {
     "public": "REVOKED ALL on all tables, views, and helper functions",
@@ -108,7 +123,7 @@
     "physicalInventoryTouched": false,
     "bookedUnitsDelta": 0,
     "heldUnitsDelta": 0,
-    "evidence": "inventory_days.booked_units remains exactly 1 before, during, and after V2 seeding and projection queries; V2-only days have booked_units = 0"
+    "evidence": "inventory_days.booked_units remains exactly identical before, during, and after V2 structural assembly, sealing, and projections"
   },
   "w4bCancellationCompatibility": {
     "modified": false,
@@ -126,29 +141,30 @@
     "acceptedModificationWriter": "ABSENT",
     "candidateProceduresInPgProc": 0,
     "runtimeRoleDMLGrants": 0,
+    "runtimeRoleSealExecuteGrants": 0,
     "completePhysicalW4CModificationCapability": false
   },
   "focusedTestResults": {
     "suite": "scripts/testing/w4c1-reservation-revision-model.mjs",
     "status": "PASS",
-    "assertionsVerified": [
-      "A. Existing W3 V1 reservation projects as version 1 without copied rows",
-      "B. V1 effective allocation projection exactly matches canonical_reservation_nights",
-      "C. Owner/test fixture can seed structurally valid V2 header + full snapshot",
-      "D. Effective projection chooses V2 when valid committed V2 fixture exists",
-      "E. V2 snapshot is FULL replacement authority, not merged cumulatively with V1",
-      "F. V2 header mutation rejected (UPDATE / DELETE)",
-      "G. V2 allocation row mutation rejected (UPDATE / DELETE)",
-      "H. V2 commercial/model binding mutation rejected",
-      "I. Duplicate reservation/version rejected (UNIQUE 23505)",
-      "J. Invalid version <= 1 rejected from V2+ structure (CHECK 23514)",
-      "K. Orphan snapshot rows rejected (FK 23503)",
-      "L. Allocation/commercial version cannot drift",
-      "M. Accepted runtime roles cannot insert/update/delete/publish later revisions (42501)",
-      "N. Migration and projections do not change inventory_days.booked_units",
-      "O. W4-B cancellation functions remain unchanged",
-      "P. Seeding higher version V3 deterministically selects V3",
-      "19. Negative authority test: complete physical W4-C modification capability = false"
+    "adversarialCasesVerified": [
+      "A. Zero snapshot: header exists with 0 nights -> not effective, seal fails with REVISION_SEAL_NIGHTS_COUNT_MISMATCH",
+      "B. Partial snapshot: 1 of 3 nights inserted -> not effective, seal fails with REVISION_SEAL_NIGHTS_COUNT_MISMATCH",
+      "C. Gapped snapshot: dates with missing day -> seal fails with REVISION_SEAL_DATES_INCOMPLETE",
+      "D. Out-of-range date: stay_date outside [check_in, check_out) -> rejected with REVISION_NIGHT_DATE_OUT_OF_RANGE",
+      "E. Header/night room-type mismatch -> rejected structurally by composite FK (23503)",
+      "F. Inventory-day / date mismatch -> rejected with REVISION_NIGHT_DATE_INVENTORY_MISMATCH",
+      "G. Inventory-day / room-type mismatch -> rejected with REVISION_NIGHT_ROOM_TYPE_INVENTORY_MISMATCH",
+      "H. Root listing / room-type mismatch -> rejected with REVISION_ROOM_TYPE_LISTING_MISMATCH",
+      "I. Valid complete snapshot before seal -> visible as ASSEMBLING in all_revisions, NOT effective",
+      "J. Valid seal -> commits successfully, V2 becomes effective, allocation matches snapshot",
+      "K. Post-seal append -> rejected with CANONICAL_RESERVATION_REVISION_SEALED",
+      "L. Post-seal update -> rejected with CANONICAL_RESERVATION_REVISION_IMMUTABLE",
+      "M. Post-seal delete -> rejected with CANONICAL_RESERVATION_REVISION_IMMUTABLE",
+      "N. Seal update/delete -> rejected with CANONICAL_RESERVATION_REVISION_SEAL_IMMUTABLE",
+      "O. Higher unsealed version -> V3 unsealed does NOT mask sealed V2",
+      "P. Concurrent append vs seal -> header row lock serializes operations, preventing phantom appends",
+      "Q. Physical inventory -> booked_units exactly unchanged (delta = 0)"
     ]
   },
   "neighboringRegressions": {
