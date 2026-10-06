@@ -206,9 +206,9 @@
       "evidence": "Case W: Concurrent identical commands converge to exactly 1 durable request row; one caller receives original result (replayed = false) and the other receives replay (replayed = true) (unique_violation exception handler path verified by SQL_REVIEW / CONTROL-FLOW REVIEW)"
     },
     {
-      "requirement": "distinct-command concurrency",
+      "requirement": "multiple distinct commands may create independent requests for the same source",
       "evidenceType": "TEST",
-      "evidence": "Case X: Distinct command IDs issued concurrently against same reservation both succeed and persist distinct request rows"
+      "evidence": "Case X sequentially issues two distinct valid command IDs against the same source and verifies that both persist as separate request rows."
     },
     {
       "requirement": "request immutability",
@@ -236,9 +236,9 @@
       "evidence": "Case AC dual evidence: DIFF_REVIEW confirms git diff --name-only affc14b185dedb3d54a3c414876f98f0f3e85061...HEAD touches only 3 files (0 files in src/server or src/routes); CALLER_SEARCH confirms git grep -n 'canonical_request_reservation_modification' src/ finds zero application/runtime callers outside migration 059 and tests"
     },
     {
-      "requirement": "no modification writer",
+      "requirement": "no accepted runtime modification writer or runtime revision assembly/seal authority",
       "evidenceType": "SQL_REVIEW",
-      "evidence": "SQL_REVIEW of migration 059 and existing codebase demonstrates zero routines capable of publishing reservation revisions exist; no role has UPDATE/INSERT privilege on canonical_reservation_revisions outside migration scripts (not an assertion in Case AC)"
+      "evidence": "Migration 059 creates only the immutable modification-request authority and does not create a revision publisher or grant runtime revision/seal DML. Accepted W4-C1 owner/test structural assembly/seal authority remains present and is not runtime modification authority."
     }
   ],
   "casesVerified": [
