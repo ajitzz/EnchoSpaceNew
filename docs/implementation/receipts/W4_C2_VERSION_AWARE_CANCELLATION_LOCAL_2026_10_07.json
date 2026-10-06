@@ -1,0 +1,117 @@
+{
+  "task": "W4-C2 — VERSION-AWARE CANONICAL CANCELLATION COMPATIBILITY",
+  "canonicalBase": "089b0effd601d9ed3e559b168f6e370a3097e09c",
+  "workerBranch": "codex/antigravity-w4c2-cancellation-compatibility",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "scope": {
+    "slice": "W4-C2: VERSION-AWARE CANCELLATION COMPATIBILITY ONLY",
+    "cancellationCompatibility": "UPGRADED CANONICAL CANCELLATION TO CONSUME W4-C1 EFFECTIVE ALLOCATION",
+    "v1Cancellation": "RELEASES IMMUTABLE W3/V1 canonical_reservation_nights",
+    "v2SealedCancellation": "RELEASES HIGHEST SEALED CURRENT-EFFECTIVE SNAPSHOT FROM canonical_reservation_revision_nights",
+    "unsealedRevisions": "COMPLETELY IGNORED",
+    "singleVersionReleased": "EXACTLY ONE EFFECTIVE ALLOCATION VERSION RELEASED",
+    "releaseHeaderEvidence": "SNAPSHOTS released_effective_version (INT NOT NULL) AND released_revision_id (UUID, NULL FOR V1, FK FOR V2+)",
+    "releaseNightEvidence": "PERSISTS room_type_id AND EXACT released_units (UNITS > 1 SUPPORTED)",
+    "underflowRollback": "ALL-OR-NOTHING: INSUFFICIENT BOOKED UNITS ON ANY NIGHT ROLLS BACK TRANSACTION COMPLETELY",
+    "replayIdempotency": "EXACT REPLAY RETURNS STORED COMMITTED RESULT WITHOUT RE-RELEASING INVENTORY",
+    "modificationWriter": "ABSENT",
+    "targetModificationContract": "NOT IMPLEMENTED",
+    "globalCrossWriterLockOrder": "NOT IMPLEMENTED",
+    "physicalModificationReplacement": "ABSENT",
+    "w4dFinancialClearance": "NOT IMPLEMENTED",
+    "guestHostIngress": "ABSENT",
+    "externalChannelAction": "NONE",
+    "production": "NOT EVALUATED"
+  },
+  "migration": {
+    "file": "src/migrations/058_version_aware_cancellation_release.sql",
+    "sha256": "f0d778624a369c5e58ecaebb2027932c7e53f54fbfa28902abfeeb9b5f73fe15",
+    "strategy": "Additive schema extension on canonical_reservation_cancellation_inventory_releases and canonical_reservation_cancellation_release_nights; replace canonical_complete_reservation_cancellation function with version-aware semantics preserving exact accepted signature"
+  },
+  "effectiveAllocationSource": {
+    "resolutionMechanism": "canonical_reservation_effective_revisions view resolving distinct highest committed/sealed version",
+    "v1Source": "public.canonical_reservation_nights (when effective_version = 1)",
+    "v2Source": "public.canonical_reservation_revision_nights for effective_revision_id (when effective_version >= 2)",
+    "unsealedHandling": "Unsealed revisions (status ASSEMBLING) are excluded by view criteria and never released"
+  },
+  "durableEvidenceSnapshots": {
+    "releaseHeader": {
+      "released_effective_version": "INT NOT NULL DEFAULT 1",
+      "released_revision_id": "UUID NULLABLE (NULL for V1; foreign key referencing canonical_reservation_revisions(id, reservation_id) for V2+)",
+      "checkConstraint": "chk_cancellation_release_version_revision enforcing ((released_effective_version = 1 AND released_revision_id IS NULL) OR (released_effective_version >= 2 AND released_revision_id IS NOT NULL))"
+    },
+    "releaseNights": {
+      "inventory_day_id": "INT NOT NULL REFERENCES inventory_days(id)",
+      "stay_date": "DATE NOT NULL",
+      "room_type_id": "INT NOT NULL REFERENCES room_types(id)",
+      "released_units": "INT NOT NULL CHECK (released_units > 0) representing exact snapshot units"
+    },
+    "historicalBackfill": "Existing release headers safely backfilled with released_effective_version = 1 and released_revision_id = NULL; release nights backfilled with room_type_id from canonical_reservations under temporary trigger disable"
+  },
+  "atomicityAndReplay": {
+    "deterministicLockOrdering": "inventory_days locked ORDER BY calendar_date ASC, id ASC FOR UPDATE OF day prior to mutation",
+    "allOrNothing": "If booked_units < units_to_release on any effective day, throws INVENTORY_RELEASE_UNDERFLOW; entire transaction rolls back with zero state changes",
+    "replayVerification": "canonical_reservation_lifecycle_commands receipt verified; returns replayed = true with stored release_id and event_id; zero inventory re-decrement"
+  },
+  "immutability": {
+    "releaseHeader": "canonical_reservation_cancellation_inventory_releases_immutable trigger rejects any UPDATE or DELETE",
+    "releaseNights": "canonical_reservation_cancellation_release_nights_immutable trigger rejects any UPDATE or DELETE",
+    "w4c1RevisionModel": "W4-C1 revision, revision nights, and seal tables remain completely immutable and read-only to cancellation execution"
+  },
+  "rolePrivilegeBoundary": {
+    "encho_cancellation_executor": "Has EXECUTE on canonical_complete_reservation_cancellation (SECURITY DEFINER); ZERO table permissions on canonical_reservation_revisions, canonical_reservation_revision_nights, or canonical_reservation_revision_seals",
+    "encho_cancellation_issuer": "Has EXECUTE on canonical_issue_cancellation_decision_authorization; ZERO table permissions on revision or release tables",
+    "runtimeRolesAssemblyAuthority": "ZERO runtime roles have INSERT, UPDATE, DELETE, or seal authority on revision tables"
+  },
+  "negativeModificationProof": {
+    "acceptedModificationWriter": "ABSENT",
+    "candidateProceduresInPgProc": 0,
+    "physicalInventoryReplacementRoutine": "ABSENT",
+    "runtimeRoleModificationPrivilege": 0
+  },
+  "focusedTestResults": {
+    "suite": "scripts/testing/w4c2-version-aware-cancellation.mjs",
+    "status": "PASS",
+    "casesVerified": [
+      "A. V1 cancellation releases version 1 original nights: released_effective_version = 1, released_revision_id = NULL",
+      "B. V2 cancellation releases sealed V2 snapshot: released_effective_version = 2, released_revision_id = V2 ID",
+      "C. V2 cancellation does NOT release OLD_ONLY V1 inventory",
+      "D. NEW_ONLY V2 inventory is released",
+      "E. UNCHANGED V2 allocation released once",
+      "F. units > 1 decremented exactly: units = 2 decrements exactly 2, release evidence records 2",
+      "G. sealed V2 + unsealed V3 releases V2: unsealed V3 completely ignored",
+      "H. highest sealed revision selected: sealed V2 + sealed V3 releases V3",
+      "I. V2 later-night underflow rolls back entire cancellation: zero decrements, zero receipts, lifecycle remains CANCELLATION_REQUESTED",
+      "J. V2 exact replay does not re-release inventory: returns replayed = true with identical IDs",
+      "K. release receipt stores exact effective version/revision evidence",
+      "L. release-night evidence stores exact units, room_type_id, and inventory identity",
+      "M. revision and seal rows remain completely untouched by cancellation",
+      "N. cancellation executor has zero V2 assembly/seal write permissions",
+      "O. zero modification writer in pg_proc",
+      "P. zero financial or payment side effects"
+    ]
+  },
+  "neighboringRegressions": {
+    "w3_canonical_reservation": "PASS (13/13)",
+    "w4a_canonical_lifecycle": "PASS (34/34)",
+    "w4b_canonical_cancellation": "PASS (52/52)",
+    "w4c1_revision_model": "PASS (1/1)"
+  },
+  "staticVerifications": {
+    "typecheck": "PASS (npx tsc --noEmit)",
+    "serverTypecheck": "PASS (npx tsc -p tsconfig.server.json --noEmit)",
+    "eslint": "PASS (npx eslint scripts/testing/w4c2-version-aware-cancellation.mjs)",
+    "jsonValidation": "PASS (python3 -m json.tool receipt)",
+    "diffCheck": "PASS (git diff --check)"
+  },
+  "nextSliceBoundary": {
+    "w4c2Scope": "VERSION-AWARE CANCELLATION COMPATIBILITY ONLY",
+    "modificationWriter": "ABSENT",
+    "targetModificationContract": "NOT IMPLEMENTED",
+    "globalCrossWriterLockOrder": "NOT IMPLEMENTED",
+    "physicalModificationReplacement": "ABSENT",
+    "w4dFinancialClearance": "NOT IMPLEMENTED",
+    "guestHostIngress": "ABSENT",
+    "production": "NOT EVALUATED"
+  }
+}
