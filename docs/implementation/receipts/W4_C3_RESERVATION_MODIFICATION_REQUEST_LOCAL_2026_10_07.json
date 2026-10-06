@@ -1,0 +1,132 @@
+{
+  "task": "W4-C3 — CANONICAL PENDING MODIFICATION REQUEST AUTHORITY",
+  "canonicalBase": "affc14b185dedb3d54a3c414876f98f0f3e85061",
+  "workerBranch": "codex/antigravity-w4c3-modification-request",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "scope": {
+    "slice": "W4-C3: CANONICAL PENDING MODIFICATION REQUEST AUTHORITY ONLY",
+    "historicalIntentContract": "Durable internal pending request binding active reservation effective version to accepted-offer target quote",
+    "targetInventoryReserved": "NONE",
+    "targetHolds": "NONE",
+    "physicalCapacityChecked": "NONE",
+    "v2ReservationRevisionsCreated": "NONE",
+    "inventoryReplaced": "NONE",
+    "financialAdjustmentApproved": "NONE",
+    "extraPayment": "NONE",
+    "refundAuthorized": "NONE",
+    "executionApproved": "NONE",
+    "guestHostPublicIngress": "ABSENT",
+    "production": "NOT EVALUATED"
+  },
+  "migration": {
+    "file": "src/migrations/059_canonical_reservation_modification_request.sql",
+    "sha256": "77bd865dac24acde1cae4b7a137360083fc7b9cffc8aa6b0a2e5e3719af971e1",
+    "strategy": "Additive schema extension creating canonical_reservation_modification_requests table with composite foreign keys to W4-C1 sealed revisions and stays_quotes; atomic routine canonical_request_reservation_modification with authorization-before-replay order, wall-clock expiry check post-row-lock, deterministic command fingerprinting, and restricted execution role encho_modification_issuer"
+  },
+  "tableSchema": {
+    "tableName": "canonical_reservation_modification_requests",
+    "columns": {
+      "id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+      "reservation_id": "UUID NOT NULL REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
+      "command_id": "UUID UNIQUE NOT NULL",
+      "command_fingerprint": "TEXT NOT NULL CHECK (command_fingerprint ~ '^[a-f0-9]{64}$')",
+      "request_type": "TEXT NOT NULL CHECK (request_type = 'CANONICAL_RESERVATION_MODIFICATION_REQUEST')",
+      "holder_principal": "TEXT NOT NULL CHECK (holder_principal ~ '^(user:[0-9]+|session:[0-9a-f-]{36})$')",
+      "source_effective_version": "INT NOT NULL CHECK (source_effective_version >= 1)",
+      "source_revision_id": "UUID",
+      "target_quote_id": "UUID NOT NULL REFERENCES stays_quotes(id) ON DELETE RESTRICT",
+      "created_at": "TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()"
+    },
+    "shapeConstraint": "chk_modification_request_source_version_shape enforces ((source_effective_version = 1 AND source_revision_id IS NULL) OR (source_effective_version >= 2 AND source_revision_id IS NOT NULL))",
+    "compositeRevisionFk": "fk_mod_req_source_revision_effective references canonical_reservation_revisions(id, reservation_id, version)",
+    "sealFk": "fk_mod_req_source_revision_seal references canonical_reservation_revision_seals(revision_id)",
+    "immutability": "Trigger canonical_reservation_modification_requests_immutable unconditionally rejects UPDATE or DELETE",
+    "rowLevelSecurity": "Enabled and forced: ALTER TABLE canonical_reservation_modification_requests ENABLE ROW LEVEL SECURITY; ALTER TABLE canonical_reservation_modification_requests FORCE ROW LEVEL SECURITY"
+  },
+  "functionSignature": {
+    "name": "canonical_request_reservation_modification",
+    "parameters": [
+      "target_reservation_id UUID",
+      "target_command_id UUID",
+      "target_expected_source_effective_version INT",
+      "target_quote UUID",
+      "authenticated_principal TEXT"
+    ],
+    "returns": "TABLE (request_id UUID, reservation_id UUID, command_id UUID, holder_principal TEXT, source_effective_version INT, source_revision_id UUID, target_quote_id UUID, created_at TIMESTAMPTZ, replayed BOOLEAN)",
+    "security": "VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on",
+    "roleModel": "REVOKE ALL FROM PUBLIC; GRANT EXECUTE TO encho_modification_issuer"
+  },
+  "architecturalGatesAndOrdering": {
+    "step1_inputValidation": "Rejects NULLs, malformed principals, source version < 1",
+    "step2_reservationLock": "SELECT * FROM canonical_reservations WHERE id = target_reservation_id FOR UPDATE",
+    "step3_originVerification": "Enforces origin_kind = 'ENCHO_DIRECT'",
+    "step4_principalAuthorization": "Enforces authenticated_principal = res_row.holder_principal",
+    "step5_fingerprintComputation": "Deterministic SHA-256 over canonical JSONB payload (command_type, reservation_id, authenticated_principal, expected_source_effective_version, target_quote_id)",
+    "step6_replayCheck": "Authorization-before-replay order: verifies existing command_id under locked reservation; if fingerprint matches, returns stored result with replayed = true BEFORE mutable gates; if fingerprint differs, raises MODIFICATION_COMMAND_CONFLICT",
+    "step7_mutableGateLifecycle": "canonical_reservation_lifecycle_current.lifecycle_state must be ACTIVE",
+    "step8_mutableGateSourceVersion": "canonical_reservation_effective_revisions.effective_version must match target_expected_source_effective_version",
+    "step9_mutableGateTargetQuote": "stays_quotes must exist, quote_kind = 'ACCEPTED_OFFER', matching holder principal, matching listing_id",
+    "step10_mutableGateOfferPointer": "Locks sellable_offers FOR UPDATE; verifies quote_row.offer_revision matches offer_ptr.current_accepted_revision and public_disposition = 'ACCEPTED'; checks static listing/room coherence",
+    "step11_mutableGateWallClockExpiry": "Checks stays_quotes.expires_at <= clock_timestamp() strictly AFTER acquiring reservation and offer row locks",
+    "step12_atomicInsertion": "Inserts row with ON CONFLICT (command_id) DO NOTHING; handles unique_violation race safety"
+  },
+  "focusedTestResults": {
+    "suite": "scripts/testing/w4c3-reservation-modification-request.mjs",
+    "status": "PASS",
+    "casesVerified": [
+      "A. ACTIVE Encho Direct V1 + fresh quote + matching holder: succeeds, persists row, zero inventory mutation, zero target holds, zero revisions",
+      "B. Unknown reservation rejected: MODIFICATION_RESERVATION_NOT_FOUND",
+      "C. Authenticated caller !== reservation holder rejected: MODIFICATION_AUTHORIZATION_DENIED",
+      "D. Authenticated caller !== target quote holder rejected: MODIFICATION_QUOTE_HOLDER_MISMATCH",
+      "E. CANCELLED reservation rejected: MODIFICATION_LIFECYCLE_CONFLICT",
+      "F. Quote expired rejected: MODIFICATION_QUOTE_EXPIRED",
+      "G. Quote expiry DURING LOCK WAIT evaluated with post-wait wall clock: MODIFICATION_QUOTE_EXPIRED",
+      "H. External-origin reservation rejected: MODIFICATION_ORIGIN_NOT_SUPPORTED",
+      "I. Authenticated caller !== reservation holder rejected: MODIFICATION_NOT_AUTHORIZED",
+      "J. Quote kind != ACCEPTED_OFFER rejected: MODIFICATION_QUOTE_KIND_INVALID",
+      "K. Different listing target quote rejected: MODIFICATION_LISTING_MISMATCH",
+      "L. Quote / offer static incoherence rejected: MODIFICATION_QUOTE_INCOHERENT",
+      "M. Superseded offer revision rejected: MODIFICATION_OFFER_SUPERSEDED",
+      "N. Current accepted revision succeeds",
+      "O. Exact idempotent replay returns same stored result: replayed = true",
+      "P. Replay after quote expiry succeeds without re-evaluating expiry: replayed = true",
+      "Q. Replay after offer succession succeeds without re-evaluating: replayed = true",
+      "R. Replay after lifecycle change succeeds without re-evaluating: replayed = true",
+      "S. Same command + changed target quote -> conflict: MODIFICATION_COMMAND_CONFLICT",
+      "T. Same command + changed expected version -> conflict: MODIFICATION_COMMAND_CONFLICT",
+      "U. Stale expected source version rejected: MODIFICATION_SOURCE_VERSION_MISMATCH",
+      "V. Sealed V2 source revision persists exact source_revision_id FK",
+      "W. Unsealed V2 source cannot be referenced by request row: FK constraint rejects",
+      "X. Modification request table is immutable: UPDATE/DELETE rejected by trigger",
+      "Y. Zero inventory mutation verified across all operations",
+      "Z. Concurrent identical commands serialize: exactly one row inserted, second replays",
+      "AA. Concurrent different commands serialize without race corruption",
+      "AB. Negative role probes: PUBLIC, web, worker roles denied EXECUTE; issuer restricted",
+      "AC. Zero modification writer in pg_proc: no routine capable of publishing revisions"
+    ]
+  },
+  "neighboringRegressions": {
+    "w3_canonical_reservation": "PASS (13/13)",
+    "w4a_canonical_lifecycle": "PASS (34/34)",
+    "w4b_canonical_cancellation": "PASS (52/52)",
+    "w4c1_revision_model": "PASS (1/1)",
+    "w4c2_version_aware_cancellation": "PASS (1/1)"
+  },
+  "staticVerifications": {
+    "typecheck": "PASS (npx tsc --noEmit)",
+    "serverTypecheck": "PASS (npx tsc -p tsconfig.server.json --noEmit)",
+    "eslint": "PASS (npx eslint scripts/testing/w4c3-reservation-modification-request.mjs)",
+    "jsonValidation": "PASS (python3 -m json.tool receipt)",
+    "diffCheck": "PASS (git diff --check)"
+  },
+  "nextSliceBoundary": {
+    "w4c3Scope": "CANONICAL PENDING MODIFICATION REQUEST AUTHORITY ONLY",
+    "targetHold": "NONE",
+    "liveInventoryCheck": "NONE",
+    "physicalInventoryReplacement": "ABSENT",
+    "financialDeltaAdjustment": "NOT IMPLEMENTED",
+    "revisionPublication": "NONE",
+    "guestHostIngress": "ABSENT",
+    "production": "NOT EVALUATED"
+  }
+}
