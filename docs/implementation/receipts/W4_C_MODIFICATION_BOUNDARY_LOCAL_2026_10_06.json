@@ -63,732 +63,3766 @@
     "canonical_reservation_lifecycle_commands",
     "canonical_reservation_nights"
   ],
-  "reservationAttachmentPaths": [
+  "reservationAttachmentEdgePaths": [
     {
-      "relation": "canonical_payment_reservations",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_payment_reservations"
-        ]
+      "pathId": "canonical_payment_reservations_reservation_id_fkey[canonical_payment_reservations(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_payment_reservations",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_payment_reservations_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_payment_reservations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_payment_reservations"
       ]
     },
     {
-      "relation": "canonical_reservation_cancellation_authorizations",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_authorizations"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_authorizations",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations"
       ]
     },
     {
-      "relation": "canonical_reservation_cancellation_inventory_releases",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_inventory_releases",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "authorization_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_cancellation_inventory_releases"
       ]
     },
     {
-      "relation": "canonical_reservation_cancellation_release_nights",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_release_nights",
+      "depth": 3,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_inventory_releases",
+          "parentColumns": [
+            "release_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_release_nights",
+          "childColumns": [
+            "release_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_cancellation_inventory_releases",
+        "canonical_reservation_cancellation_release_nights"
       ]
     },
     {
-      "relation": "canonical_reservation_commands",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_commands"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_events",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "decision_authorization_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_events"
       ]
     },
     {
-      "relation": "canonical_reservation_events",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_events"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_inventory_releases",
+      "depth": 3,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "decision_authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_inventory_releases"
       ]
     },
     {
-      "relation": "canonical_reservation_lifecycle_authorizations",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_lifecycle_authorizations"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_authorizations"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_authorizations"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_release_nights",
+      "depth": 4,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "decision_authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_inventory_releases",
+          "parentColumns": [
+            "release_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_release_nights",
+          "childColumns": [
+            "release_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_inventory_releases",
+        "canonical_reservation_cancellation_release_nights"
       ]
     },
     {
-      "relation": "canonical_reservation_lifecycle_commands",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_lifecycle_commands"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_commands"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_commands"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey[canonical_reservation_lifecycle_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_lifecycle_authorizations",
+      "depth": 3,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "decision_authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_lifecycle_authorizations",
+          "childColumns": [
+            "consumed_by_event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_events",
+        "canonical_reservation_lifecycle_authorizations"
       ]
     },
     {
-      "relation": "canonical_reservation_nights",
-      "attachmentDepth": 1,
-      "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_nights"
-        ]
+      "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_lifecycle_commands_event_id_fkey[canonical_reservation_lifecycle_commands(event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_lifecycle_commands",
+      "depth": 3,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "decision_authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_lifecycle_commands",
+          "childColumns": [
+            "event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_events",
+        "canonical_reservation_lifecycle_commands"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_cancellation_inventor_reservation_id_fkey[canonical_reservation_cancellation_inventory_releases(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_inventory_releases",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_inventor_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_inventory_releases"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_cancellation_inventor_reservation_id_fkey[canonical_reservation_cancellation_inventory_releases(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_release_nights",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_inventor_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_inventory_releases",
+          "parentColumns": [
+            "release_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_release_nights",
+          "childColumns": [
+            "release_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_inventory_releases",
+        "canonical_reservation_cancellation_release_nights"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_cancellation_release__reservation_id_fkey[canonical_reservation_cancellation_release_nights(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_release_nights",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_cancellation_release__reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_cancellation_release_nights",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_cancellation_release_nights"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_commands_reservation_id_fkey[canonical_reservation_commands(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_commands",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_commands_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_commands",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_commands"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_events",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_au_consumed_by_event_id_fkey[canonical_reservation_cancellation_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_authorizations",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_au_consumed_by_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "consumed_by_event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_authorizations"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_au_consumed_by_event_id_fkey[canonical_reservation_cancellation_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_inventory_releases",
+      "depth": 3,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_au_consumed_by_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "consumed_by_event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "authorization_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_cancellation_inventory_releases"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_au_consumed_by_event_id_fkey[canonical_reservation_cancellation_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_release_nights",
+      "depth": 4,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_au_consumed_by_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "consumed_by_event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_inventory_releases",
+          "parentColumns": [
+            "release_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_release_nights",
+          "childColumns": [
+            "release_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_cancellation_inventory_releases",
+        "canonical_reservation_cancellation_release_nights"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_author_request_event_id_fkey[canonical_reservation_cancellation_authorizations(request_event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_authorizations",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_author_request_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "request_event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_authorizations"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_author_request_event_id_fkey[canonical_reservation_cancellation_authorizations(request_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_inventory_releases",
+      "depth": 3,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_author_request_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "request_event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "authorization_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_cancellation_inventory_releases"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_author_request_event_id_fkey[canonical_reservation_cancellation_authorizations(request_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_release_nights",
+      "depth": 4,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_author_request_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_authorizations",
+          "childColumns": [
+            "request_event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_inventory_releases",
+          "parentColumns": [
+            "release_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_release_nights",
+          "childColumns": [
+            "release_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_authorizations",
+        "canonical_reservation_cancellation_inventory_releases",
+        "canonical_reservation_cancellation_release_nights"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_inventory_releases",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_inventory_releases"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_cancellation_release_nights",
+      "depth": 3,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_inventory_releases",
+          "childColumns": [
+            "event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+          "parentTable": "canonical_reservation_cancellation_inventory_releases",
+          "parentColumns": [
+            "release_id"
+          ],
+          "childTable": "canonical_reservation_cancellation_release_nights",
+          "childColumns": [
+            "release_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_cancellation_inventory_releases",
+        "canonical_reservation_cancellation_release_nights"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey[canonical_reservation_lifecycle_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_lifecycle_authorizations",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_lifecycle_authorizations",
+          "childColumns": [
+            "consumed_by_event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_lifecycle_authorizations"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_lifecycle_commands_event_id_fkey[canonical_reservation_lifecycle_commands(event_id)->canonical_reservation_events(event_id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_lifecycle_commands",
+      "depth": 2,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_events",
+          "childColumns": [
+            "reservation_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_event_id_fkey",
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ],
+          "childTable": "canonical_reservation_lifecycle_commands",
+          "childColumns": [
+            "event_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_events",
+        "canonical_reservation_lifecycle_commands"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_lifecycle_authorizati_reservation_id_fkey[canonical_reservation_lifecycle_authorizations(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_lifecycle_authorizations",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_lifecycle_authorizati_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_lifecycle_authorizations",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_lifecycle_authorizations"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_lifecycle_commands_reservation_id_fkey[canonical_reservation_lifecycle_commands(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_lifecycle_commands",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_lifecycle_commands",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_lifecycle_commands"
+      ]
+    },
+    {
+      "pathId": "canonical_reservation_nights_reservation_id_fkey[canonical_reservation_nights(reservation_id)->canonical_reservations(id)]",
+      "root": "canonical_reservations",
+      "terminalRelation": "canonical_reservation_nights",
+      "depth": 1,
+      "edges": [
+        {
+          "constraintName": "canonical_reservation_nights_reservation_id_fkey",
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ],
+          "childTable": "canonical_reservation_nights",
+          "childColumns": [
+            "reservation_id"
+          ]
+        }
+      ],
+      "tableSequence": [
+        "canonical_reservations",
+        "canonical_reservation_nights"
       ]
     }
   ],
+  "maxReservationAttachmentDepth": 4,
   "undispositionedReservationAttachedRelationIds": [],
   "reservationAttachedSchema": [
     {
       "relation": "canonical_payment_reservations",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_payment_reservations"
-        ]
+        {
+          "pathId": "canonical_payment_reservations_reservation_id_fkey[canonical_payment_reservations(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_payment_reservations_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_payment_reservations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_payment_reservations"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "payment_attempt_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "quote_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "hold_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "command_fingerprint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        },
+        {
+          "name": "finalized_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        }
       ],
       "primaryKey": [
         "id"
       ],
-      "foreignKeys": [
-        "hold_id -> booking_holds.id",
-        "payment_attempt_id -> canonical_payment_attempts.id",
-        "quote_id -> stays_quotes.id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_payment_reservations_command_id_key",
+          "constraintName": "canonical_payment_reservations_command_id_key",
           "columns": [
             "command_id"
           ]
         },
         {
-          "constraint": "canonical_payment_reservations_payment_attempt_id_key",
+          "constraintName": "canonical_payment_reservations_payment_attempt_id_key",
           "columns": [
             "payment_attempt_id"
           ]
         },
         {
-          "constraint": "canonical_payment_reservations_reservation_id_key",
+          "constraintName": "canonical_payment_reservations_reservation_id_key",
           "columns": [
             "reservation_id"
           ]
         }
       ],
-      "cardinalityFromReservation": "EXACTLY_ONE_ROW",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "id",
-        "command_id",
-        "payment_attempt_id",
-        "quote_id",
-        "hold_id",
-        "reservation_id",
-        "command_fingerprint",
-        "status",
-        "created_at",
-        "finalized_at"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_payment_reservations_hold_id_fkey",
+          "childColumns": [
+            "hold_id"
+          ],
+          "parentTable": "booking_holds",
+          "parentColumns": [
+            "id"
+          ]
+        },
+        {
+          "constraintName": "canonical_payment_reservations_payment_attempt_id_fkey",
+          "childColumns": [
+            "payment_attempt_id"
+          ],
+          "parentTable": "canonical_payment_attempts",
+          "parentColumns": [
+            "id"
+          ]
+        },
+        {
+          "constraintName": "canonical_payment_reservations_quote_id_fkey",
+          "childColumns": [
+            "quote_id"
+          ],
+          "parentTable": "stays_quotes",
+          "parentColumns": [
+            "id"
+          ]
+        },
+        {
+          "constraintName": "canonical_payment_reservations_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_payment_reservations_command_fingerprint_check",
+          "definition": "CHECK ((command_fingerprint ~ '^[a-f0-9]{64}$'::text))"
+        },
+        {
+          "constraintName": "canonical_payment_reservations_status_check",
+          "definition": "CHECK ((status = 'COMMITTED'::text))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_payment_reservations_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_payment_reservations_immutable BEFORE DELETE OR UPDATE ON public.canonical_payment_reservations FOR EACH ROW EXECUTE FUNCTION canonical_payment_reservation_reject_mutation()",
+          "functionName": "canonical_payment_reservation_reject_mutation"
+        }
       ],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_payment_reservations_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_payment_reservations_immutable BEFORE DELETE OR UPDATE ON public.canonical_payment_reservations FOR EACH ROW EXECUTE FUNCTION canonical_payment_reservation_reject_mutation()",
+            "functionName": "canonical_payment_reservation_reject_mutation",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "UNIQUE constraint on reservation_id enforces 1:1 cardinality with reservation identity"
+          ],
+          "semanticEvidence": [
+            "Cannot store multiple reservation revisions under stable reservation identity"
+          ],
+          "reason": "Enforces exactly one row per reservation_id via unique constraint; structurally incapable of persisting multiple revisions."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No command idempotency key or command execution ledger"
+          ],
+          "semanticEvidence": [
+            "Not a command idempotency or replay ledger"
+          ],
+          "reason": "Relation does not provide command execution replay semantics."
+        }
+      },
       "structuralDisposition": "W3_PAYMENT_COMPOSITION_BRIDGE_UNIQUE_1_TO_1"
     },
     {
       "relation": "canonical_reservation_cancellation_authorizations",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1,
+        2
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_authorizations"
-        ]
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_au_consumed_by_event_id_fkey[canonical_reservation_cancellation_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_au_consumed_by_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "consumed_by_event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_authorizations"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_author_request_event_id_fkey[canonical_reservation_cancellation_authorizations(request_event_id)->canonical_reservation_events(event_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_author_request_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "request_event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_authorizations"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "authorization_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "request_event_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "command_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "origin_kind",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "decision_source_kind",
+          "type": "text",
+          "nullable": false,
+          "default": "'INTERNAL_AUTHORITY_PRIMITIVE'::text"
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "decision_fingerprint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "consumed_by_event_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        }
       ],
       "primaryKey": [
         "authorization_id"
       ],
-      "foreignKeys": [
-        "consumed_by_event_id -> canonical_reservation_events.event_id",
-        "request_event_id -> canonical_reservation_events.event_id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_reservation_cancellatio_reservation_id_command_id_key",
+          "constraintName": "canonical_reservation_cancellatio_reservation_id_command_id_key",
           "columns": [
             "reservation_id",
             "command_id"
           ]
         }
       ],
-      "cardinalityFromReservation": "MULTIPLE_PERSISTENT_ROWS",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "authorization_id",
-        "reservation_id",
-        "request_event_id",
-        "command_id",
-        "command_type",
-        "origin_kind",
-        "decision_source_kind",
-        "reason_code",
-        "reason_text",
-        "decision_fingerprint",
-        "issued_at",
-        "expires_at",
-        "consumed_at",
-        "consumed_by_event_id",
-        "created_at"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_cancellation_au_consumed_by_event_id_fkey",
+          "childColumns": [
+            "consumed_by_event_id"
+          ],
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_author_request_event_id_fkey",
+          "childColumns": [
+            "request_event_id"
+          ],
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_cancellation_a_decision_fingerprint_check",
+          "definition": "CHECK ((decision_fingerprint ~ '^[a-f0-9]{64}$'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_a_decision_source_kind_check",
+          "definition": "CHECK ((decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_authoriza_command_type_check",
+          "definition": "CHECK ((command_type = 'COMPLETE_CANCELLATION'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_authorizat_origin_kind_check",
+          "definition": "CHECK ((origin_kind = 'ENCHO_DIRECT'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_authorizat_reason_code_check",
+          "definition": "CHECK ((reason_code ~ '^[A-Z0-9_]{1,64}$'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_authorizat_reason_text_check",
+          "definition": "CHECK (((reason_text IS NULL) OR (length(reason_text) <= 500)))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_reservation_cancellation_authorizations_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_reservation_cancellation_authorizations_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_cancellation_authorizations FOR EACH ROW EXECUTE FUNCTION canonical_cancellation_authorization_reject_mutation()",
+          "functionName": "canonical_cancellation_authorization_reject_mutation"
+        }
       ],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_reservation_cancellation_authorizations_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_reservation_cancellation_authorizations_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_cancellation_authorizations FOR EACH ROW EXECUTE FUNCTION canonical_cancellation_authorization_reject_mutation()",
+            "functionName": "canonical_cancellation_authorization_reject_mutation",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "Table schema is strictly scoped to cancellation requests, decisions, or releases"
+          ],
+          "semanticEvidence": [
+            "Cancellation lifecycle capabilities, not reservation revision authority"
+          ],
+          "reason": "Scoped strictly to cancellation lifecycle operations; zero revision header or reservation version semantics."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No command idempotency key or command execution ledger"
+          ],
+          "semanticEvidence": [
+            "Not a command idempotency or replay ledger"
+          ],
+          "reason": "Relation does not provide command execution replay semantics."
+        }
+      },
       "structuralDisposition": "W4_B_CANCELLATION_DECISION_AUTHORIZATION_CAPABILITY"
     },
     {
       "relation": "canonical_reservation_cancellation_inventory_releases",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1,
+        2,
+        3
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases"
-        ]
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "authorization_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_cancellation_inventory_releases"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]",
+          "depth": 3,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "decision_authorization_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_inventory_releases"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_cancellation_inventor_reservation_id_fkey[canonical_reservation_cancellation_inventory_releases(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_inventor_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_inventory_releases"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_au_consumed_by_event_id_fkey[canonical_reservation_cancellation_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+          "depth": 3,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_au_consumed_by_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "consumed_by_event_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "authorization_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_cancellation_inventory_releases"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_author_request_event_id_fkey[canonical_reservation_cancellation_authorizations(request_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+          "depth": 3,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_author_request_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "request_event_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "authorization_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_cancellation_inventory_releases"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_inventory_releases"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "event_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "authorization_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "released_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        },
+        {
+          "name": "release_fingerprint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        }
       ],
       "primaryKey": [
         "release_id"
       ],
-      "foreignKeys": [
-        "authorization_id -> canonical_reservation_cancellation_authorizations.authorization_id",
-        "event_id -> canonical_reservation_events.event_id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_reservation_cancellation_invento_authorization_id_key",
+          "constraintName": "canonical_reservation_cancellation_invento_authorization_id_key",
           "columns": [
             "authorization_id"
           ]
         },
         {
-          "constraint": "canonical_reservation_cancellation_inventory_rel_command_id_key",
+          "constraintName": "canonical_reservation_cancellation_inventory_rel_command_id_key",
           "columns": [
             "command_id"
           ]
         },
         {
-          "constraint": "canonical_reservation_cancellation_inventory_relea_event_id_key",
+          "constraintName": "canonical_reservation_cancellation_inventory_relea_event_id_key",
           "columns": [
             "event_id"
           ]
         },
         {
-          "constraint": "canonical_reservation_cancellation_inventory_reservation_id_key",
+          "constraintName": "canonical_reservation_cancellation_inventory_reservation_id_key",
           "columns": [
             "reservation_id"
           ]
         }
       ],
-      "cardinalityFromReservation": "EXACTLY_ONE_ROW",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "release_id",
-        "reservation_id",
-        "event_id",
-        "command_id",
-        "authorization_id",
-        "released_at",
-        "release_fingerprint"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+          "childColumns": [
+            "authorization_id"
+          ],
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_inventor_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+          "childColumns": [
+            "event_id"
+          ],
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_cancellation_in_release_fingerprint_check",
+          "definition": "CHECK ((release_fingerprint ~ '^[a-f0-9]{64}$'::text))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_reservation_cancellation_inventory_releases_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_reservation_cancellation_inventory_releases_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_cancellation_inventory_releases FOR EACH ROW EXECUTE FUNCTION canonical_cancellation_release_reject_mutation()",
+          "functionName": "canonical_cancellation_release_reject_mutation"
+        }
       ],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_reservation_cancellation_inventory_releases_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_reservation_cancellation_inventory_releases_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_cancellation_inventory_releases FOR EACH ROW EXECUTE FUNCTION canonical_cancellation_release_reject_mutation()",
+            "functionName": "canonical_cancellation_release_reject_mutation",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "UNIQUE constraint on reservation_id enforces 1:1 cardinality with reservation identity"
+          ],
+          "semanticEvidence": [
+            "Cannot store multiple reservation revisions under stable reservation identity"
+          ],
+          "reason": "Enforces exactly one row per reservation_id via unique constraint; structurally incapable of persisting multiple revisions."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No command idempotency key or command execution ledger"
+          ],
+          "semanticEvidence": [
+            "Not a command idempotency or replay ledger"
+          ],
+          "reason": "Relation does not provide command execution replay semantics."
+        }
+      },
       "structuralDisposition": "W4_B_CANCELLATION_RELEASE_FENCE_UNIQUE_1_TO_1"
     },
     {
       "relation": "canonical_reservation_cancellation_release_nights",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1,
+        2,
+        3,
+        4
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_cancellation_inventory_releases",
-          "canonical_reservation_cancellation_release_nights"
-        ]
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+          "depth": 3,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "authorization_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_inventory_releases",
+              "parentColumns": [
+                "release_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_release_nights",
+              "childColumns": [
+                "release_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_cancellation_inventory_releases",
+            "canonical_reservation_cancellation_release_nights"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+          "depth": 4,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "decision_authorization_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "event_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_inventory_releases",
+              "parentColumns": [
+                "release_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_release_nights",
+              "childColumns": [
+                "release_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_inventory_releases",
+            "canonical_reservation_cancellation_release_nights"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_cancellation_inventor_reservation_id_fkey[canonical_reservation_cancellation_inventory_releases(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_inventor_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_inventory_releases",
+              "parentColumns": [
+                "release_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_release_nights",
+              "childColumns": [
+                "release_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_inventory_releases",
+            "canonical_reservation_cancellation_release_nights"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_cancellation_release__reservation_id_fkey[canonical_reservation_cancellation_release_nights(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_release__reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_release_nights",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_release_nights"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_au_consumed_by_event_id_fkey[canonical_reservation_cancellation_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+          "depth": 4,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_au_consumed_by_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "consumed_by_event_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "authorization_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_inventory_releases",
+              "parentColumns": [
+                "release_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_release_nights",
+              "childColumns": [
+                "release_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_cancellation_inventory_releases",
+            "canonical_reservation_cancellation_release_nights"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_author_request_event_id_fkey[canonical_reservation_cancellation_authorizations(request_event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_invent_authorization_id_fkey[canonical_reservation_cancellation_inventory_releases(authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+          "depth": 4,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_author_request_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "request_event_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_invent_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "authorization_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_inventory_releases",
+              "parentColumns": [
+                "release_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_release_nights",
+              "childColumns": [
+                "release_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_cancellation_inventory_releases",
+            "canonical_reservation_cancellation_release_nights"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_cancellation_inventory_rele_event_id_fkey[canonical_reservation_cancellation_inventory_releases(event_id)->canonical_reservation_events(event_id)]::canonical_reservation_cancellation_release_nigh_release_id_fkey[canonical_reservation_cancellation_release_nights(release_id)->canonical_reservation_cancellation_inventory_releases(release_id)]",
+          "depth": 3,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_inventory_rele_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_inventory_releases",
+              "childColumns": [
+                "event_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_inventory_releases",
+              "parentColumns": [
+                "release_id"
+              ],
+              "childTable": "canonical_reservation_cancellation_release_nights",
+              "childColumns": [
+                "release_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_cancellation_inventory_releases",
+            "canonical_reservation_cancellation_release_nights"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "inventory_day_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "stay_date",
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "released_units",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        }
       ],
       "primaryKey": [
         "release_id",
         "inventory_day_id"
       ],
-      "foreignKeys": [
-        "inventory_day_id -> inventory_days.id",
-        "release_id -> canonical_reservation_cancellation_inventory_releases.release_id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_reservation_cancellation_reservation_id_stay_date_key",
+          "constraintName": "canonical_reservation_cancellation_reservation_id_stay_date_key",
           "columns": [
             "reservation_id",
             "stay_date"
           ]
         }
       ],
-      "cardinalityFromReservation": "MULTIPLE_PERSISTENT_ROWS",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "release_id",
-        "reservation_id",
-        "inventory_day_id",
-        "stay_date",
-        "released_units",
-        "created_at"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_cancellation_releas_inventory_day_id_fkey",
+          "childColumns": [
+            "inventory_day_id"
+          ],
+          "parentTable": "inventory_days",
+          "parentColumns": [
+            "id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release__reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_cancellation_release_nigh_release_id_fkey",
+          "childColumns": [
+            "release_id"
+          ],
+          "parentTable": "canonical_reservation_cancellation_inventory_releases",
+          "parentColumns": [
+            "release_id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_cancellation_release_released_units_check",
+          "definition": "CHECK ((released_units > 0))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_reservation_cancellation_release_nights_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_reservation_cancellation_release_nights_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_cancellation_release_nights FOR EACH ROW EXECUTE FUNCTION canonical_cancellation_release_night_reject_mutation()",
+          "functionName": "canonical_cancellation_release_night_reject_mutation"
+        }
       ],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_reservation_cancellation_release_nights_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_reservation_cancellation_release_nights_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_cancellation_release_nights FOR EACH ROW EXECUTE FUNCTION canonical_cancellation_release_night_reject_mutation()",
+            "functionName": "canonical_cancellation_release_night_reject_mutation",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "UNIQUE constraint on (reservation_id, stay_date)",
+            "No revision or version grouping column"
+          ],
+          "semanticEvidence": [
+            "Restricted to single set of stay dates per reservation",
+            "Zero grouping identity to persist N+1 replacement stay dates under same reservation"
+          ],
+          "reason": "UNIQUE constraint limits table to single stay date set; zero revision grouping column exists to persist N+1 replacement nights."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No command idempotency key or command execution ledger"
+          ],
+          "semanticEvidence": [
+            "Not a command idempotency or replay ledger"
+          ],
+          "reason": "Relation does not provide command execution replay semantics."
+        }
+      },
       "structuralDisposition": "W4_B_PER_NIGHT_CANCELLATION_RELEASE_EVIDENCE"
     },
     {
       "relation": "canonical_reservation_commands",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_commands"
-        ]
+        {
+          "pathId": "canonical_reservation_commands_reservation_id_fkey[canonical_reservation_commands(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_commands_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_commands",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_commands"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "holder_principal",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "hold_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "quote_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "request_fingerprint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        }
       ],
       "primaryKey": [
         "command_id"
       ],
-      "foreignKeys": [
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_reservation_commands_reservation_id_key",
+          "constraintName": "canonical_reservation_commands_reservation_id_key",
           "columns": [
             "reservation_id"
           ]
         }
       ],
-      "cardinalityFromReservation": "EXACTLY_ONE_ROW",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "command_id",
-        "holder_principal",
-        "hold_id",
-        "quote_id",
-        "request_fingerprint",
-        "reservation_id",
-        "created_at"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_commands_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        }
       ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_commands_request_fingerprint_check",
+          "definition": "CHECK ((request_fingerprint ~ '^[a-f0-9]{64}$'::text))"
+        }
+      ],
+      "triggers": [],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "UNKNOWN",
+        "evidence": []
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "UNIQUE constraint on reservation_id enforces 1:1 cardinality with reservation identity"
+          ],
+          "semanticEvidence": [
+            "Cannot store multiple reservation revisions under stable reservation identity"
+          ],
+          "reason": "Enforces exactly one row per reservation_id via unique constraint; structurally incapable of persisting multiple revisions."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "UNIQUE(command_id)",
+            "UNIQUE(reservation_id)"
+          ],
+          "semanticEvidence": [
+            "Replay is strictly scoped to V1 initial reservation creation (composePaymentReservation)"
+          ],
+          "reason": "Scoped strictly to V1 initial reservation creation replay; zero support for reservation modification commands."
+        }
+      },
       "structuralDisposition": "W3_FINALIZATION_COMMAND_IDEMPOTENCY_FENCE_UNIQUE_1_TO_1"
     },
     {
       "relation": "canonical_reservation_events",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1,
+        2
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_events"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events"
-        ]
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "decision_authorization_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_events"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "sequence_number",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "event_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "actor_kind",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "actor_principal",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "origin_kind",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        },
+        {
+          "name": "source_ref",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "metadata",
+          "type": "jsonb",
+          "nullable": false,
+          "default": "'{}'::jsonb"
+        },
+        {
+          "name": "request_event_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "decision_authorization_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "decision_source_kind",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        }
       ],
       "primaryKey": [
         "event_id"
       ],
-      "foreignKeys": [
-        "decision_authorization_id -> canonical_reservation_cancellation_authorizations.authorization_id",
-        "request_event_id -> canonical_reservation_events.event_id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_reservation_events_command_id_key",
+          "constraintName": "canonical_reservation_events_command_id_key",
           "columns": [
             "command_id"
           ]
         },
         {
-          "constraint": "canonical_reservation_events_reservation_id_event_type_key",
+          "constraintName": "canonical_reservation_events_reservation_id_event_type_key",
           "columns": [
             "reservation_id",
             "event_type"
           ]
         },
         {
-          "constraint": "canonical_reservation_events_reservation_id_sequence_number_key",
+          "constraintName": "canonical_reservation_events_reservation_id_sequence_number_key",
           "columns": [
             "reservation_id",
             "sequence_number"
           ]
         }
       ],
-      "cardinalityFromReservation": "MULTIPLE_PERSISTENT_ROWS",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "event_id",
-        "reservation_id",
-        "sequence_number",
-        "event_type",
-        "actor_kind",
-        "actor_principal",
-        "origin_kind",
-        "reason_code",
-        "reason_text",
-        "command_id",
-        "occurred_at",
-        "source_ref",
-        "metadata",
-        "request_event_id",
-        "decision_authorization_id",
-        "decision_source_kind"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+          "childColumns": [
+            "decision_authorization_id"
+          ],
+          "parentTable": "canonical_reservation_cancellation_authorizations",
+          "parentColumns": [
+            "authorization_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_events_request_event_id_fkey",
+          "childColumns": [
+            "request_event_id"
+          ],
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_events_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_events_actor_kind_check",
+          "definition": "CHECK ((actor_kind = ANY (ARRAY['GUEST'::text, 'HOST'::text, 'STAFF'::text, 'EXTERNAL_CHANNEL'::text, 'INTERNAL_DECISION'::text])))"
+        },
+        {
+          "constraintName": "canonical_reservation_events_event_type_check",
+          "definition": "CHECK ((event_type = ANY (ARRAY['CANCELLATION_REQUESTED'::text, 'CANCELLED'::text])))"
+        },
+        {
+          "constraintName": "canonical_reservation_events_origin_kind_check",
+          "definition": "CHECK ((origin_kind = ANY (ARRAY['ENCHO_DIRECT'::text, 'EXTERNAL_CHANNEL'::text])))"
+        },
+        {
+          "constraintName": "canonical_reservation_events_reason_code_check",
+          "definition": "CHECK ((reason_code ~ '^[A-Z0-9_]{1,64}$'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_events_reason_text_check",
+          "definition": "CHECK (((reason_text IS NULL) OR (length(reason_text) <= 500)))"
+        },
+        {
+          "constraintName": "canonical_reservation_events_sequence_number_check",
+          "definition": "CHECK ((sequence_number > 0))"
+        },
+        {
+          "constraintName": "canonical_reservation_events_source_ref_check",
+          "definition": "CHECK (((source_ref IS NULL) OR (length(source_ref) <= 256)))"
+        },
+        {
+          "constraintName": "chk_canonical_reservation_events_cancellation_provenance",
+          "definition": "CHECK ((((event_type = 'CANCELLATION_REQUESTED'::text) AND (actor_kind = 'GUEST'::text) AND (origin_kind = 'ENCHO_DIRECT'::text) AND (request_event_id IS NULL) AND (decision_authorization_id IS NULL) AND (decision_source_kind IS NULL)) OR ((event_type = 'CANCELLED'::text) AND (actor_kind = 'INTERNAL_DECISION'::text) AND (origin_kind = 'ENCHO_DIRECT'::text) AND (request_event_id IS NOT NULL) AND (decision_authorization_id IS NOT NULL) AND (decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE'::text))))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_reservation_events_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_reservation_events_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_events FOR EACH ROW EXECUTE FUNCTION canonical_reservation_event_reject_mutation()",
+          "functionName": "canonical_reservation_event_reject_mutation"
+        }
       ],
       "jsonOrJsonbColumns": [
         "metadata"
       ],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_reservation_events_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_reservation_events_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_events FOR EACH ROW EXECUTE FUNCTION canonical_reservation_event_reject_mutation()",
+            "functionName": "canonical_reservation_event_reject_mutation",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "Check constraint canonical_reservation_events_event_type_check restricts event_type to CANCELLATION_REQUESTED and CANCELLED"
+          ],
+          "semanticEvidence": [
+            "Event ledger is bounded strictly to cancellation lifecycle history, not reservation revision state"
+          ],
+          "reason": "Restricted strictly to cancellation lifecycle states; zero revision publication event types or revision grouping keys exist."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No command idempotency key or command execution ledger"
+          ],
+          "semanticEvidence": [
+            "Not a command idempotency or replay ledger"
+          ],
+          "reason": "Relation does not provide command execution replay semantics."
+        }
+      },
       "structuralDisposition": "W4_A_W4_B_LIFECYCLE_EVENT_LEDGER_RESTRICTED_TO_CANCELLATION"
     },
     {
       "relation": "canonical_reservation_lifecycle_authorizations",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1,
+        2,
+        3
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_lifecycle_authorizations"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_authorizations"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_authorizations"
-        ]
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey[canonical_reservation_lifecycle_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]",
+          "depth": 3,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "decision_authorization_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_lifecycle_authorizations",
+              "childColumns": [
+                "consumed_by_event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_events",
+            "canonical_reservation_lifecycle_authorizations"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey[canonical_reservation_lifecycle_authorizations(consumed_by_event_id)->canonical_reservation_events(event_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_lifecycle_authorizations",
+              "childColumns": [
+                "consumed_by_event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_lifecycle_authorizations"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_lifecycle_authorizati_reservation_id_fkey[canonical_reservation_lifecycle_authorizations(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_lifecycle_authorizati_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_lifecycle_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_lifecycle_authorizations"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "authorization_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": "gen_random_uuid()"
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "command_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "guest_principal",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "origin_kind",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "consumed_by_event_id",
+          "type": "uuid",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "fingerprint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        }
       ],
       "primaryKey": [
         "authorization_id"
       ],
-      "foreignKeys": [
-        "consumed_by_event_id -> canonical_reservation_events.event_id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_reservation_lifecycle_a_reservation_id_command_id_key",
+          "constraintName": "canonical_reservation_lifecycle_a_reservation_id_command_id_key",
           "columns": [
             "reservation_id",
             "command_id"
           ]
         }
       ],
-      "cardinalityFromReservation": "MULTIPLE_PERSISTENT_ROWS",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "authorization_id",
-        "reservation_id",
-        "command_id",
-        "command_type",
-        "guest_principal",
-        "origin_kind",
-        "reason_code",
-        "reason_text",
-        "issued_at",
-        "expires_at",
-        "consumed_at",
-        "consumed_by_event_id",
-        "fingerprint",
-        "created_at"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_lifecycle_autho_consumed_by_event_id_fkey",
+          "childColumns": [
+            "consumed_by_event_id"
+          ],
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_authorizati_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_lifecycle_authoriza_guest_principal_check",
+          "definition": "CHECK ((guest_principal ~ '^(user:[0-9]+|session:[0-9a-f-]{36})$'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_authorizatio_command_type_check",
+          "definition": "CHECK ((command_type = 'REQUEST_CANCELLATION'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_authorization_fingerprint_check",
+          "definition": "CHECK ((fingerprint ~ '^[a-f0-9]{64}$'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_authorization_origin_kind_check",
+          "definition": "CHECK ((origin_kind = 'ENCHO_DIRECT'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_authorization_reason_code_check",
+          "definition": "CHECK ((reason_code ~ '^[A-Z0-9_]{1,64}$'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_authorization_reason_text_check",
+          "definition": "CHECK (((reason_text IS NULL) OR (length(reason_text) <= 500)))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_reservation_lifecycle_authorizations_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_reservation_lifecycle_authorizations_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_lifecycle_authorizations FOR EACH ROW EXECUTE FUNCTION canonical_reservation_lifecycle_authorization_immutable()",
+          "functionName": "canonical_reservation_lifecycle_authorization_immutable"
+        }
       ],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_reservation_lifecycle_authorizations_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_reservation_lifecycle_authorizations_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_lifecycle_authorizations FOR EACH ROW EXECUTE FUNCTION canonical_reservation_lifecycle_authorization_immutable()",
+            "functionName": "canonical_reservation_lifecycle_authorization_immutable",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "Table schema is strictly scoped to cancellation requests, decisions, or releases"
+          ],
+          "semanticEvidence": [
+            "Cancellation lifecycle capabilities, not reservation revision authority"
+          ],
+          "reason": "Scoped strictly to cancellation lifecycle operations; zero revision header or reservation version semantics."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No command idempotency key or command execution ledger"
+          ],
+          "semanticEvidence": [
+            "Not a command idempotency or replay ledger"
+          ],
+          "reason": "Relation does not provide command execution replay semantics."
+        }
+      },
       "structuralDisposition": "W4_A_CANCELLATION_REQUEST_AUTHORIZATION_CAPABILITY"
     },
     {
       "relation": "canonical_reservation_lifecycle_commands",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1,
+        2,
+        3
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_lifecycle_commands"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_commands"
-        ],
-        [
-          "canonical_reservations",
-          "canonical_reservation_cancellation_authorizations",
-          "canonical_reservation_events",
-          "canonical_reservation_lifecycle_commands"
-        ]
+        {
+          "pathId": "canonical_reservation_cancellation_authoriz_reservation_id_fkey[canonical_reservation_cancellation_authorizations(reservation_id)->canonical_reservations(id)]::canonical_reservation_events_decision_authorization_id_fkey[canonical_reservation_events(decision_authorization_id)->canonical_reservation_cancellation_authorizations(authorization_id)]::canonical_reservation_lifecycle_commands_event_id_fkey[canonical_reservation_lifecycle_commands(event_id)->canonical_reservation_events(event_id)]",
+          "depth": 3,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_cancellation_authoriz_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_cancellation_authorizations",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_events_decision_authorization_id_fkey",
+              "parentTable": "canonical_reservation_cancellation_authorizations",
+              "parentColumns": [
+                "authorization_id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "decision_authorization_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_lifecycle_commands_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_lifecycle_commands",
+              "childColumns": [
+                "event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_cancellation_authorizations",
+            "canonical_reservation_events",
+            "canonical_reservation_lifecycle_commands"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_events_reservation_id_fkey[canonical_reservation_events(reservation_id)->canonical_reservations(id)]::canonical_reservation_lifecycle_commands_event_id_fkey[canonical_reservation_lifecycle_commands(event_id)->canonical_reservation_events(event_id)]",
+          "depth": 2,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_events_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_events",
+              "childColumns": [
+                "reservation_id"
+              ]
+            },
+            {
+              "constraintName": "canonical_reservation_lifecycle_commands_event_id_fkey",
+              "parentTable": "canonical_reservation_events",
+              "parentColumns": [
+                "event_id"
+              ],
+              "childTable": "canonical_reservation_lifecycle_commands",
+              "childColumns": [
+                "event_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_events",
+            "canonical_reservation_lifecycle_commands"
+          ]
+        },
+        {
+          "pathId": "canonical_reservation_lifecycle_commands_reservation_id_fkey[canonical_reservation_lifecycle_commands(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_lifecycle_commands_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_lifecycle_commands",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_lifecycle_commands"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "command_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "command_type",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "actor_kind",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "actor_principal",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "origin_kind",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "reason_text",
+          "type": "text",
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "command_fingerprint",
+          "type": "text",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "event_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "statement_timestamp()"
+        }
       ],
       "primaryKey": [
         "command_id"
       ],
-      "foreignKeys": [
-        "event_id -> canonical_reservation_events.event_id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [],
-      "cardinalityFromReservation": "MULTIPLE_PERSISTENT_ROWS",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "command_id",
-        "reservation_id",
-        "command_type",
-        "actor_kind",
-        "actor_principal",
-        "origin_kind",
-        "reason_code",
-        "reason_text",
-        "command_fingerprint",
-        "event_id",
-        "created_at"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_event_id_fkey",
+          "childColumns": [
+            "event_id"
+          ],
+          "parentTable": "canonical_reservation_events",
+          "parentColumns": [
+            "event_id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_lifecycle_comma_command_fingerprint_check",
+          "definition": "CHECK ((command_fingerprint ~ '^[a-f0-9]{64}$'::text))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_actor_kind_check",
+          "definition": "CHECK ((actor_kind = ANY (ARRAY['GUEST'::text, 'HOST'::text, 'STAFF'::text, 'EXTERNAL_CHANNEL'::text, 'INTERNAL_DECISION'::text])))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_command_type_check",
+          "definition": "CHECK ((command_type = ANY (ARRAY['REQUEST_CANCELLATION'::text, 'COMPLETE_CANCELLATION'::text])))"
+        },
+        {
+          "constraintName": "canonical_reservation_lifecycle_commands_origin_kind_check",
+          "definition": "CHECK ((origin_kind = ANY (ARRAY['ENCHO_DIRECT'::text, 'EXTERNAL_CHANNEL'::text])))"
+        },
+        {
+          "constraintName": "chk_canonical_reservation_lifecycle_commands_cross_field",
+          "definition": "CHECK ((((command_type = 'REQUEST_CANCELLATION'::text) AND (actor_kind = 'GUEST'::text) AND (origin_kind = 'ENCHO_DIRECT'::text)) OR ((command_type = 'COMPLETE_CANCELLATION'::text) AND (actor_kind = 'INTERNAL_DECISION'::text) AND (origin_kind = 'ENCHO_DIRECT'::text))))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_reservation_lifecycle_commands_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_reservation_lifecycle_commands_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_lifecycle_commands FOR EACH ROW EXECUTE FUNCTION canonical_reservation_lifecycle_command_reject_mutation()",
+          "functionName": "canonical_reservation_lifecycle_command_reject_mutation"
+        }
       ],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_reservation_lifecycle_commands_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_reservation_lifecycle_commands_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_lifecycle_commands FOR EACH ROW EXECUTE FUNCTION canonical_reservation_lifecycle_command_reject_mutation()",
+            "functionName": "canonical_reservation_lifecycle_command_reject_mutation",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "Table schema is strictly scoped to cancellation requests, decisions, or releases"
+          ],
+          "semanticEvidence": [
+            "Cancellation lifecycle capabilities, not reservation revision authority"
+          ],
+          "reason": "Scoped strictly to cancellation lifecycle operations; zero revision header or reservation version semantics."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "PRIMARY KEY(command_id)",
+            "Check constraint restricts command_type to cancellation lifecycle"
+          ],
+          "semanticEvidence": [
+            "Replay is strictly scoped to cancellation lifecycle events"
+          ],
+          "reason": "Scoped strictly to cancellation lifecycle commands; zero support for reservation modification commands."
+        }
+      },
       "structuralDisposition": "W4_A_W4_B_LIFECYCLE_COMMAND_RECEIPT_LEDGER"
     },
     {
       "relation": "canonical_reservation_nights",
       "attachmentDepth": 1,
+      "allAttachmentDepths": [
+        1
+      ],
       "attachmentPaths": [
-        [
-          "canonical_reservations",
-          "canonical_reservation_nights"
-        ]
+        {
+          "pathId": "canonical_reservation_nights_reservation_id_fkey[canonical_reservation_nights(reservation_id)->canonical_reservations(id)]",
+          "depth": 1,
+          "edges": [
+            {
+              "constraintName": "canonical_reservation_nights_reservation_id_fkey",
+              "parentTable": "canonical_reservations",
+              "parentColumns": [
+                "id"
+              ],
+              "childTable": "canonical_reservation_nights",
+              "childColumns": [
+                "reservation_id"
+              ]
+            }
+          ],
+          "tableSequence": [
+            "canonical_reservations",
+            "canonical_reservation_nights"
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "name": "reservation_id",
+          "type": "uuid",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "inventory_day_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "stay_date",
+          "type": "date",
+          "nullable": false,
+          "default": null
+        },
+        {
+          "name": "units",
+          "type": "integer",
+          "nullable": false,
+          "default": null
+        }
       ],
       "primaryKey": [
         "reservation_id",
         "inventory_day_id"
       ],
-      "foreignKeys": [
-        "inventory_day_id -> inventory_days.id",
-        "reservation_id -> canonical_reservations.id"
-      ],
       "uniqueConstraints": [
         {
-          "constraint": "canonical_reservation_nights_reservation_id_stay_date_key",
+          "constraintName": "canonical_reservation_nights_reservation_id_stay_date_key",
           "columns": [
             "reservation_id",
             "stay_date"
           ]
         }
       ],
-      "cardinalityFromReservation": "MULTIPLE_PERSISTENT_ROWS",
-      "mutableOrImmutableEvidence": "IMMUTABLE_TRIGGER_OR_APPEND_ONLY",
-      "relevantColumns": [
-        "reservation_id",
-        "inventory_day_id",
-        "stay_date",
-        "units"
+      "foreignKeys": [
+        {
+          "constraintName": "canonical_reservation_nights_inventory_day_id_fkey",
+          "childColumns": [
+            "inventory_day_id"
+          ],
+          "parentTable": "inventory_days",
+          "parentColumns": [
+            "id"
+          ]
+        },
+        {
+          "constraintName": "canonical_reservation_nights_reservation_id_fkey",
+          "childColumns": [
+            "reservation_id"
+          ],
+          "parentTable": "canonical_reservations",
+          "parentColumns": [
+            "id"
+          ]
+        }
+      ],
+      "checkConstraints": [
+        {
+          "constraintName": "canonical_reservation_nights_units_check",
+          "definition": "CHECK ((units > 0))"
+        }
+      ],
+      "triggers": [
+        {
+          "triggerName": "canonical_reservation_nights_immutable",
+          "triggerDefinition": "CREATE TRIGGER canonical_reservation_nights_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_nights FOR EACH ROW EXECUTE FUNCTION canonical_reservation_reject_mutation()",
+          "functionName": "canonical_reservation_reject_mutation"
+        }
       ],
       "jsonOrJsonbColumns": [],
-      "canRepresentMultipleRevisions": false,
-      "canRepresentRevisionHeader": false,
-      "canRepresentAllocationSnapshot": false,
-      "canRepresentCommercialBinding": false,
-      "canRepresentCurrentEffectivePointer": false,
+      "immutabilityEvidence": {
+        "status": "IMMUTABLE_TRIGGER_ENFORCED",
+        "evidence": [
+          {
+            "triggerName": "canonical_reservation_nights_immutable",
+            "triggerDefinition": "CREATE TRIGGER canonical_reservation_nights_immutable BEFORE DELETE OR UPDATE ON public.canonical_reservation_nights FOR EACH ROW EXECUTE FUNCTION canonical_reservation_reject_mutation()",
+            "functionName": "canonical_reservation_reject_mutation",
+            "rejectionSemantics": "REJECTS_UPDATE_AND_DELETE"
+          }
+        ]
+      },
+      "capabilities": {
+        "persistentLaterRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "UNIQUE constraint on (reservation_id, stay_date)",
+            "No revision or version grouping column"
+          ],
+          "semanticEvidence": [
+            "Restricted to single set of stay dates per reservation",
+            "Zero grouping identity to persist N+1 replacement stay dates under same reservation"
+          ],
+          "reason": "UNIQUE constraint limits table to single stay date set; zero revision grouping column exists to persist N+1 replacement nights."
+        },
+        "fullEffectiveAllocationSnapshot": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No revision grouping key or revision counter associating complete allocation rows with a revision"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists"
+          ],
+          "reason": "Zero schema structure to store complete replacement allocation snapshot under a revision identifier."
+        },
+        "currentEffectiveRevision": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No current_revision pointer, version column, or effective-revision projection view"
+          ],
+          "semanticEvidence": [
+            "canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth"
+          ],
+          "reason": "Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective."
+        },
+        "commercialVersionBinding": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No relation binds an allocation revision to an updated commercial quote or price delta"
+          ],
+          "semanticEvidence": [
+            "Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities"
+          ],
+          "reason": "Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter."
+        },
+        "modificationReplayAuthority": {
+          "status": "ABSENT",
+          "structuralEvidence": [
+            "No command idempotency key or command execution ledger"
+          ],
+          "semanticEvidence": [
+            "Not a command idempotency or replay ledger"
+          ],
+          "reason": "Relation does not provide command execution replay semantics."
+        }
+      },
       "structuralDisposition": "V1_ORIGINAL_ALLOCATION_TRUTH_IMMUTABLE"
     }
   ],

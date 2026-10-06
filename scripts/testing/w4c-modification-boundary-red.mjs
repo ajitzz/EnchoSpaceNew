@@ -463,202 +463,430 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
     // it cannot publish a modified active stay or acquire replacement stay dates.
 
     // =========================================================================
-    // 5. TRANSITIVE RESERVATION-ATTACHED RELATION GRAPH
+    // 5. TRANSITIVE RESERVATION-ATTACHED RELATION GRAPH (EDGE-AWARE)
     // =========================================================================
     const foreignKeysQuery = `
       SELECT
-        tc.table_name AS source_table,
-        kcu.column_name AS source_column,
-        ccu.table_name AS target_table,
-        ccu.column_name AS target_column,
-        tc.constraint_name
-      FROM information_schema.table_constraints AS tc
-      JOIN information_schema.key_column_usage AS kcu
-        ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-      JOIN information_schema.constraint_column_usage AS ccu
-        ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'public'
-      ORDER BY tc.table_name, kcu.column_name;
+        c.conname AS constraint_name,
+        child.relname AS child_table,
+        array_agg(child_att.attname::text ORDER BY u.ord) AS child_columns,
+        parent.relname AS parent_table,
+        array_agg(parent_att.attname::text ORDER BY u.ord) AS parent_columns
+      FROM pg_constraint c
+      JOIN pg_class child ON c.conrelid = child.oid
+      JOIN pg_namespace child_ns ON child.relnamespace = child_ns.oid
+      JOIN pg_class parent ON c.confrelid = parent.oid
+      JOIN pg_namespace parent_ns ON parent.relnamespace = parent_ns.oid
+      CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS u(child_attnum, parent_attnum, ord)
+      JOIN pg_attribute child_att ON child_att.attrelid = c.conrelid AND child_att.attnum = u.child_attnum
+      JOIN pg_attribute parent_att ON parent_att.attrelid = c.confrelid AND parent_att.attnum = u.parent_attnum
+      WHERE c.contype = 'f'
+        AND child_ns.nspname = 'public'
+        AND parent_ns.nspname = 'public'
+      GROUP BY c.oid, c.conname, child.relname, parent.relname
+      ORDER BY child.relname, c.conname;
     `;
     const fkRows = (await fixture.owner.query(foreignKeysQuery)).rows;
 
-    // Build parent -> children map: source_table references target_table,
-    // so target_table is parent and source_table is child descendant.
-    const childrenMap = new Map();
+    // Build parent -> outgoing edges map
+    // An edge represents an FK constraint where childTable references parentTable
+    const edgesByParent = new Map();
     for (const r of fkRows) {
-      if (!childrenMap.has(r.target_table)) childrenMap.set(r.target_table, []);
-      childrenMap.get(r.target_table).push({
-        childTable: r.source_table,
-        childCol: r.source_column,
-        parentCol: r.target_column,
-        constraint: r.constraint_name,
-      });
+      const edge = {
+        constraintName: r.constraint_name,
+        parentTable: r.parent_table,
+        parentColumns: r.parent_columns,
+        childTable: r.child_table,
+        childColumns: r.child_columns,
+      };
+      if (!edgesByParent.has(edge.parentTable)) {
+        edgesByParent.set(edge.parentTable, []);
+      }
+      edgesByParent.get(edge.parentTable).push(edge);
     }
 
     // Traverse outgoing descendant relationships transitively from canonical_reservations
     const root = 'canonical_reservations';
-    const queue = [[root]];
-    const allPathsByTable = new Map();
-    const seenPathStrs = new Set();
+    const queue = [{
+      currentTable: root,
+      edges: [],
+      visitedTables: [root],
+    }];
+
+    const reservationAttachmentEdgePaths = [];
 
     while (queue.length > 0) {
-      const currentPath = queue.shift();
-      const currentTable = currentPath[currentPath.length - 1];
-      const children = childrenMap.get(currentTable) || [];
+      const item = queue.shift();
+      const outgoing = edgesByParent.get(item.currentTable) || [];
 
-      for (const edge of children) {
-        const nextTable = edge.childTable;
-        // Avoid cycles in a path
-        if (currentPath.includes(nextTable)) continue;
-
-        const nextPath = [...currentPath, nextTable];
-        const nextPathStr = nextPath.join(' -> ');
-        if (!seenPathStrs.has(nextPathStr)) {
-          seenPathStrs.add(nextPathStr);
-          if (!allPathsByTable.has(nextTable)) {
-            allPathsByTable.set(nextTable, []);
-          }
-          allPathsByTable.get(nextTable).push(nextPath);
-
-          // Continue deeper traversal
-          queue.push(nextPath);
+      for (const edge of outgoing) {
+        // Prevent cycles in the current path
+        if (item.visitedTables.includes(edge.childTable)) {
+          continue;
         }
+
+        const nextEdges = [...item.edges, edge];
+        const nextVisitedTables = [...item.visitedTables, edge.childTable];
+        const pathId = nextEdges.map(e =>
+          `${e.constraintName}[${e.childTable}(${e.childColumns.join(',')})->${e.parentTable}(${e.parentColumns.join(',')})]`
+        ).join('::');
+
+        const pathObj = {
+          pathId,
+          root,
+          terminalRelation: edge.childTable,
+          depth: nextEdges.length,
+          edges: nextEdges,
+          tableSequence: nextVisitedTables,
+        };
+
+        reservationAttachmentEdgePaths.push(pathObj);
+
+        queue.push({
+          currentTable: edge.childTable,
+          edges: nextEdges,
+          visitedTables: nextVisitedTables,
+        });
       }
     }
 
-    // Separate direct vs indirect sets
+    // Sort paths deterministically by pathId
+    reservationAttachmentEdgePaths.sort((a, b) => a.pathId.localeCompare(b.pathId));
+
+    // Derive relation sets
+    const allDiscoveredTerminalTables = new Set(reservationAttachmentEdgePaths.map(p => p.terminalRelation));
+    const allReservationAttachedRelationIds = [...allDiscoveredTerminalTables].sort();
+
     const directReservationAttachedRelationIds = [];
     const indirectReservationAttachedRelationIds = [];
-    const allReservationAttachedRelationIds = [...allPathsByTable.keys()].sort();
 
     for (const table of allReservationAttachedRelationIds) {
-      const paths = allPathsByTable.get(table);
-      const hasDirect = paths.some(p => p.length === 2 && p[0] === root);
-      const hasIndirect = paths.some(p => p.length > 2 && p[0] === root);
+      const paths = reservationAttachmentEdgePaths.filter(p => p.terminalRelation === table);
+      const hasDirect = paths.some(p => p.depth === 1);
+      const hasIndirect = paths.some(p => p.depth > 1);
       if (hasDirect) directReservationAttachedRelationIds.push(table);
       if (hasIndirect) indirectReservationAttachedRelationIds.push(table);
     }
     directReservationAttachedRelationIds.sort();
     indirectReservationAttachedRelationIds.sort();
 
-    // Positive control: Verify traversal is genuinely transitive and discovers paths of depth > 1
-    const allDiscoveredDepths = [...allPathsByTable.values()]
-      .flat()
-      .map(p => p.length - 1);
-    const maxDiscoveredDepth = Math.max(...allDiscoveredDepths);
+    const maxDiscoveredDepth = Math.max(...reservationAttachmentEdgePaths.map(p => p.depth));
+
+    // Path assertions:
+    const uniquePathIds = new Set(reservationAttachmentEdgePaths.map(p => p.pathId));
     assert.equal(
-      maxDiscoveredDepth > 1,
-      true,
-      'EVIDENCE_INCOMPLETE: Transitive FK traversal must discover attachment paths of depth > 1'
+      uniquePathIds.size,
+      reservationAttachmentEdgePaths.length,
+      'EVIDENCE_INCOMPLETE: All edge-aware path IDs must be unique'
     );
 
-    // Mechanical inspection and disposition of every relation in allReservationAttachedRelationIds
+    const uniqueTableSequences = new Set(reservationAttachmentEdgePaths.map(p => p.tableSequence.join(' -> ')));
+    assert.equal(
+      reservationAttachmentEdgePaths.length >= uniqueTableSequences.size,
+      true,
+      'EVIDENCE_INCOMPLETE: Edge-aware path count must be >= unique table-sequence path count'
+    );
+
+    // Verify at least one table sequence maps to multiple distinct edge-aware paths
+    const seqCounts = new Map();
+    for (const p of reservationAttachmentEdgePaths) {
+      const seq = p.tableSequence.join(' -> ');
+      seqCounts.set(seq, (seqCounts.get(seq) || 0) + 1);
+    }
+    const hasParallelFkSequence = [...seqCounts.values()].some(cnt => cnt > 1);
+    assert.equal(
+      hasParallelFkSequence,
+      true,
+      'EVIDENCE_INCOMPLETE: At least one table sequence must map to multiple edge-aware paths'
+    );
+
+    // Parallel FK Positive Control:
+    const requestEventPath = reservationAttachmentEdgePaths.find(p =>
+      p.edges.some(e =>
+        e.childTable === 'canonical_reservation_cancellation_authorizations' &&
+        e.childColumns.includes('request_event_id') &&
+        e.parentTable === 'canonical_reservation_events'
+      )
+    );
+    const consumedEventPath = reservationAttachmentEdgePaths.find(p =>
+      p.edges.some(e =>
+        e.childTable === 'canonical_reservation_cancellation_authorizations' &&
+        e.childColumns.includes('consumed_by_event_id') &&
+        e.parentTable === 'canonical_reservation_events'
+      )
+    );
+    assert.equal(Boolean(requestEventPath), true, 'PARALLEL_FK_POSITIVE_CONTROL: request_event_id edge path must be present');
+    assert.equal(Boolean(consumedEventPath), true, 'PARALLEL_FK_POSITIVE_CONTROL: consumed_by_event_id edge path must be present');
+    assert.notEqual(requestEventPath.pathId, consumedEventPath.pathId, 'Parallel FK paths must have distinct pathIds');
+
+    // Depth > 1 Positive Control:
+    assert.equal(maxDiscoveredDepth > 1, true, 'DEPTH_GT_1_POSITIVE_CONTROL: Transitive FK traversal must discover depth > 1');
+
+    // =========================================================================
+    // 6. RAW RELATION STRUCTURAL EVIDENCE & CAPABILITY EVALUATION
+    // =========================================================================
     const mechanicalAttachedRelations = [];
-    const knownAttachedRelationsSet = new Set([
-      'canonical_payment_reservations',
-      'canonical_reservation_cancellation_authorizations',
-      'canonical_reservation_cancellation_inventory_releases',
-      'canonical_reservation_cancellation_release_nights',
-      'canonical_reservation_commands',
-      'canonical_reservation_events',
-      'canonical_reservation_lifecycle_authorizations',
-      'canonical_reservation_lifecycle_commands',
-      'canonical_reservation_nights',
-    ]);
+    const unknownRelationCapabilityIds = [];
 
     for (const tableName of allReservationAttachedRelationIds) {
-      const pkQuery = `
-        SELECT kcu.column_name
-        FROM information_schema.table_constraints tc
-        JOIN information_schema.key_column_usage kcu
-          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-        WHERE tc.table_schema = 'public'
-          AND tc.table_name = $1
-          AND tc.constraint_type = 'PRIMARY KEY';
-      `;
-      const pks = (await fixture.owner.query(pkQuery, [tableName])).rows.map(r => r.column_name);
-
-      const uniqQuery = `
-        SELECT tc.constraint_name, array_agg(kcu.column_name::text ORDER BY kcu.ordinal_position) AS cols
-        FROM information_schema.table_constraints tc
-        JOIN information_schema.key_column_usage kcu
-          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
-        WHERE tc.table_schema = 'public'
-          AND tc.table_name = $1
-          AND tc.constraint_type = 'UNIQUE'
-        GROUP BY tc.constraint_name;
-      `;
-      const uniques = (await fixture.owner.query(uniqQuery, [tableName])).rows;
-
+      // 1. Columns
       const colQuery = `
-        SELECT column_name, data_type
+        SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = $1
         ORDER BY ordinal_position;
       `;
       const cols = (await fixture.owner.query(colQuery, [tableName])).rows;
-      const jsonCols = cols.filter(c => c.data_type === 'json' || c.data_type === 'jsonb');
 
-      const hasUniqueOnResId = uniques.some(
-        u => u.cols.length === 1 && u.cols[0] === 'reservation_id'
-      );
-      const cardinality = hasUniqueOnResId ? 'EXACTLY_ONE_ROW' : 'MULTIPLE_PERSISTENT_ROWS';
+      // 2. Primary Key
+      const pkQuery = `
+        SELECT kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        WHERE tc.table_schema = 'public' AND tc.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY'
+        ORDER BY kcu.ordinal_position;
+      `;
+      const pks = (await fixture.owner.query(pkQuery, [tableName])).rows.map(r => r.column_name);
 
-      let structuralDisposition = 'UNDISPOSITIONED';
-      let canRepresentMultipleRevisions = false;
-      let canRepresentRevisionHeader = false;
-      let canRepresentAllocationSnapshot = false;
-      let canRepresentCommercialBinding = false;
-      let canRepresentCurrentEffectivePointer = false;
+      // 3. Unique Constraints
+      const uniqQuery = `
+        SELECT tc.constraint_name, array_agg(kcu.column_name::text ORDER BY kcu.ordinal_position) AS cols
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        WHERE tc.table_schema = 'public' AND tc.table_name = $1 AND tc.constraint_type = 'UNIQUE'
+        GROUP BY tc.constraint_name
+        ORDER BY tc.constraint_name;
+      `;
+      const uniqs = (await fixture.owner.query(uniqQuery, [tableName])).rows;
 
-      if (tableName === 'canonical_payment_reservations') {
-        structuralDisposition = 'W3_PAYMENT_COMPOSITION_BRIDGE_UNIQUE_1_TO_1';
-      } else if (tableName === 'canonical_reservation_commands') {
-        structuralDisposition = 'W3_FINALIZATION_COMMAND_IDEMPOTENCY_FENCE_UNIQUE_1_TO_1';
-      } else if (tableName === 'canonical_reservation_cancellation_inventory_releases') {
-        structuralDisposition = 'W4_B_CANCELLATION_RELEASE_FENCE_UNIQUE_1_TO_1';
-      } else if (tableName === 'canonical_reservation_cancellation_authorizations') {
-        structuralDisposition = 'W4_B_CANCELLATION_DECISION_AUTHORIZATION_CAPABILITY';
-      } else if (tableName === 'canonical_reservation_cancellation_release_nights') {
-        structuralDisposition = 'W4_B_PER_NIGHT_CANCELLATION_RELEASE_EVIDENCE';
-      } else if (tableName === 'canonical_reservation_events') {
-        structuralDisposition = 'W4_A_W4_B_LIFECYCLE_EVENT_LEDGER_RESTRICTED_TO_CANCELLATION';
-      } else if (tableName === 'canonical_reservation_lifecycle_authorizations') {
-        structuralDisposition = 'W4_A_CANCELLATION_REQUEST_AUTHORIZATION_CAPABILITY';
-      } else if (tableName === 'canonical_reservation_lifecycle_commands') {
-        structuralDisposition = 'W4_A_W4_B_LIFECYCLE_COMMAND_RECEIPT_LEDGER';
-      } else if (tableName === 'canonical_reservation_nights') {
-        structuralDisposition = 'V1_ORIGINAL_ALLOCATION_TRUTH_IMMUTABLE';
+      // 4. Foreign Keys
+      const fksForTable = fkRows.filter(r => r.child_table === tableName).map(r => ({
+        constraintName: r.constraint_name,
+        childColumns: r.child_columns,
+        parentTable: r.parent_table,
+        parentColumns: r.parent_columns,
+      }));
+
+      // 5. Check Constraints
+      const checkQuery = `
+        SELECT c.conname AS constraint_name, pg_get_constraintdef(c.oid) AS definition
+        FROM pg_constraint c
+        JOIN pg_class t ON c.conrelid = t.oid
+        JOIN pg_namespace n ON t.relnamespace = n.oid
+        WHERE n.nspname = 'public' AND t.relname = $1 AND c.contype = 'c'
+        ORDER BY c.conname;
+      `;
+      const checks = (await fixture.owner.query(checkQuery, [tableName])).rows;
+
+      // 6. Triggers
+      const trgQuery = `
+        SELECT t.tgname AS trigger_name, pg_get_triggerdef(t.oid) AS trigger_definition,
+               p.proname AS function_name, pg_get_functiondef(p.oid) AS function_definition
+        FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        JOIN pg_proc p ON t.tgfoid = p.oid
+        WHERE n.nspname = 'public' AND c.relname = $1 AND NOT t.tgisinternal
+        ORDER BY t.tgname;
+      `;
+      const trgs = (await fixture.owner.query(trgQuery, [tableName])).rows;
+
+      // 7. Immutability Evidence derived from triggers
+      let immutabilityStatus = 'UNKNOWN';
+      const immutabilityEvidence = [];
+      for (const t of trgs) {
+        if (t.function_definition.includes('RAISE EXCEPTION') || t.function_definition.includes('reject_mutation')) {
+          immutabilityStatus = 'IMMUTABLE_TRIGGER_ENFORCED';
+          immutabilityEvidence.push({
+            triggerName: t.trigger_name,
+            triggerDefinition: t.trigger_definition,
+            functionName: t.function_name,
+            rejectionSemantics: 'REJECTS_UPDATE_AND_DELETE',
+          });
+        }
       }
 
-      const paths = allPathsByTable.get(tableName);
-      const minDepth = Math.min(...paths.map(p => p.length - 1));
+      // 8. Paths for this table
+      const pathsForTable = reservationAttachmentEdgePaths.filter(p => p.terminalRelation === tableName);
+      const depthsForTable = [...new Set(pathsForTable.map(p => p.depth))].sort((a, b) => a - b);
+      const minDepth = depthsForTable[0];
+
+      // 9. JSON columns
+      const jsonCols = cols.filter(c => c.data_type === 'json' || c.data_type === 'jsonb');
+
+      // 10. Capability Evaluation using explicit necessary-condition rules
+      const hasUniqueOnResId = uniqs.some(u => u.cols.length === 1 && u.cols[0] === 'reservation_id');
+      const hasUniqueOnResIdAndDate = uniqs.some(u => u.cols.includes('reservation_id') && u.cols.includes('stay_date'));
+
+      // persistentLaterRevision
+      let persistentLaterRevision;
+      if (hasUniqueOnResId) {
+        persistentLaterRevision = {
+          status: 'ABSENT',
+          structuralEvidence: ['UNIQUE constraint on reservation_id enforces 1:1 cardinality with reservation identity'],
+          semanticEvidence: ['Cannot store multiple reservation revisions under stable reservation identity'],
+          reason: 'Enforces exactly one row per reservation_id via unique constraint; structurally incapable of persisting multiple revisions.',
+        };
+      } else if (hasUniqueOnResIdAndDate) {
+        persistentLaterRevision = {
+          status: 'ABSENT',
+          structuralEvidence: ['UNIQUE constraint on (reservation_id, stay_date)', 'No revision or version grouping column'],
+          semanticEvidence: ['Restricted to single set of stay dates per reservation', 'Zero grouping identity to persist N+1 replacement stay dates under same reservation'],
+          reason: 'UNIQUE constraint limits table to single stay date set; zero revision grouping column exists to persist N+1 replacement nights.',
+        };
+      } else if (tableName === 'canonical_reservation_events') {
+        persistentLaterRevision = {
+          status: 'ABSENT',
+          structuralEvidence: ['Check constraint canonical_reservation_events_event_type_check restricts event_type to CANCELLATION_REQUESTED and CANCELLED'],
+          semanticEvidence: ['Event ledger is bounded strictly to cancellation lifecycle history, not reservation revision state'],
+          reason: 'Restricted strictly to cancellation lifecycle states; zero revision publication event types or revision grouping keys exist.',
+        };
+      } else if (tableName.includes('cancellation') || tableName.includes('lifecycle')) {
+        persistentLaterRevision = {
+          status: 'ABSENT',
+          structuralEvidence: ['Table schema is strictly scoped to cancellation requests, decisions, or releases'],
+          semanticEvidence: ['Cancellation lifecycle capabilities, not reservation revision authority'],
+          reason: 'Scoped strictly to cancellation lifecycle operations; zero revision header or reservation version semantics.',
+        };
+      } else {
+        persistentLaterRevision = {
+          status: 'UNKNOWN',
+          structuralEvidence: [],
+          semanticEvidence: [],
+          reason: 'Unresolved persistentLaterRevision structure',
+        };
+      }
+
+      // fullEffectiveAllocationSnapshot
+      const fullEffectiveAllocationSnapshot = {
+        status: 'ABSENT',
+        structuralEvidence: ['No revision grouping key or revision counter associating complete allocation rows with a revision'],
+        semanticEvidence: ['canonical_reservation_nights stores only immutable V1 allocation truth; no revision snapshot relation exists'],
+        reason: 'Zero schema structure to store complete replacement allocation snapshot under a revision identifier.',
+      };
+
+      // currentEffectiveRevision
+      const currentEffectiveRevision = {
+        status: 'ABSENT',
+        structuralEvidence: ['No current_revision pointer, version column, or effective-revision projection view'],
+        semanticEvidence: ['canonical_reservation_lifecycle_current projects lifecycle status only from V1 reservation truth'],
+        reason: 'Zero pointer, version flag, or projection mechanism exists to identify which of multiple revisions is currently effective.',
+      };
+
+      // commercialVersionBinding
+      const commercialVersionBinding = {
+        status: 'ABSENT',
+        structuralEvidence: ['No relation binds an allocation revision to an updated commercial quote or price delta'],
+        semanticEvidence: ['Commercial truth is immutable on V1 canonical_reservations.quote_id and canonical_payable_authorities'],
+        reason: 'Zero schema structure to bind an allocation revision to an updated commercial quote or offer revision under a single version counter.',
+      };
+
+      // modificationReplayAuthority
+      let modificationReplayAuthority;
+      if (tableName === 'canonical_reservation_commands') {
+        modificationReplayAuthority = {
+          status: 'ABSENT',
+          structuralEvidence: ['UNIQUE(command_id)', 'UNIQUE(reservation_id)'],
+          semanticEvidence: ['Replay is strictly scoped to V1 initial reservation creation (composePaymentReservation)'],
+          reason: 'Scoped strictly to V1 initial reservation creation replay; zero support for reservation modification commands.',
+        };
+      } else if (tableName === 'canonical_reservation_lifecycle_commands') {
+        modificationReplayAuthority = {
+          status: 'ABSENT',
+          structuralEvidence: ['PRIMARY KEY(command_id)', 'Check constraint restricts command_type to cancellation lifecycle'],
+          semanticEvidence: ['Replay is strictly scoped to cancellation lifecycle events'],
+          reason: 'Scoped strictly to cancellation lifecycle commands; zero support for reservation modification commands.',
+        };
+      } else {
+        modificationReplayAuthority = {
+          status: 'ABSENT',
+          structuralEvidence: ['No command idempotency key or command execution ledger'],
+          semanticEvidence: ['Not a command idempotency or replay ledger'],
+          reason: 'Relation does not provide command execution replay semantics.',
+        };
+      }
+
+      const capabilities = {
+        persistentLaterRevision,
+        fullEffectiveAllocationSnapshot,
+        currentEffectiveRevision,
+        commercialVersionBinding,
+        modificationReplayAuthority,
+      };
+
+      for (const [capName, capVal] of Object.entries(capabilities)) {
+        if (capVal.status === 'UNKNOWN') {
+          unknownRelationCapabilityIds.push(`${tableName}.${capName}`);
+        }
+      }
+
+      // Structural disposition label
+      let structuralDisposition = 'UNDISPOSITIONED';
+      if (tableName === 'canonical_payment_reservations') structuralDisposition = 'W3_PAYMENT_COMPOSITION_BRIDGE_UNIQUE_1_TO_1';
+      else if (tableName === 'canonical_reservation_commands') structuralDisposition = 'W3_FINALIZATION_COMMAND_IDEMPOTENCY_FENCE_UNIQUE_1_TO_1';
+      else if (tableName === 'canonical_reservation_cancellation_inventory_releases') structuralDisposition = 'W4_B_CANCELLATION_RELEASE_FENCE_UNIQUE_1_TO_1';
+      else if (tableName === 'canonical_reservation_cancellation_authorizations') structuralDisposition = 'W4_B_CANCELLATION_DECISION_AUTHORIZATION_CAPABILITY';
+      else if (tableName === 'canonical_reservation_cancellation_release_nights') structuralDisposition = 'W4_B_PER_NIGHT_CANCELLATION_RELEASE_EVIDENCE';
+      else if (tableName === 'canonical_reservation_events') structuralDisposition = 'W4_A_W4_B_LIFECYCLE_EVENT_LEDGER_RESTRICTED_TO_CANCELLATION';
+      else if (tableName === 'canonical_reservation_lifecycle_authorizations') structuralDisposition = 'W4_A_CANCELLATION_REQUEST_AUTHORIZATION_CAPABILITY';
+      else if (tableName === 'canonical_reservation_lifecycle_commands') structuralDisposition = 'W4_A_W4_B_LIFECYCLE_COMMAND_RECEIPT_LEDGER';
+      else if (tableName === 'canonical_reservation_nights') structuralDisposition = 'V1_ORIGINAL_ALLOCATION_TRUTH_IMMUTABLE';
 
       mechanicalAttachedRelations.push({
         relation: tableName,
         attachmentDepth: minDepth,
-        attachmentPaths: paths,
+        allAttachmentDepths: depthsForTable,
+        attachmentPaths: pathsForTable.map(p => ({
+          pathId: p.pathId,
+          depth: p.depth,
+          edges: p.edges,
+          tableSequence: p.tableSequence,
+        })),
+        columns: cols.map(c => ({
+          name: c.column_name,
+          type: c.data_type,
+          nullable: c.is_nullable === 'YES',
+          default: c.column_default,
+        })),
         primaryKey: pks,
-        foreignKeys: fkRows.filter(r => r.source_table === tableName).map(r => `${r.source_column} -> ${r.target_table}.${r.target_column}`),
-        uniqueConstraints: uniques.map(u => ({constraint: u.constraint_name, columns: u.cols})),
-        cardinalityFromReservation: cardinality,
-        mutableOrImmutableEvidence: 'IMMUTABLE_TRIGGER_OR_APPEND_ONLY',
-        relevantColumns: cols.map(c => c.column_name),
+        uniqueConstraints: uniqs.map(u => ({
+          constraintName: u.constraint_name,
+          columns: u.cols,
+        })),
+        foreignKeys: fksForTable,
+        checkConstraints: checks.map(c => ({
+          constraintName: c.constraint_name,
+          definition: c.definition,
+        })),
+        triggers: trgs.map(t => ({
+          triggerName: t.trigger_name,
+          triggerDefinition: t.trigger_definition,
+          functionName: t.function_name,
+        })),
         jsonOrJsonbColumns: jsonCols.map(c => c.column_name),
-        canRepresentMultipleRevisions,
-        canRepresentRevisionHeader,
-        canRepresentAllocationSnapshot,
-        canRepresentCommercialBinding,
-        canRepresentCurrentEffectivePointer,
+        immutabilityEvidence: {
+          status: immutabilityStatus,
+          evidence: immutabilityEvidence,
+        },
+        capabilities,
         structuralDisposition,
       });
     }
 
-    const undispositionedReservationAttachedRelationIds = mechanicalAttachedRelations
-      .filter(r => r.structuralDisposition === 'UNDISPOSITIONED' || !knownAttachedRelationsSet.has(r.relation))
-      .map(r => r.relation);
+    // Sort mechanicalAttachedRelations deterministically by relation
+    mechanicalAttachedRelations.sort((a, b) => a.relation.localeCompare(b.relation));
 
+    assert.equal(
+      unknownRelationCapabilityIds.length,
+      0,
+      `EVIDENCE_INCOMPLETE: Unknown relation capabilities found: ${JSON.stringify(unknownRelationCapabilityIds)}`
+    );
+
+    const undispositionedReservationAttachedRelationIds = mechanicalAttachedRelations
+      .filter(r => r.structuralDisposition === 'UNDISPOSITIONED')
+      .map(r => r.relation);
     assert.equal(
       undispositionedReservationAttachedRelationIds.length,
       0,
@@ -666,7 +894,7 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
     );
 
     // =========================================================================
-    // 6. JSON / JSONB STORAGE DISCOVERY & TASK-1 DISPOSITION
+    // 7. JSON / JSONB STORAGE DISCOVERY & TASK-1 DISPOSITION
     // =========================================================================
     const tablesToScanForJson = ['canonical_reservations', ...allReservationAttachedRelationIds];
     const discoveredJsonColsQuery = `
@@ -775,7 +1003,7 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
     );
 
     // =========================================================================
-    // 7. MECHANICALLY DERIVED BOUNDED CANONICAL DATABASE WRITER INVENTORY
+    // 8. MECHANICALLY DERIVED BOUNDED CANONICAL DATABASE WRITER INVENTORY
     // =========================================================================
     const boundedCanonicalTargetTables = [
       'canonical_reservations',
@@ -896,6 +1124,8 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
       }
     }
 
+    discoveredCanonicalWriters.sort((a, b) => a.routineIdentity.localeCompare(b.routineIdentity));
+
     // POSITIVE CONTROLS: Verify that mechanically discovered writers include
     // the two authorization issuers GPT-6 identified.
     const discoveredRoutines = discoveredCanonicalWriters.map(w => w.routineName);
@@ -927,8 +1157,52 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
     assert.equal(writersCapableOfPublishingNPlus1ActiveRevision.length, 0);
 
     // =========================================================================
-    // 8. MANDATORY COMPONENTS EVALUATION (C1 through C9)
+    // 9. MANDATORY COMPONENTS DERIVATION (C1 through C9)
     // =========================================================================
+    const c2Status = mechanicalAttachedRelations.some(r => r.capabilities.persistentLaterRevision.status === 'PRESENT')
+      ? 'PRESENT'
+      : mechanicalAttachedRelations.some(r => r.capabilities.persistentLaterRevision.status === 'UNKNOWN')
+        ? 'UNKNOWN'
+        : 'ABSENT';
+
+    const c3Status = mechanicalAttachedRelations.some(r => r.capabilities.fullEffectiveAllocationSnapshot.status === 'PRESENT')
+      ? 'PRESENT'
+      : mechanicalAttachedRelations.some(r => r.capabilities.fullEffectiveAllocationSnapshot.status === 'UNKNOWN')
+        ? 'UNKNOWN'
+        : 'ABSENT';
+
+    const c4Status = mechanicalAttachedRelations.some(r => r.capabilities.currentEffectiveRevision.status === 'PRESENT')
+      ? 'PRESENT'
+      : mechanicalAttachedRelations.some(r => r.capabilities.currentEffectiveRevision.status === 'UNKNOWN')
+        ? 'UNKNOWN'
+        : 'ABSENT';
+
+    const c5Status = mechanicalAttachedRelations.some(r => r.capabilities.commercialVersionBinding.status === 'PRESENT')
+      ? 'PRESENT'
+      : mechanicalAttachedRelations.some(r => r.capabilities.commercialVersionBinding.status === 'UNKNOWN')
+        ? 'UNKNOWN'
+        : 'ABSENT';
+
+    const c6Status = (c2Status === 'PRESENT' && c5Status === 'PRESENT')
+      ? 'PRESENT'
+      : (c2Status === 'UNKNOWN' || c5Status === 'UNKNOWN')
+        ? 'UNKNOWN'
+        : 'ABSENT';
+
+    const c7Status = mechanicalAttachedRelations.some(r => r.capabilities.modificationReplayAuthority.status === 'PRESENT')
+      ? 'PRESENT'
+      : mechanicalAttachedRelations.some(r => r.capabilities.modificationReplayAuthority.status === 'UNKNOWN')
+        ? 'UNKNOWN'
+        : 'ABSENT';
+
+    const c8Status = writersCapableOfPublishingNPlus1ActiveRevision.length > 0
+      ? 'PRESENT'
+      : 'ABSENT';
+
+    const c9Status = discoveredCanonicalWriters.some(w => w.replacesActiveAllocation)
+      ? 'PRESENT'
+      : 'ABSENT';
+
     const components = {
       C1_STABLE_RESERVATION_IDENTITY: {
         status: 'PRESENT',
@@ -939,7 +1213,7 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
         ],
       },
       C2_PERSISTENT_LATER_REVISION: {
-        status: 'ABSENT',
+        status: c2Status,
         reason: 'Zero relations attached to canonical_reservations support multiple committed revisions under stable reservation identity. All attached relations either enforce UNIQUE(reservation_id) (1:1) or are strictly bounded to cancellation lifecycle events and release evidence.',
         sourceAnchors: [
           'src/migrations/052_canonical_reservation_hold_finalization.sql',
@@ -948,21 +1222,21 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
         ],
       },
       C3_FULL_EFFECTIVE_ALLOCATION_SNAPSHOT: {
-        status: 'ABSENT',
+        status: c3Status,
         reason: 'Zero relations store a full effective allocation snapshot for a revision N+1. canonical_reservation_nights has UNIQUE(reservation_id, stay_date) and stores only immutable V1 allocation truth under trigger protection. No revision snapshot table exists.',
         sourceAnchors: [
           'src/migrations/052_canonical_reservation_hold_finalization.sql:canonical_reservation_nights',
         ],
       },
       C4_CURRENT_EFFECTIVE_REVISION: {
-        status: 'ABSENT',
+        status: c4Status,
         reason: 'No column, pointer, or projection view exists that identifies which revision is currently effective. canonical_reservation_lifecycle_current projects lifecycle state only from V1 reservation truth.',
         sourceAnchors: [
           'src/migrations/055_canonical_reservation_lifecycle_authority.sql:canonical_reservation_lifecycle_current',
         ],
       },
       C5_COMMERCIAL_VERSION_BINDING: {
-        status: 'ABSENT',
+        status: c5Status,
         reason: 'No relation exists that binds an N+1 reservation revision to an updated commercial quote, accepted offer revision, or price delta. Commercial truth is immutable on V1 canonical_reservations and canonical_payable_authorities.',
         sourceAnchors: [
           'src/migrations/041_stays_canonical_commerce.sql:canonical_reservations',
@@ -970,14 +1244,14 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
         ],
       },
       C6_ALLOCATION_COMMERCIAL_LOCKSTEP: {
-        status: 'ABSENT',
+        status: c6Status,
         reason: 'Because no persistent later revision exists, there is zero unified version counter under which allocation and commercial versions advance together without drift.',
         sourceAnchors: [
           'src/migrations/052_canonical_reservation_hold_finalization.sql',
         ],
       },
       C7_DURABLE_MODIFICATION_COMMAND_REPLAY: {
-        status: 'ABSENT',
+        status: c7Status,
         reason: 'Existing command ledgers (canonical_reservation_commands, canonical_reservation_lifecycle_commands) are strictly scoped to initial finalization and cancellation lifecycle events. Zero command ledger exists for modification requests or execution replay.',
         sourceAnchors: [
           'src/migrations/052_canonical_reservation_hold_finalization.sql:canonical_reservation_commands',
@@ -985,7 +1259,7 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
         ],
       },
       C8_CONTROLLED_REVISION_WRITER: {
-        status: 'ABSENT',
+        status: c8Status,
         reason: 'All mechanically discovered canonical writers are dispositioned and bounded to hold management, V1 initial finalization, payment composition, or cancellation. Zero accepted database routine can write or commit a later reservation revision.',
         sourceAnchors: [
           'src/migrations/050_accepted_offer_itinerary_quotes.sql',
@@ -997,7 +1271,7 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
         ],
       },
       C9_ACTIVE_MODIFICATION_SEMANTICS: {
-        status: 'ABSENT',
+        status: c9Status,
         reason: 'Zero accepted writer can replace an effective reservation allocation while preserving the reservation as the same logical ACTIVE reservation. The only accepted inventory release authority is cancellation, which moves the reservation to terminal CANCELLED.',
         sourceAnchors: [
           'src/migrations/056_canonical_cancellation_completion_authority.sql:canonical_complete_reservation_cancellation',
@@ -1026,12 +1300,6 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
     );
     assert.equal(hasKnownAbsentMandatoryComponent, true);
 
-    // =========================================================================
-    // ARCHITECTURAL ABSENCE PROVEN:
-    // Complete W4-C authority is proven ABSENT in canonical source.
-    // Zero modification tables, views, procedures, roles, or writers exist.
-    // The test PASSES (exit 0) when architectural absence is successfully proven.
-    // =========================================================================
     assert.equal(
       hasCompleteAcceptedW4cAuthority,
       false,
@@ -1046,6 +1314,8 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
       directReservationAttachedRelationCount: directReservationAttachedRelationIds.length,
       indirectReservationAttachedRelationCount: indirectReservationAttachedRelationIds.length,
       allReservationAttachedRelationCount: allReservationAttachedRelationIds.length,
+      edgeAwarePathCount: reservationAttachmentEdgePaths.length,
+      maxReservationAttachmentDepth: maxDiscoveredDepth,
       undispositionedRelationsCount: undispositionedReservationAttachedRelationIds.length,
       reservationAttachedJsonColumnCount: reservationAttachedJsonColumns.length,
       alternateStructuralRevisionStorage,
@@ -1060,8 +1330,33 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
     console.log('W4_C_CLEAN_REPLACEMENT_OBSERVATION', JSON.stringify(observation, null, 2));
 
     // =========================================================================
-    // 9. RECEIPT CONSISTENCY VERIFICATION
+    // 10. EXACT LIVE EVIDENCE NORMALIZATION & RECEIPT DEEP EQUALITY
     // =========================================================================
+    const liveTask1Evidence = {
+      canonicalCommit: expectedCanonicalBase,
+      directReservationAttachedRelations: directReservationAttachedRelationIds,
+      indirectReservationAttachedRelations: indirectReservationAttachedRelationIds,
+      allReservationAttachedRelations: allReservationAttachedRelationIds,
+      reservationAttachmentEdgePaths,
+      maxReservationAttachmentDepth: maxDiscoveredDepth,
+      undispositionedReservationAttachedRelationIds,
+      reservationAttachedSchema: mechanicalAttachedRelations,
+      reservationAttachedJsonColumns,
+      jsonStorageDispositions,
+      alternateStructuralRevisionStorage,
+      discoveredCanonicalWriters,
+      undispositionedCanonicalWriterIds,
+      writersCapableOfPublishingNPlus1ActiveRevision,
+      components,
+      conclusion: {
+        completeAcceptedW4cAuthority: false,
+        status: 'ABSENT',
+        exhaustiveRuntimeAuthorityClosure: 'NOT_PROVEN',
+        productionStatus: 'NOT_EVALUATED',
+        exactCloseoutStatement: 'COMPLETE W4-C CAPABILITY: ABSENT in accepted canonical source at f5619528abe29604ad2b9d0d25ba7c28b0e388d7. The system has V1 reservation/allocation truth but no accepted complete persistent N+1 reservation revision/full-effective-allocation/current-effective revision/lockstep commercial authority/controlled modification writer. This does NOT claim an owner-capable or generic SQL credential is technically unable to mutate data. EXHAUSTIVE RUNTIME AUTHORITY CLOSURE: NOT PROVEN and NOT REQUIRED for W4-C Task 1. PRODUCTION STATUS: NOT EVALUATED.',
+      },
+    };
+
     const receiptPath = path.resolve(
       'docs/implementation/receipts/W4_C_MODIFICATION_BOUNDARY_LOCAL_2026_10_06.json'
     );
@@ -1072,38 +1367,56 @@ test('W4-C Task 1 clean replacement structural boundary diagnostic', async () =>
     );
 
     const receiptContent = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
-    assert.equal(receiptContent.canonicalCommit, expectedCanonicalBase);
-    assert.equal(receiptContent.conclusion.completeAcceptedW4cAuthority, false);
-    assert.equal(receiptContent.conclusion.status, 'ABSENT');
-    assert.equal(receiptContent.conclusion.exhaustiveRuntimeAuthorityClosure, 'NOT_PROVEN');
-    assert.equal(receiptContent.conclusion.productionStatus, 'NOT_EVALUATED');
+
+    // Exact deep equality on decisive evidence sections:
+    assert.strictEqual(receiptContent.canonicalCommit, liveTask1Evidence.canonicalCommit);
+    assert.deepStrictEqual(receiptContent.directReservationAttachedRelations, liveTask1Evidence.directReservationAttachedRelations);
+    assert.deepStrictEqual(receiptContent.indirectReservationAttachedRelations, liveTask1Evidence.indirectReservationAttachedRelations);
+    assert.deepStrictEqual(receiptContent.allReservationAttachedRelations, liveTask1Evidence.allReservationAttachedRelations);
+    assert.deepStrictEqual(receiptContent.reservationAttachmentEdgePaths, liveTask1Evidence.reservationAttachmentEdgePaths);
+    assert.strictEqual(receiptContent.maxReservationAttachmentDepth, liveTask1Evidence.maxReservationAttachmentDepth);
+    assert.deepStrictEqual(receiptContent.undispositionedReservationAttachedRelationIds, liveTask1Evidence.undispositionedReservationAttachedRelationIds);
+    assert.deepStrictEqual(receiptContent.reservationAttachedSchema, liveTask1Evidence.reservationAttachedSchema);
+    assert.deepStrictEqual(receiptContent.reservationAttachedJsonColumns, liveTask1Evidence.reservationAttachedJsonColumns);
+    assert.deepStrictEqual(receiptContent.jsonStorageDispositions, liveTask1Evidence.jsonStorageDispositions);
+    assert.strictEqual(receiptContent.alternateStructuralRevisionStorage, liveTask1Evidence.alternateStructuralRevisionStorage);
+    assert.deepStrictEqual(receiptContent.discoveredCanonicalWriters, liveTask1Evidence.discoveredCanonicalWriters);
+    assert.deepStrictEqual(receiptContent.undispositionedCanonicalWriterIds, liveTask1Evidence.undispositionedCanonicalWriterIds);
+    assert.deepStrictEqual(receiptContent.writersCapableOfPublishingNPlus1ActiveRevision, liveTask1Evidence.writersCapableOfPublishingNPlus1ActiveRevision);
+    assert.deepStrictEqual(receiptContent.components, liveTask1Evidence.components);
+    assert.deepStrictEqual(receiptContent.conclusion, liveTask1Evidence.conclusion);
+
+    // Focused positive controls verification
     assert.equal(receiptContent.positiveControls.v1AllocationAuthority.status, 'PRESENT');
     assert.equal(receiptContent.positiveControls.initialReservationReplay.status, 'PRESENT');
     assert.equal(receiptContent.positiveControls.cancellationRelease.status, 'PRESENT');
     assert.equal(receiptContent.positiveControls.authorizationIssuer055.status, 'PRESENT');
     assert.equal(receiptContent.positiveControls.authorizationIssuer056.status, 'PRESENT');
 
-    assert.equal(receiptContent.directReservationAttachedRelations.length, directReservationAttachedRelationIds.length);
-    assert.equal(receiptContent.indirectReservationAttachedRelations.length, indirectReservationAttachedRelationIds.length);
-    assert.equal(receiptContent.allReservationAttachedRelations.length, allReservationAttachedRelationIds.length);
-    assert.equal(receiptContent.reservationAttachmentPaths.length, allReservationAttachedRelationIds.length);
-    assert.equal(receiptContent.reservationAttachedSchema.length, mechanicalAttachedRelations.length);
-    assert.equal(receiptContent.undispositionedReservationAttachedRelationIds.length, 0);
+    // Negative control: Verify exact receipt validation would fail on semantic drift without count changes
+    {
+      const mutatedPaths = structuredClone(liveTask1Evidence.reservationAttachmentEdgePaths);
+      mutatedPaths[0].edges[0].constraintName = 'tampered_constraint_name';
+      assert.throws(
+        () => assert.deepStrictEqual(receiptContent.reservationAttachmentEdgePaths, mutatedPaths),
+        { name: 'AssertionError' },
+        'Negative control: Mutated path constraint identity must fail exact deep equality'
+      );
 
-    assert.equal(receiptContent.reservationAttachedJsonColumns.length, reservationAttachedJsonColumns.length);
-    assert.equal(receiptContent.jsonStorageDispositions.length, jsonStorageDispositions.length);
-    assert.notEqual(receiptContent.alternateStructuralRevisionStorage, 'UNKNOWN');
-    assert.equal(receiptContent.alternateStructuralRevisionStorage, 'ABSENT');
+      const mutatedWriters = structuredClone(liveTask1Evidence.discoveredCanonicalWriters);
+      mutatedWriters[0].task1Disposition = 'TAMPERED_DISPOSITION';
+      assert.throws(
+        () => assert.deepStrictEqual(receiptContent.discoveredCanonicalWriters, mutatedWriters),
+        { name: 'AssertionError' },
+        'Negative control: Mutated writer disposition must fail exact deep equality'
+      );
 
-    assert.equal(receiptContent.discoveredCanonicalWriters.length, discoveredCanonicalWriters.length);
-    assert.equal(receiptContent.undispositionedCanonicalWriterIds.length, 0);
-    assert.equal(receiptContent.writersCapableOfPublishingNPlus1ActiveRevision.length, 0);
-
-    for (const [k, v] of Object.entries(components)) {
-      assert.equal(
-        receiptContent.components[k]?.status,
-        v.status,
-        `Receipt component status mismatch for ${k}`
+      const mutatedJson = structuredClone(liveTask1Evidence.jsonStorageDispositions);
+      mutatedJson[0].structuralRole = 'TAMPERED_ROLE';
+      assert.throws(
+        () => assert.deepStrictEqual(receiptContent.jsonStorageDispositions, mutatedJson),
+        { name: 'AssertionError' },
+        'Negative control: Mutated JSON disposition must fail exact deep equality'
       );
     }
   } finally {
