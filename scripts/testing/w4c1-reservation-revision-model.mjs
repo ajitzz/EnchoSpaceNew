@@ -197,6 +197,47 @@ test('W4-C1 canonical reservation revision, full snapshot, and structural seal m
       expectedVersion: submitted.version,
     });
 
+    // Additional offer fixtures for static offer-scope testing:
+    // Offer 2: listing 1, room 102 (same listing, different room)
+    const offerRoom102Id = randomUUID();
+    await fixture.owner.query(
+      `INSERT INTO sellable_offers (id, listing_id, room_type_id, host_account_id, latest_revision, version)
+       VALUES ($1, 1, 102, 10, 1, 1)`,
+      [offerRoom102Id]
+    );
+    await fixture.owner.query(
+      `INSERT INTO sellable_offer_revisions (
+         offer_id, revision, amount_minor, currency, price_basis, stay_start, stay_end,
+         effective_from, effective_until, max_guests, min_nights,
+         source_facts, source_hash, media_facts, media_hash, created_by
+       ) VALUES (
+         $1, 1, 650000, 'INR', 'PER_ROOM_NIGHT', $2, $3,
+         now() - interval '1 hour', now() + interval '70 days', 2, 1,
+         '{}'::jsonb, repeat('a', 64), '[]'::jsonb, repeat('b', 64), 10
+       )`,
+      [offerRoom102Id, fixture.today, addDays(fixture.today, 70)]
+    );
+
+    // Offer 3: listing 2, room 201 (different listing)
+    const offerListing2Id = randomUUID();
+    await fixture.owner.query(
+      `INSERT INTO sellable_offers (id, listing_id, room_type_id, host_account_id, latest_revision, version)
+       VALUES ($1, 2, 201, 11, 1, 1)`,
+      [offerListing2Id]
+    );
+    await fixture.owner.query(
+      `INSERT INTO sellable_offer_revisions (
+         offer_id, revision, amount_minor, currency, price_basis, stay_start, stay_end,
+         effective_from, effective_until, max_guests, min_nights,
+         source_facts, source_hash, media_facts, media_hash, created_by
+       ) VALUES (
+         $1, 1, 750000, 'INR', 'PER_ROOM_NIGHT', $2, $3,
+         now() - interval '1 hour', now() + interval '70 days', 2, 1,
+         '{}'::jsonb, repeat('c', 64), '[]'::jsonb, repeat('d', 64), 11
+       )`,
+      [offerListing2Id, fixture.today, addDays(fixture.today, 70)]
+    );
+
     const checkIn = addDays(fixture.today, 10);
     const checkOut = addDays(fixture.today, 12); // 2 nights
     const quote = await createItineraryQuote(
@@ -817,6 +858,303 @@ test('W4-C1 canonical reservation revision, full snapshot, and structural seal m
     }
 
     // =========================================================================
+    // OFFER-SCOPE ADVERSARIAL TEST 1: SAME LISTING, WRONG ROOM (Section 8)
+    // Revision room_type_id = 101, but offer_id belongs to room_type_id 102 (both listing 1).
+    // Direct seal insert must be REJECTED with REVISION_OFFER_ROOM_TYPE_MISMATCH.
+    // =========================================================================
+    const v5HeaderId = randomUUID();
+    const v5CheckIn = addDays(fixture.today, 19);
+    const v5CheckOut = addDays(fixture.today, 21); // 2 nights
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revisions (
+        id, reservation_id, version, room_type_id, offer_id, offer_revision,
+        check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+      ) VALUES ($1, $2, 5, 101, $3, 1, $4, $5, 2, 2, 550000, 'INR')`,
+      [v5HeaderId, reservationId, offerRoom102Id, v5CheckIn, v5CheckOut]
+    );
+
+    const day19 = (
+      await fixture.owner.query(
+        `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+        [v5CheckIn]
+      )
+    ).rows[0];
+    const day20 = (
+      await fixture.owner.query(
+        `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+        [addDays(fixture.today, 20)]
+      )
+    ).rows[0];
+
+    // Assemble complete valid snapshot
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revision_nights (
+        revision_id, reservation_id, inventory_day_id, stay_date, room_type_id, units
+      ) VALUES ($1, $2, $3, $4, 101, 1), ($1, $2, $5, $6, 101, 1)`,
+      [v5HeaderId, reservationId, day19.id, day19.calendar_date, day20.id, day20.calendar_date]
+    );
+
+    // Attempt direct seal insert -> MUST REJECT
+    await assert.rejects(
+      async () => {
+        await fixture.owner.query(
+          `INSERT INTO canonical_reservation_revision_seals (revision_id, reservation_id) VALUES ($1, $2)`,
+          [v5HeaderId, reservationId]
+        );
+      },
+      /REVISION_OFFER_ROOM_TYPE_MISMATCH/,
+      'Direct seal insert for revision with mismatched offer room_type must be rejected'
+    );
+
+    // Revision remains unsealed and NOT effective
+    const sealV5Exists = (
+      await fixture.owner.query(
+        `SELECT count(*)::int AS count FROM canonical_reservation_revision_seals WHERE revision_id = $1`,
+        [v5HeaderId]
+      )
+    ).rows[0].count;
+    assert.equal(sealV5Exists, 0, 'V5 must remain unsealed');
+
+    const effAfterV5Fail = (
+      await fixture.owner.query(
+        `SELECT effective_version FROM canonical_reservation_effective_revisions WHERE reservation_id = $1`,
+        [reservationId]
+      )
+    ).rows[0];
+    assert.equal(effAfterV5Fail.effective_version, 4, 'Effective version must remain 4 (V5 is unsealed)');
+
+    // =========================================================================
+    // OFFER-SCOPE ADVERSARIAL TEST 2: WRONG LISTING (Section 9)
+    // Revision room_type_id = 101 (listing 1), but offer_id belongs to listing 2 (room 201).
+    // Direct seal insert must be REJECTED with REVISION_OFFER_LISTING_MISMATCH.
+    // =========================================================================
+    const v6HeaderId = randomUUID();
+    const v6CheckIn = addDays(fixture.today, 21);
+    const v6CheckOut = addDays(fixture.today, 23); // 2 nights
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revisions (
+        id, reservation_id, version, room_type_id, offer_id, offer_revision,
+        check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+      ) VALUES ($1, $2, 6, 101, $3, 1, $4, $5, 2, 2, 550000, 'INR')`,
+      [v6HeaderId, reservationId, offerListing2Id, v6CheckIn, v6CheckOut]
+    );
+
+    const day21 = (
+      await fixture.owner.query(
+        `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+        [v6CheckIn]
+      )
+    ).rows[0];
+    const day22 = (
+      await fixture.owner.query(
+        `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+        [addDays(fixture.today, 22)]
+      )
+    ).rows[0];
+
+    // Assemble complete valid snapshot
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revision_nights (
+        revision_id, reservation_id, inventory_day_id, stay_date, room_type_id, units
+      ) VALUES ($1, $2, $3, $4, 101, 1), ($1, $2, $5, $6, 101, 1)`,
+      [v6HeaderId, reservationId, day21.id, day21.calendar_date, day22.id, day22.calendar_date]
+    );
+
+    // Attempt direct seal insert -> MUST REJECT
+    await assert.rejects(
+      async () => {
+        await fixture.owner.query(
+          `INSERT INTO canonical_reservation_revision_seals (revision_id, reservation_id) VALUES ($1, $2)`,
+          [v6HeaderId, reservationId]
+        );
+      },
+      /REVISION_OFFER_LISTING_MISMATCH/,
+      'Direct seal insert for revision with mismatched offer listing must be rejected'
+    );
+
+    // Revision remains unsealed and NOT effective
+    const sealV6Exists = (
+      await fixture.owner.query(
+        `SELECT count(*)::int AS count FROM canonical_reservation_revision_seals WHERE revision_id = $1`,
+        [v6HeaderId]
+      )
+    ).rows[0].count;
+    assert.equal(sealV6Exists, 0, 'V6 must remain unsealed');
+
+    const effAfterV6Fail = (
+      await fixture.owner.query(
+        `SELECT effective_version FROM canonical_reservation_effective_revisions WHERE reservation_id = $1`,
+        [reservationId]
+      )
+    ).rows[0];
+    assert.equal(effAfterV6Fail.effective_version, 4, 'Effective version must remain 4 (V6 is unsealed)');
+
+    // =========================================================================
+    // OFFER-SCOPE POSITIVE CONTROL: MATCHING OFFER (Section 10)
+    // Revision room_type_id = 101 (listing 1), offer_id belongs to listing 1, room 101.
+    // Direct seal insert must SUCCEED, and revision becomes effective.
+    // =========================================================================
+    const v7HeaderId = randomUUID();
+    const v7CheckIn = addDays(fixture.today, 23);
+    const v7CheckOut = addDays(fixture.today, 25); // 2 nights
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revisions (
+        id, reservation_id, version, room_type_id, offer_id, offer_revision,
+        check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+      ) VALUES ($1, $2, 7, 101, $3, 1, $4, $5, 2, 2, 550000, 'INR')`,
+      [v7HeaderId, reservationId, draft.offerId, v7CheckIn, v7CheckOut]
+    );
+
+    const day23 = (
+      await fixture.owner.query(
+        `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+        [v7CheckIn]
+      )
+    ).rows[0];
+    const day24 = (
+      await fixture.owner.query(
+        `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+        [addDays(fixture.today, 24)]
+      )
+    ).rows[0];
+
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revision_nights (
+        revision_id, reservation_id, inventory_day_id, stay_date, room_type_id, units
+      ) VALUES ($1, $2, $3, $4, 101, 1), ($1, $2, $5, $6, 101, 1)`,
+      [v7HeaderId, reservationId, day23.id, day23.calendar_date, day24.id, day24.calendar_date]
+    );
+
+    // Direct seal insert -> SUCCEEDS
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revision_seals (revision_id, reservation_id) VALUES ($1, $2)`,
+      [v7HeaderId, reservationId]
+    );
+
+    const effAfterV7 = (
+      await fixture.owner.query(
+        `SELECT * FROM canonical_reservation_effective_revisions WHERE reservation_id = $1`,
+        [reservationId]
+      )
+    ).rows[0];
+    assert.equal(effAfterV7.effective_version, 7, 'After sealing matching offer, V7 becomes effective');
+    assert.equal(effAfterV7.status, 'SEALED');
+    assert.equal(effAfterV7.effective_revision_id, v7HeaderId);
+
+    const effAllocV7 = (
+      await fixture.owner.query(
+        `SELECT * FROM canonical_reservation_effective_allocations WHERE reservation_id = $1 ORDER BY stay_date`,
+        [reservationId]
+      )
+    ).rows;
+    assert.equal(effAllocV7.length, 2, 'Effective allocation has exactly 2 nights');
+    assert.deepEqual(effAllocV7.map(r => r.effective_version), [7, 7]);
+
+    // =========================================================================
+    // PARTIAL OFFER BINDING TESTS (Section 11)
+    // offer_id present + offer_revision NULL => rejected by CHECK constraint
+    // offer_id NULL + offer_revision present => rejected by CHECK constraint
+    // both NULL => valid for EXTERNAL_CHANNEL reservation, seals without inventing offer
+    // =========================================================================
+    // Seed external reservation to isolate table CHECK constraint from ENCHO_DIRECT trigger
+    const extReservationId = randomUUID();
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservations (
+        id, origin_kind, listing_id, room_type_id, check_in_date, check_out_date,
+        nights, guest_count, room_subtotal_paise, currency, quote_id, hold_id,
+        offer_id, offer_revision, holder_principal, status, command_id, command_fingerprint
+      ) VALUES (
+        $1, 'EXTERNAL_CHANNEL', 1, 101, $2, $3, 2, 2, 0, 'INR',
+        NULL, NULL, NULL, NULL, 'partner:booking_com', 'INVENTORY_COMMITTED', $4, $5
+      )`,
+      [extReservationId, addDays(fixture.today, 1), addDays(fixture.today, 3), randomUUID(), 'f'.repeat(64)]
+    );
+
+    // Test 1: offer_id present + offer_revision NULL -> CHECK constraint violation (23514)
+    await assert.rejects(
+      async () => {
+        await fixture.owner.query(
+          `INSERT INTO canonical_reservation_revisions (
+            id, reservation_id, version, room_type_id, offer_id, offer_revision,
+            check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+          ) VALUES ($1, $2, 3, 101, $3, NULL, $4, $5, 2, 2, 0, 'INR')`,
+          [randomUUID(), extReservationId, draft.offerId, addDays(fixture.today, 26), addDays(fixture.today, 28)]
+        );
+      },
+      (err) => err.code === '23514',
+      'Header with offer_id present and offer_revision NULL must be rejected by CHECK constraint'
+    );
+
+    // Test 2: offer_id NULL + offer_revision present -> CHECK constraint violation (23514)
+    await assert.rejects(
+      async () => {
+        await fixture.owner.query(
+          `INSERT INTO canonical_reservation_revisions (
+            id, reservation_id, version, room_type_id, offer_id, offer_revision,
+            check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+          ) VALUES ($1, $2, 3, 101, NULL, 1, $3, $4, 2, 2, 0, 'INR')`,
+          [randomUUID(), extReservationId, addDays(fixture.today, 26), addDays(fixture.today, 28)]
+        );
+      },
+      (err) => err.code === '23514',
+      'Header with offer_id NULL and offer_revision present must be rejected by CHECK constraint'
+    );
+
+    // Test 3: ENCHO_DIRECT reservation also rejects partial/missing offer at trigger boundary
+    await assert.rejects(
+      async () => {
+        await fixture.owner.query(
+          `INSERT INTO canonical_reservation_revisions (
+            id, reservation_id, version, room_type_id, offer_id, offer_revision,
+            check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+          ) VALUES ($1, $2, 8, 101, $3, NULL, $4, $5, 2, 2, 550000, 'INR')`,
+          [randomUUID(), reservationId, draft.offerId, addDays(fixture.today, 26), addDays(fixture.today, 28)]
+        );
+      },
+      /REVISION_ENCHO_DIRECT_COMMERCIAL_INVALID|23514/,
+      'ENCHO_DIRECT reservation must reject partial offer'
+    );
+
+    const extV2HeaderId = randomUUID();
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revisions (
+        id, reservation_id, version, room_type_id, offer_id, offer_revision,
+        check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+      ) VALUES ($1, $2, 2, 101, NULL, NULL, $3, $4, 2, 2, 0, 'INR')`,
+      [extV2HeaderId, extReservationId, addDays(fixture.today, 1), addDays(fixture.today, 3)]
+    );
+
+    const extDay1 = (await fixture.owner.query(
+      `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+      [addDays(fixture.today, 1)]
+    )).rows[0];
+    const extDay2 = (await fixture.owner.query(
+      `SELECT id, calendar_date FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+      [addDays(fixture.today, 2)]
+    )).rows[0];
+
+    await fixture.owner.query(
+      `INSERT INTO canonical_reservation_revision_nights (
+        revision_id, reservation_id, inventory_day_id, stay_date, room_type_id, units
+      ) VALUES ($1, $2, $3, $4, 101, 1), ($1, $2, $5, $6, 101, 1)`,
+      [extV2HeaderId, extReservationId, extDay1.id, extDay1.calendar_date, extDay2.id, extDay2.calendar_date]
+    );
+
+    // Sealing external reservation with offer_id = NULL and offer_revision = NULL succeeds without inventing offer
+    await fixture.owner.query(`SELECT * FROM canonical_seal_reservation_revision($1)`, [extV2HeaderId]);
+
+    const extEff = (
+      await fixture.owner.query(
+        `SELECT * FROM canonical_reservation_effective_revisions WHERE reservation_id = $1`,
+        [extReservationId]
+      )
+    ).rows[0];
+    assert.equal(extEff.effective_version, 2);
+    assert.equal(extEff.status, 'SEALED');
+    assert.equal(extEff.offer_id, null);
+    assert.equal(extEff.offer_revision, null);
+
+    // =========================================================================
     // ADVERSARIAL CASE Q: ZERO PHYSICAL INVENTORY MUTATION
     // Compare inventory_days.booked_units against baseline
     // =========================================================================
@@ -970,6 +1308,11 @@ test('W4-C1 canonical reservation revision, full snapshot, and structural seal m
       adversarialCaseO_HigherUnsealedDoesNotMaskSealed: true,
       adversarialCaseP_ConcurrentAppendSealSerialized: true,
       adversarialCaseQ_ZeroInventoryMutation: true,
+      offerScopeAdversarial1_RoomTypeMismatchRejected: true,
+      offerScopeAdversarial2_ListingMismatchRejected: true,
+      offerScopePositiveControl_MatchingOfferSealed: true,
+      partialOfferBindingRejectedByCheckConstraint: true,
+      absentOfferBindingSealsWithoutInventingOffer: true,
       runtimeRolesNegativeAuthorityVerified: true,
       w4bCancellationProcsUnchanged: true,
       hasCompleteAcceptedW4cModificationWriter: false,

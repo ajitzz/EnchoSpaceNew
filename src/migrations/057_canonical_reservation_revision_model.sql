@@ -16,6 +16,8 @@
 --       * Revision room_type_id must belong to reservation's listing_id.
 --       * Revision night room_type_id must match revision header room_type_id (enforced structurally via composite FK).
 --       * Inventory day calendar_date, room_type_id, and listing_id must match night stay_date, room_type_id, and listing_id.
+--       * Offer binding static coherence: if offer_id + offer_revision is present, both must be non-null (CHECK),
+--         and sealing validates that the parent sellable offer matches the reservation root listing_id and revision room_type_id.
 --   - Zero modification writer: NO accepted runtime role or function can publish later revisions.
 --   - Zero inventory mutation: migration 057 touches zero physical inventory (inventory_days.booked_units is untouched).
 --   - Zero payment / refund side effects: no financial clearance or settlement authority in W4-C1.
@@ -38,6 +40,7 @@ CREATE TABLE IF NOT EXISTS canonical_reservation_revisions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
   FOREIGN KEY (offer_id, offer_revision) REFERENCES sellable_offer_revisions(offer_id, revision) ON DELETE RESTRICT,
   CHECK (check_out_date > check_in_date AND check_out_date - check_in_date = nights),
+  CHECK ((offer_id IS NULL AND offer_revision IS NULL) OR (offer_id IS NOT NULL AND offer_revision IS NOT NULL)),
   UNIQUE (reservation_id, version),
   UNIQUE (id, reservation_id),
   UNIQUE (id, reservation_id, room_type_id)
@@ -208,6 +211,8 @@ RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   header RECORD;
   actual_nights INT;
+  root RECORD;
+  offer_rec RECORD;
 BEGIN
   -- Serialize against concurrent night appends by locking revision header row
   SELECT * INTO header
@@ -248,6 +253,38 @@ BEGIN
     SELECT stay_date FROM canonical_reservation_revision_nights WHERE revision_id = NEW.revision_id
   ) THEN
     RAISE EXCEPTION 'REVISION_SEAL_DATES_INCOMPLETE';
+  END IF;
+
+  -- Validate static offer-scope identity coherence if offer binding is present
+  IF (header.offer_id IS NULL) <> (header.offer_revision IS NULL) THEN
+    RAISE EXCEPTION 'REVISION_OFFER_PAIR_INCOMPLETE';
+  END IF;
+
+  IF header.offer_id IS NOT NULL AND header.offer_revision IS NOT NULL THEN
+    SELECT listing_id INTO root
+    FROM canonical_reservations
+    WHERE id = header.reservation_id;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'REVISION_SEAL_RESERVATION_NOT_FOUND';
+    END IF;
+
+    SELECT so.listing_id, so.room_type_id INTO offer_rec
+    FROM sellable_offer_revisions sor
+    JOIN sellable_offers so ON so.id = sor.offer_id
+    WHERE sor.offer_id = header.offer_id AND sor.revision = header.offer_revision;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'REVISION_OFFER_REVISION_NOT_FOUND';
+    END IF;
+
+    IF offer_rec.listing_id IS DISTINCT FROM root.listing_id THEN
+      RAISE EXCEPTION 'REVISION_OFFER_LISTING_MISMATCH';
+    END IF;
+
+    IF offer_rec.room_type_id IS DISTINCT FROM header.room_type_id THEN
+      RAISE EXCEPTION 'REVISION_OFFER_ROOM_TYPE_MISMATCH';
+    END IF;
   END IF;
 
   RETURN NEW;

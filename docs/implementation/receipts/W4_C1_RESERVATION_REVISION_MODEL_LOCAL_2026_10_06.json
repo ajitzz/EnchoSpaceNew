@@ -10,6 +10,7 @@
     "currentEffectiveV2": "HIGHEST SEALED VALID REVISION ONLY",
     "snapshotSet": "IMMUTABLE AFTER SEAL",
     "modificationWriter": "ABSENT",
+    "targetModificationQuoteAuthority": "NOT IMPLEMENTED",
     "physicalInventoryReplacement": "ABSENT",
     "w4bVersionAwareness": "NOT IMPLEMENTED",
     "financialClearance": "NOT IMPLEMENTED",
@@ -18,12 +19,18 @@
   },
   "migration": {
     "file": "src/migrations/057_canonical_reservation_revision_model.sql",
-    "sha256": "2a8ad76f9ffd6f0f916d6ae3ae0e570bc75521f6b1c9a11a785ada8626c94045"
+    "sha256": "a68802bf354cbf0069d42b282d49a8cb796f537acfafb09d837335d7f448624a"
+  },
+  "offerBindingStaticCoherence": {
+    "rule": "If a revision carries offer_id + offer_revision, sealing verifies that the parent sellable offer belongs to the canonical reservation listing and the revision room_type.",
+    "offerPairNullability": "Structurally enforced via CHECK ((offer_id IS NULL AND offer_revision IS NULL) OR (offer_id IS NOT NULL AND offer_revision IS NOT NULL)); partial offer pairs are strictly rejected.",
+    "absentOfferSemantics": "If offer_id and offer_revision are NULL (permitted on external origin reservations), seal validation does not invent an offer and succeeds.",
+    "boundariesExcluded": "Offer presence is NOT proof of current sellability, modification quote authority, date eligibility, holder authority, or financial clearance. Those remain outside W4-C1."
   },
   "newRelations": [
     {
       "tableName": "canonical_reservation_revisions",
-      "description": "Immutable V2+ reservation revision header table (assembly data only until sealed; version >= 2, UNIQUE(reservation_id, version), UNIQUE(id, reservation_id, room_type_id), commercial snapshot)",
+      "description": "Immutable V2+ reservation revision header table (assembly data only until sealed; version >= 2, UNIQUE(reservation_id, version), UNIQUE(id, reservation_id, room_type_id), commercial snapshot, offer pair nullability CHECK constraint)",
       "rlsEnabled": true,
       "rlsForced": true,
       "immutabilityTrigger": "canonical_reservation_revisions_immutable"
@@ -37,7 +44,7 @@
     },
     {
       "tableName": "canonical_reservation_revision_seals",
-      "description": "Immutable V2+ structural seal authority table (authority fence; exactly one seal per revision; atomic validation of complete contiguous dates, counts, and identities)",
+      "description": "Immutable V2+ structural seal authority table (authority fence; exactly one seal per revision; atomic validation of complete contiguous dates, counts, identities, and offer static scope)",
       "rlsEnabled": true,
       "rlsForced": true,
       "immutabilityTrigger": "canonical_reservation_revision_seals_immutable"
@@ -71,7 +78,7 @@
     {
       "functionName": "canonical_validate_and_seal_reservation_revision",
       "signature": "() -> trigger",
-      "description": "BEFORE INSERT trigger on seals enforcing atomic validation: row count == header.nights, all stay dates within range, contiguous coverage against generate_series with zero gaps"
+      "description": "BEFORE INSERT trigger on seals enforcing atomic validation: row count == header.nights, all stay dates within range, contiguous coverage against generate_series with zero gaps, and static offer-scope identity coherence (listing and room-type match)"
     },
     {
       "functionName": "canonical_seal_reservation_revision",
@@ -95,7 +102,8 @@
     "rowCount": "Verified exactly equal to header.nights",
     "headerNightIdentity": "Enforced structurally via composite FK (revision_id, reservation_id, room_type_id)",
     "inventoryDayIdentity": "Verified calendar_date == stay_date, room_type_id == night room_type_id, listing_id == root listing_id",
-    "rootReservationIdentity": "Root reservation is the single authority for origin_kind and listing_id (no competing duplicates)"
+    "rootReservationIdentity": "Root reservation is the single authority for origin_kind and listing_id (no competing duplicates)",
+    "offerScopeIdentity": "Verified parent sellable_offers.listing_id == canonical_reservations.listing_id and sellable_offers.room_type_id == revision.room_type_id"
   },
   "snapshotSetImmutability": {
     "postSealAppend": "REJECTED (CANONICAL_RESERVATION_REVISION_SEALED via BEFORE INSERT trigger)",
@@ -139,6 +147,7 @@
   },
   "negativeModificationWriterProof": {
     "acceptedModificationWriter": "ABSENT",
+    "targetModificationQuoteAuthority": "NOT IMPLEMENTED",
     "candidateProceduresInPgProc": 0,
     "runtimeRoleDMLGrants": 0,
     "runtimeRoleSealExecuteGrants": 0,
@@ -164,7 +173,12 @@
       "N. Seal update/delete -> rejected with CANONICAL_RESERVATION_REVISION_SEAL_IMMUTABLE",
       "O. Higher unsealed version -> V3 unsealed does NOT mask sealed V2",
       "P. Concurrent append vs seal -> header row lock serializes operations, preventing phantom appends",
-      "Q. Physical inventory -> booked_units exactly unchanged (delta = 0)"
+      "Q. Physical inventory -> booked_units exactly unchanged (delta = 0)",
+      "Offer-scope adversarial 1: same listing, wrong room -> rejected with REVISION_OFFER_ROOM_TYPE_MISMATCH",
+      "Offer-scope adversarial 2: wrong listing -> rejected with REVISION_OFFER_LISTING_MISMATCH",
+      "Offer-scope positive control: matching offer -> sealed successfully and became effective",
+      "Partial offer binding: offer_id without revision or revision without offer_id rejected by CHECK constraint (23514); ENCHO_DIRECT rejects partial offer at trigger boundary",
+      "Absent offer binding: external origin with offer_id = NULL and offer_revision = NULL seals without inventing offer"
     ]
   },
   "neighboringRegressions": {
@@ -173,6 +187,6 @@
     "w4b_canonical_cancellation": "PASS (52/52)"
   },
   "nextSlice": {
-    "declaration": "W4-C1: STRUCTURAL MODEL ONLY; MODIFICATION WRITER: ABSENT; PHYSICAL INVENTORY REPLACEMENT: ABSENT; W4-B VERSION AWARENESS: NOT IMPLEMENTED; W4-D FINANCIAL CLEARANCE: NOT IMPLEMENTED; GUEST/HOST INGRESS: ABSENT; PRODUCTION: NOT EVALUATED"
+    "declaration": "W4-C1: STRUCTURAL MODEL ONLY; MODIFICATION WRITER: ABSENT; TARGET MODIFICATION QUOTE AUTHORITY: NOT IMPLEMENTED; PHYSICAL INVENTORY REPLACEMENT: ABSENT; W4-B VERSION AWARENESS: NOT IMPLEMENTED; W4-D: NOT IMPLEMENTED; GUEST/HOST INGRESS: ABSENT; PRODUCTION: NOT EVALUATED"
   }
 }
