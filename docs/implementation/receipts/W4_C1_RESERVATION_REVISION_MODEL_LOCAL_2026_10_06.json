@@ -1,0 +1,162 @@
+{
+  "task": "W4-C1 — IMMUTABLE RESERVATION REVISION / FULL SNAPSHOT MODEL",
+  "canonicalBase": "03de9fc4ceb6bc170033db8fb8f09f100d2a5b35",
+  "workerBranch": "codex/antigravity-w4c1-revision-model",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "scope": {
+    "slice": "W4-C1: STRUCTURAL MODEL ONLY",
+    "modificationWriter": "ABSENT",
+    "physicalInventoryReplacement": "ABSENT",
+    "w4bVersionAwareness": "NOT IMPLEMENTED",
+    "w4dFinancialClearance": "NOT IMPLEMENTED",
+    "guestHostIngress": "ABSENT",
+    "production": "NOT EVALUATED"
+  },
+  "migration": {
+    "file": "src/migrations/057_canonical_reservation_revision_model.sql",
+    "sha256": "9f3aca94de12317244cbbac89f8a6a0fa6dc372a9c3c2e58226ed4114298cbcd"
+  },
+  "newRelations": [
+    {
+      "tableName": "canonical_reservation_revisions",
+      "description": "Immutable V2+ reservation revision header table enforcing version >= 2, UNIQUE(reservation_id, version), status 'COMMITTED', and full commercial/model binding snapshot",
+      "rlsEnabled": true,
+      "rlsForced": true,
+      "immutabilityTrigger": "canonical_reservation_revisions_immutable"
+    },
+    {
+      "tableName": "canonical_reservation_revision_nights",
+      "description": "Immutable V2+ full effective allocation snapshot table enforcing complete allocation replacement (not deltas), UNIQUE(revision_id, stay_date), and composite FK to header",
+      "rlsEnabled": true,
+      "rlsForced": true,
+      "immutabilityTrigger": "canonical_reservation_revision_nights_immutable"
+    }
+  ],
+  "newViews": [
+    {
+      "viewName": "canonical_reservation_revisions_all",
+      "description": "Unified projection presenting V1 (projected from W3 canonical_reservations + nights) and committed V2+ revisions in identical logical shape"
+    },
+    {
+      "viewName": "canonical_reservation_effective_revisions",
+      "description": "Deterministic current effective revision projection (yields V1 if no committed later revision exists, else highest valid committed revision)"
+    },
+    {
+      "viewName": "canonical_reservation_effective_allocations",
+      "description": "Deterministic current effective allocation projection (yields W3 canonical_reservation_nights for V1, or full replacement snapshot rows for V2+)"
+    }
+  ],
+  "newFunctions": [
+    {
+      "functionName": "canonical_reservation_revision_reject_mutation",
+      "signature": "() -> trigger",
+      "description": "Trigger procedure raising CANONICAL_RESERVATION_REVISION_IMMUTABLE on any UPDATE or DELETE"
+    },
+    {
+      "functionName": "canonical_get_effective_reservation",
+      "signature": "(target_reservation_id UUID) -> TABLE",
+      "description": "Read-only SECURITY DEFINER function querying current effective reservation terms"
+    },
+    {
+      "functionName": "canonical_get_effective_reservation_allocation",
+      "signature": "(target_reservation_id UUID) -> TABLE",
+      "description": "Read-only SECURITY DEFINER function querying current effective allocation rows"
+    }
+  ],
+  "v1ProjectionSemantics": {
+    "source": "canonical_reservations + canonical_reservation_nights",
+    "duplication": "ZERO - V1 rows are never duplicated or copied into revision tables",
+    "effectiveVersion": 1,
+    "effectiveRevisionId": null,
+    "commercialBinding": "Preserves original W3 quote_id, hold_id, offer_id, offer_revision, check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency"
+  },
+  "v2StructuralModel": {
+    "headerTable": "canonical_reservation_revisions",
+    "versionConstraint": "CHECK (version >= 2)",
+    "uniqueness": "UNIQUE (reservation_id, version), UNIQUE (id, reservation_id)",
+    "statusConstraint": "CHECK (status IN ('COMMITTED'))",
+    "snapshotTable": "canonical_reservation_revision_nights",
+    "replacementSemantics": "FULL REPLACEMENT - allocation rows represent entire effective stay for version, never deltas from V1",
+    "compositeForeignKey": "FOREIGN KEY (revision_id, reservation_id) REFERENCES canonical_reservation_revisions(id, reservation_id)"
+  },
+  "allocationCommercialLockstep": {
+    "enforced": true,
+    "mechanism": "Version number is reservation-level authority. Header owns commercial terms and revision identity; snapshot rows are strictly bound to that exact header via composite FK. Projections derive both from effective_version."
+  },
+  "immutability": {
+    "headerMutation": "REJECTED (CANONICAL_RESERVATION_REVISION_IMMUTABLE)",
+    "allocationRowMutation": "REJECTED (CANONICAL_RESERVATION_REVISION_IMMUTABLE)",
+    "commercialBindingMutation": "REJECTED (enforced by header immutability trigger)",
+    "rls": "ENABLED and FORCED on both tables with owner-only access policy"
+  },
+  "roleGrantMatrix": {
+    "public": "REVOKED ALL on all tables, views, and helper functions",
+    "runtimeRoles": [
+      "encho_stays_web",
+      "encho_reservation_worker",
+      "encho_payment_worker",
+      "encho_composition_worker",
+      "encho_lifecycle_issuer",
+      "encho_lifecycle_worker",
+      "encho_cancellation_issuer",
+      "encho_cancellation_executor"
+    ],
+    "runtimeRolePermissions": "ALL PRIVILEGES REVOKED (zero SELECT, INSERT, UPDATE, DELETE, or EXECUTE grants)",
+    "ownerOnlySeeding": "Allowed for test/fixture execution only"
+  },
+  "inventoryNonMutation": {
+    "physicalInventoryTouched": false,
+    "bookedUnitsDelta": 0,
+    "heldUnitsDelta": 0,
+    "evidence": "inventory_days.booked_units remains exactly 1 before, during, and after V2 seeding and projection queries; V2-only days have booked_units = 0"
+  },
+  "w4bCancellationCompatibility": {
+    "modified": false,
+    "functionBodies": "IDENTICAL to migration 056 baseline",
+    "invariant": "Current cancellation continues to release original W3/V1 allocation because no accepted later-revision writer exists. W4-B version-aware cancellation upgrade is REQUIRED BEFORE enabling any modification writer."
+  },
+  "financialBoundary": {
+    "payableAdjustment": "NONE",
+    "refundAuthority": "NONE",
+    "financialClearance": "NONE",
+    "paymentSuccessClaim": "NONE",
+    "note": "Commercial snapshot bindings are descriptive facts; financial settlement authority is deferred to W4-D"
+  },
+  "negativeModificationWriterProof": {
+    "acceptedModificationWriter": "ABSENT",
+    "candidateProceduresInPgProc": 0,
+    "runtimeRoleDMLGrants": 0,
+    "completePhysicalW4CModificationCapability": false
+  },
+  "focusedTestResults": {
+    "suite": "scripts/testing/w4c1-reservation-revision-model.mjs",
+    "status": "PASS",
+    "assertionsVerified": [
+      "A. Existing W3 V1 reservation projects as version 1 without copied rows",
+      "B. V1 effective allocation projection exactly matches canonical_reservation_nights",
+      "C. Owner/test fixture can seed structurally valid V2 header + full snapshot",
+      "D. Effective projection chooses V2 when valid committed V2 fixture exists",
+      "E. V2 snapshot is FULL replacement authority, not merged cumulatively with V1",
+      "F. V2 header mutation rejected (UPDATE / DELETE)",
+      "G. V2 allocation row mutation rejected (UPDATE / DELETE)",
+      "H. V2 commercial/model binding mutation rejected",
+      "I. Duplicate reservation/version rejected (UNIQUE 23505)",
+      "J. Invalid version <= 1 rejected from V2+ structure (CHECK 23514)",
+      "K. Orphan snapshot rows rejected (FK 23503)",
+      "L. Allocation/commercial version cannot drift",
+      "M. Accepted runtime roles cannot insert/update/delete/publish later revisions (42501)",
+      "N. Migration and projections do not change inventory_days.booked_units",
+      "O. W4-B cancellation functions remain unchanged",
+      "P. Seeding higher version V3 deterministically selects V3",
+      "19. Negative authority test: complete physical W4-C modification capability = false"
+    ]
+  },
+  "neighboringRegressions": {
+    "w3_reservation_finalization": "PASS (13/13)",
+    "w4a_canonical_lifecycle": "PASS (34/34)",
+    "w4b_canonical_cancellation": "PASS (52/52)"
+  },
+  "nextSlice": {
+    "declaration": "W4-C1: STRUCTURAL MODEL ONLY; MODIFICATION WRITER: ABSENT; PHYSICAL INVENTORY REPLACEMENT: ABSENT; W4-B VERSION AWARENESS: NOT IMPLEMENTED; W4-D FINANCIAL CLEARANCE: NOT IMPLEMENTED; GUEST/HOST INGRESS: ABSENT; PRODUCTION: NOT EVALUATED"
+  }
+}
