@@ -1375,17 +1375,211 @@ test('W4-C3 canonical pending modification request authority verification', asyn
     );
 
     // =========================================================================
-    // CASE AC: No public ingress route mounted
+    // CASE AC: Zero public ingress route / runtime caller evidence
     // =========================================================================
-    const filesInSrc = execSync(`git status --porcelain`, {encoding: 'utf8'}).trim();
-    // Verify no application/runtime API controllers are created or modified
+    // Evidence A: committed diff from canonical base contains ONLY the 3 allowed files
+    const changedFiles = execSync(`git diff --name-only ${expectedCanonicalBase}...HEAD`, {
+      encoding: 'utf8',
+    }).trim().split('\n').filter(Boolean);
+    const allowedFiles = [
+      'src/migrations/059_canonical_reservation_modification_request.sql',
+      'scripts/testing/w4c3-reservation-modification-request.mjs',
+      'docs/implementation/receipts/W4_C3_RESERVATION_MODIFICATION_REQUEST_LOCAL_2026_10_07.json',
+    ];
+    for (const file of changedFiles) {
+      assert.ok(
+        allowedFiles.includes(file),
+        `Only designated W4-C3 files may be modified or committed, found: ${file}`
+      );
+    }
+
+    // Evidence B: repository caller search finds zero application/runtime callers
+    let callers = '';
+    try {
+      callers = execSync(`git grep -n "canonical_request_reservation_modification" src/`, {
+        encoding: 'utf8',
+      }).trim();
+    } catch {
+      callers = '';
+    }
+    const nonMigrationCallers = callers
+      .split('\n')
+      .filter(line => line && !line.includes('src/migrations/059_canonical_reservation_modification_request.sql') && !line.includes('src/test/'));
     assert.equal(
-      filesInSrc.includes('src/server') || filesInSrc.includes('src/routes'),
-      false,
-      'No application routes or controllers must be modified or created'
+      nonMigrationCallers.length,
+      0,
+      `Zero application/runtime callers of modification function permitted, found: ${nonMigrationCallers.join('; ')}`
     );
 
-    console.log('✔ All W4-C3 test matrix cases (A-AC) verified successfully');
+    // =========================================================================
+    // CASE AD: Stale W1 source facts rejected for NEW modification request
+    // =========================================================================
+    const resAD = await createCommittedRes(2);
+    const quoteAD = await createItineraryQuote(
+      stays,
+      {
+        offerId,
+        revision: 2,
+        checkIn: safeAddDays(fixture.today, 95),
+        checkOut: safeAddDays(fixture.today, 97),
+        guestCount: 2,
+        requestId: randomUUID(),
+      },
+      'user:10'
+    );
+
+    // Baseline: Valid C3 request BEFORE source drift succeeds
+    const cmdAD1 = randomUUID();
+    const reqAD1 = await requestModification({
+      reservationId: resAD.reservationId,
+      commandId: cmdAD1,
+      expectedSourceEffectiveVersion: 1,
+      targetQuoteId: quoteAD.id,
+      authenticatedPrincipal: 'user:10',
+    });
+    assert.equal(reqAD1.replayed, false);
+    assert.equal(reqAD1.target_quote_id, quoteAD.id);
+
+    // Mutate ONE current source fact included by accepted W1 source hash: room_types.name
+    await fixture.owner.query(
+      `UPDATE room_types SET name = 'Mutated Room Name For Stale Test' WHERE id = 101`
+    );
+
+    // Verify accepted W1 state/currentness mechanism now reports OFFER_STALE_REVIEW
+    const w1State = (await fixture.owner.query(
+      `SELECT public.sellable_offer_revision_state($1, $2) AS state`,
+      [offerId, 2]
+    )).rows[0].state;
+    assert.equal(w1State, 'OFFER_STALE_REVIEW', 'Mutated room name must cause W1 to report OFFER_STALE_REVIEW');
+
+    // Issue a NEW C3 command with a NEW command_id -> must be rejected with MODIFICATION_OFFER_SOURCE_STALE
+    const cmdAD2 = randomUUID();
+    await assert.rejects(
+      requestModification({
+        reservationId: resAD.reservationId,
+        commandId: cmdAD2,
+        expectedSourceEffectiveVersion: 1,
+        targetQuoteId: quoteAD.id,
+        authenticatedPrincipal: 'user:10',
+      }),
+      /MODIFICATION_OFFER_SOURCE_STALE/
+    );
+
+    // Assert zero rows inserted for that command
+    const countAD2 = (await fixture.owner.query(
+      `SELECT count(*)::int AS count FROM canonical_reservation_modification_requests WHERE command_id = $1`,
+      [cmdAD2]
+    )).rows[0].count;
+    assert.equal(countAD2, 0, 'No row must be inserted for rejected stale-source command');
+
+    // =========================================================================
+    // CASE AE: Replay after source drift succeeds without re-evaluating source currentness
+    // =========================================================================
+    const replayAE = await requestModification({
+      reservationId: resAD.reservationId,
+      commandId: cmdAD1, // Existing command issued before drift
+      expectedSourceEffectiveVersion: 1,
+      targetQuoteId: quoteAD.id,
+      authenticatedPrincipal: 'user:10',
+    });
+    assert.equal(replayAE.replayed, true, 'Replay after source drift must return replayed = true');
+    assert.equal(replayAE.request_id, reqAD1.request_id);
+    assert.equal(replayAE.created_at.toISOString(), reqAD1.created_at.toISOString());
+
+    // Restore room_types.name so subsequent tests operate cleanly
+    await fixture.owner.query(
+      `UPDATE room_types SET name = 'Royal Suite' WHERE id = 101`
+    );
+    const restoredState = (await fixture.owner.query(
+      `SELECT public.sellable_offer_revision_state($1, $2) AS state`,
+      [offerId, 2]
+    )).rows[0].state;
+    assert.equal(restoredState, 'VERIFIED_OFFER_AVAILABLE');
+
+    // =========================================================================
+    // CASE AF: Same-listing different-room positive case
+    // =========================================================================
+    // Reservation on listing 1, room 101
+    const resAF = await createCommittedRes(2);
+
+    // Create and accept an offer for room 102 on listing 1
+    const draftRoom102 = await offerService.createDraft(fixture.principal(10), {
+      commandId: randomUUID(),
+      listingId: 1,
+      roomTypeId: 102,
+      amountMinor: '650000',
+      stayStart: fixture.today,
+      stayEnd: addDays(fixture.today, 100),
+      effectiveFrom: new Date(Date.now() - 3600000).toISOString(),
+      effectiveUntil: new Date(Date.now() + 100 * 86400000).toISOString(),
+      maxGuests: 2,
+      minNights: 1,
+    });
+    const subRoom102 = await offerService.submit(fixture.principal(10), {
+      offerId: draftRoom102.offerId,
+      revision: 1,
+      expectedVersion: draftRoom102.version,
+    });
+    await fixture.grantOffer(draftRoom102.offerId);
+    await offerService.accept(fixture.principal(90, 'STAFF'), {
+      offerId: draftRoom102.offerId,
+      revision: 1,
+      expectedVersion: subRoom102.version,
+    });
+
+    // Create itinerary quote for room 102
+    const quoteRoom102 = await createItineraryQuote(
+      stays,
+      {
+        offerId: draftRoom102.offerId,
+        revision: 1,
+        checkIn: safeAddDays(fixture.today, 70),
+        checkOut: safeAddDays(fixture.today, 72),
+        guestCount: 2,
+        requestId: randomUUID(),
+      },
+      'user:10'
+    );
+
+    // Request modification: source room 101 -> target room 102 (different room, same listing)
+    const cmdAF = randomUUID();
+    const resultDiffRoom = await requestModification({
+      reservationId: resAF.reservationId,
+      commandId: cmdAF,
+      expectedSourceEffectiveVersion: 1,
+      targetQuoteId: quoteRoom102.id,
+      authenticatedPrincipal: 'user:10',
+    });
+
+    assert.equal(resultDiffRoom.replayed, false);
+    assert.equal(resultDiffRoom.reservation_id, resAF.reservationId);
+    assert.equal(resultDiffRoom.command_id, cmdAF);
+    assert.equal(resultDiffRoom.target_quote_id, quoteRoom102.id);
+
+    // Verify zero target inventory reserved
+    const invRoom102 = (await fixture.owner.query(
+      `SELECT * FROM inventory_days WHERE room_type_id = 102 AND calendar_date BETWEEN $1 AND $2`,
+      [safeAddDays(fixture.today, 70), safeAddDays(fixture.today, 71)]
+    )).rows;
+    for (const row of invRoom102) {
+      assert.equal(row.booked_units, 0, 'No booked units may be allocated on target room 102');
+    }
+
+    // Verify zero target holds
+    const holds102 = (await fixture.owner.query(
+      `SELECT * FROM booking_holds WHERE quote_id = $1`,
+      [quoteRoom102.id]
+    )).rows;
+    assert.equal(holds102.length, 0, 'No booking hold may be created for target quote');
+
+    // Verify zero revisions published
+    const revsAF = (await fixture.owner.query(
+      `SELECT * FROM canonical_reservation_revisions WHERE reservation_id = $1`,
+      [resAF.reservationId]
+    )).rows;
+    assert.equal(revsAF.length, 0, 'No reservation revision may be published');
+
+    console.log('✔ All W4-C3 test matrix cases (A-AF) verified successfully');
   } finally {
     await Promise.all([
       stays?.end(),

@@ -20,27 +20,27 @@
   },
   "migration": {
     "file": "src/migrations/059_canonical_reservation_modification_request.sql",
-    "sha256": "77bd865dac24acde1cae4b7a137360083fc7b9cffc8aa6b0a2e5e3719af971e1",
-    "strategy": "Additive schema extension creating canonical_reservation_modification_requests table with composite foreign keys to W4-C1 sealed revisions and stays_quotes; atomic routine canonical_request_reservation_modification with authorization-before-replay order, wall-clock expiry check post-row-lock, deterministic command fingerprinting, and restricted execution role encho_modification_issuer"
+    "sha256": "b0f928e141e104da23ada5eca745ae508a537a9d44f6dacdde3eb037e4a9df46",
+    "strategy": "Additive schema extension creating canonical_reservation_modification_requests table with composite foreign keys to W4-C1 sealed revisions and stays_quotes; atomic routine canonical_request_reservation_modification with authorization-before-replay order, PRESENT W1 commercial source-currentness check, wall-clock expiry check post-row-lock, deterministic command fingerprinting, and restricted execution role encho_modification_issuer"
   },
   "tableSchema": {
     "tableName": "canonical_reservation_modification_requests",
     "columns": {
       "id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
       "reservation_id": "UUID NOT NULL REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
-      "command_id": "UUID UNIQUE NOT NULL",
+      "command_id": "UUID NOT NULL UNIQUE",
       "command_fingerprint": "TEXT NOT NULL CHECK (command_fingerprint ~ '^[a-f0-9]{64}$')",
-      "request_type": "TEXT NOT NULL CHECK (request_type = 'CANONICAL_RESERVATION_MODIFICATION_REQUEST')",
-      "holder_principal": "TEXT NOT NULL CHECK (holder_principal ~ '^(user:[0-9]+|session:[0-9a-f-]{36})$')",
+      "request_type": "TEXT NOT NULL DEFAULT 'REQUEST_MODIFICATION' CHECK (request_type = 'REQUEST_MODIFICATION')",
+      "holder_principal": "TEXT NOT NULL (validated via routine input validation ^(user:[0-9]+|session:[0-9a-f-]{36})$ and foreign key/holder equality with canonical_reservations.holder_principal; table schema defines NOT NULL without inline CHECK regex)",
       "source_effective_version": "INT NOT NULL CHECK (source_effective_version >= 1)",
       "source_revision_id": "UUID",
       "target_quote_id": "UUID NOT NULL REFERENCES stays_quotes(id) ON DELETE RESTRICT",
-      "created_at": "TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()"
+      "created_at": "TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp()"
     },
-    "shapeConstraint": "chk_modification_request_source_version_shape enforces ((source_effective_version = 1 AND source_revision_id IS NULL) OR (source_effective_version >= 2 AND source_revision_id IS NOT NULL))",
-    "compositeRevisionFk": "fk_mod_req_source_revision_effective references canonical_reservation_revisions(id, reservation_id, version)",
-    "sealFk": "fk_mod_req_source_revision_seal references canonical_reservation_revision_seals(revision_id)",
-    "immutability": "Trigger canonical_reservation_modification_requests_immutable unconditionally rejects UPDATE or DELETE",
+    "shapeConstraint": "chk_modification_request_source_version_shape CHECK ((source_effective_version = 1 AND source_revision_id IS NULL) OR (source_effective_version >= 2 AND source_revision_id IS NOT NULL))",
+    "compositeRevisionFk": "fk_modification_request_source_revision FOREIGN KEY (source_revision_id, reservation_id, source_effective_version) REFERENCES canonical_reservation_revisions(id, reservation_id, version) ON DELETE RESTRICT",
+    "sealFk": "fk_modification_request_source_sealed FOREIGN KEY (source_revision_id) REFERENCES canonical_reservation_revision_seals(revision_id) ON DELETE RESTRICT",
+    "immutability": "Trigger canonical_reservation_modification_requests_immutable executes canonical_reservation_modification_requests_prevent_mutation() which raises CANONICAL_MODIFICATION_REQUEST_IMMUTABLE on UPDATE or DELETE",
     "rowLevelSecurity": "Enabled and forced: ALTER TABLE canonical_reservation_modification_requests ENABLE ROW LEVEL SECURITY; ALTER TABLE canonical_reservation_modification_requests FORCE ROW LEVEL SECURITY"
   },
   "functionSignature": {
@@ -54,10 +54,11 @@
     ],
     "returns": "TABLE (request_id UUID, reservation_id UUID, command_id UUID, holder_principal TEXT, source_effective_version INT, source_revision_id UUID, target_quote_id UUID, created_at TIMESTAMPTZ, replayed BOOLEAN)",
     "security": "VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on",
-    "roleModel": "REVOKE ALL FROM PUBLIC; GRANT EXECUTE TO encho_modification_issuer"
+    "roleModel": "REVOKE ALL FROM PUBLIC and all runtime roles; conditional GRANT EXECUTE to encho_modification_issuer when role exists with strictly pre-validated restricted privileges (no table DML, no schema create, no bypassrls, no superuser)",
+    "roleProvisioningNote": "Role encho_modification_issuer must be provisioned before migration/application in the intended environment; migration skips grant if role does not exist; disposable tests provision it explicitly."
   },
   "architecturalGatesAndOrdering": {
-    "step1_inputValidation": "Rejects NULLs, malformed principals, source version < 1",
+    "step1_inputValidation": "Rejects NULLs, malformed principals (^(user:[0-9]+|session:[0-9a-f-]{36})$), source version < 1",
     "step2_reservationLock": "SELECT * FROM canonical_reservations WHERE id = target_reservation_id FOR UPDATE",
     "step3_originVerification": "Enforces origin_kind = 'ENCHO_DIRECT'",
     "step4_principalAuthorization": "Enforces authenticated_principal = res_row.holder_principal",
@@ -66,45 +67,175 @@
     "step7_mutableGateLifecycle": "canonical_reservation_lifecycle_current.lifecycle_state must be ACTIVE",
     "step8_mutableGateSourceVersion": "canonical_reservation_effective_revisions.effective_version must match target_expected_source_effective_version",
     "step9_mutableGateTargetQuote": "stays_quotes must exist, quote_kind = 'ACCEPTED_OFFER', matching holder principal, matching listing_id",
-    "step10_mutableGateOfferPointer": "Locks sellable_offers FOR UPDATE; verifies quote_row.offer_revision matches offer_ptr.current_accepted_revision and public_disposition = 'ACCEPTED'; checks static listing/room coherence",
-    "step11_mutableGateWallClockExpiry": "Checks stays_quotes.expires_at <= clock_timestamp() strictly AFTER acquiring reservation and offer row locks",
-    "step12_atomicInsertion": "Inserts row with ON CONFLICT (command_id) DO NOTHING; handles unique_violation race safety"
+    "step10_mutableGateOfferPointer": "Locks sellable_offers FOR UPDATE; verifies quote_row.offer_revision matches offer_ptr.current_accepted_revision and public_disposition = 'ACCEPTED'; checks static listing/room coherence, date window, occupancy, currency, and arithmetic",
+    "step11_mutableGatePresentSourceFacts": "Recomputes PRESENT W1 source snapshot via public.sellable_offer_source_snapshot(listing_id, room_type_id); recomputes current_source_hash and current_media_hash; checks against offer_rev_row and verifies approved media URLs are safe; raises MODIFICATION_OFFER_SOURCE_STALE on mismatch or unsafe URL (live inventory check: NONE)",
+    "step12_mutableGateWallClockExpiry": "Checks stays_quotes.expires_at <= clock_timestamp() strictly AFTER acquiring reservation and offer row locks",
+    "step13_atomicInsertion": "Inserts row into canonical_reservation_modification_requests; catches EXCEPTION WHEN unique_violation THEN queries existing row by command_id, verifies matching parameters/fingerprint for idempotent replay return or raises MODIFICATION_COMMAND_CONFLICT on divergence"
   },
-  "focusedTestResults": {
-    "suite": "scripts/testing/w4c3-reservation-modification-request.mjs",
-    "status": "PASS",
-    "casesVerified": [
-      "A. ACTIVE Encho Direct V1 + fresh quote + matching holder: succeeds, persists row, zero inventory mutation, zero target holds, zero revisions",
-      "B. Unknown reservation rejected: MODIFICATION_RESERVATION_NOT_FOUND",
-      "C. Authenticated caller !== reservation holder rejected: MODIFICATION_AUTHORIZATION_DENIED",
-      "D. Authenticated caller !== target quote holder rejected: MODIFICATION_QUOTE_HOLDER_MISMATCH",
-      "E. CANCELLED reservation rejected: MODIFICATION_LIFECYCLE_CONFLICT",
-      "F. Quote expired rejected: MODIFICATION_QUOTE_EXPIRED",
-      "G. Quote expiry DURING LOCK WAIT evaluated with post-wait wall clock: MODIFICATION_QUOTE_EXPIRED",
-      "H. External-origin reservation rejected: MODIFICATION_ORIGIN_NOT_SUPPORTED",
-      "I. Authenticated caller !== reservation holder rejected: MODIFICATION_NOT_AUTHORIZED",
-      "J. Quote kind != ACCEPTED_OFFER rejected: MODIFICATION_QUOTE_KIND_INVALID",
-      "K. Different listing target quote rejected: MODIFICATION_LISTING_MISMATCH",
-      "L. Quote / offer static incoherence rejected: MODIFICATION_QUOTE_INCOHERENT",
-      "M. Superseded offer revision rejected: MODIFICATION_OFFER_SUPERSEDED",
-      "N. Current accepted revision succeeds",
-      "O. Exact idempotent replay returns same stored result: replayed = true",
-      "P. Replay after quote expiry succeeds without re-evaluating expiry: replayed = true",
-      "Q. Replay after offer succession succeeds without re-evaluating: replayed = true",
-      "R. Replay after lifecycle change succeeds without re-evaluating: replayed = true",
-      "S. Same command + changed target quote -> conflict: MODIFICATION_COMMAND_CONFLICT",
-      "T. Same command + changed expected version -> conflict: MODIFICATION_COMMAND_CONFLICT",
-      "U. Stale expected source version rejected: MODIFICATION_SOURCE_VERSION_MISMATCH",
-      "V. Sealed V2 source revision persists exact source_revision_id FK",
-      "W. Unsealed V2 source cannot be referenced by request row: FK constraint rejects",
-      "X. Modification request table is immutable: UPDATE/DELETE rejected by trigger",
-      "Y. Zero inventory mutation verified across all operations",
-      "Z. Concurrent identical commands serialize: exactly one row inserted, second replays",
-      "AA. Concurrent different commands serialize without race corruption",
-      "AB. Negative role probes: PUBLIC, web, worker roles denied EXECUTE; issuer restricted",
-      "AC. Zero modification writer in pg_proc: no routine capable of publishing revisions"
-    ]
-  },
+  "frozenRequirementCoverage": [
+    {
+      "requirement": "ACTIVE V1 create",
+      "testEvidence": "Case A: ACTIVE Encho Direct V1 + fresh quote + matching holder: succeeds, persists row, zero inventory mutation, zero target holds, zero revisions"
+    },
+    {
+      "requirement": "sealed V2 source",
+      "testEvidence": "Case B: Sealed V2 source captures exact revision; unsealed V3 ignored: resolves exact source_revision_id FK"
+    },
+    {
+      "requirement": "stale expected version",
+      "testEvidence": "Case C: Stale expected source version rejected: expected version != effective_version raises MODIFICATION_SOURCE_VERSION_MISMATCH"
+    },
+    {
+      "requirement": "CANCELLATION_REQUESTED rejection",
+      "testEvidence": "Case D: CANCELLATION_REQUESTED lifecycle rejected: raises MODIFICATION_LIFECYCLE_CONFLICT"
+    },
+    {
+      "requirement": "CANCELLED rejection",
+      "testEvidence": "Case E: CANCELLED lifecycle rejected: raises MODIFICATION_LIFECYCLE_CONFLICT"
+    },
+    {
+      "requirement": "quote expiry",
+      "testEvidence": "Case F: Quote expired rejected: wall-clock expiry raises MODIFICATION_QUOTE_EXPIRED"
+    },
+    {
+      "requirement": "expiry during lock wait",
+      "testEvidence": "Case G: Quote expiry DURING LOCK WAIT evaluated with post-wait wall clock: evaluates clock_timestamp() post-lock and raises MODIFICATION_QUOTE_EXPIRED"
+    },
+    {
+      "requirement": "holder mismatch",
+      "testEvidence": "Case H: Reservation / quote holder mismatch rejected: authenticated principal !== reservation/quote holder raises MODIFICATION_AUTHORIZATION_DENIED / MODIFICATION_QUOTE_HOLDER_MISMATCH"
+    },
+    {
+      "requirement": "foreign principal known-command replay",
+      "testEvidence": "Case I: Foreign authenticated principal rejected for create & replay: foreign principal trying to replay existing command raises MODIFICATION_AUTHORIZATION_DENIED without leaking stored request"
+    },
+    {
+      "requirement": "quote-kind rejection",
+      "testEvidence": "Case J: Quote kind != ACCEPTED_OFFER rejected: non-accepted quote raises MODIFICATION_QUOTE_KIND_INVALID"
+    },
+    {
+      "requirement": "different-listing rejection",
+      "testEvidence": "Case K: Different listing target quote rejected: target quote listing !== reservation listing raises MODIFICATION_LISTING_MISMATCH"
+    },
+    {
+      "requirement": "static quote/offer incoherence",
+      "testEvidence": "Case L: Quote / offer static incoherence rejected: corrupted quote amount, dates, or guests mismatching offer raises MODIFICATION_QUOTE_INCOHERENT"
+    },
+    {
+      "requirement": "superseded offer rejection",
+      "testEvidence": "Case M: Superseded offer revision rejected: target quote pointing to historical revision when current_accepted_revision was superseded raises MODIFICATION_OFFER_SUPERSEDED"
+    },
+    {
+      "requirement": "CURRENT SOURCE-FACT DRIFT rejection",
+      "testEvidence": "Case AD: Stale W1 source facts rejected for NEW modification request: mutated room_types.name causes W1 to report OFFER_STALE_REVIEW and NEW C3 command raises MODIFICATION_OFFER_SOURCE_STALE; zero rows inserted"
+    },
+    {
+      "requirement": "same-listing/different-room success",
+      "testEvidence": "Case AF: Same-listing different-room positive case: target quote on different room within same listing succeeds cleanly; zero inventory/holds/revisions"
+    },
+    {
+      "requirement": "exact replay",
+      "testEvidence": "Case O: Exact idempotent replay returns same stored result: returns replayed = true with identical request_id and created_at"
+    },
+    {
+      "requirement": "replay after expiry",
+      "testEvidence": "Case P: Replay after quote expiry succeeds without re-evaluating expiry: replayed = true before mutable gates"
+    },
+    {
+      "requirement": "replay after offer succession",
+      "testEvidence": "Case Q: Replay after offer succession succeeds without re-evaluating: replayed = true before mutable gates"
+    },
+    {
+      "requirement": "replay after SOURCE FACT DRIFT",
+      "testEvidence": "Case AE: Replay after source drift succeeds without re-evaluating source currentness: returns replayed = true for pre-drift command"
+    },
+    {
+      "requirement": "replay after lifecycle change",
+      "testEvidence": "Case R: Replay after lifecycle change succeeds without re-evaluating: cancelled reservation returns replayed = true"
+    },
+    {
+      "requirement": "command mutation: target quote",
+      "testEvidence": "Case S: Same command + changed target quote -> conflict: raises MODIFICATION_COMMAND_CONFLICT"
+    },
+    {
+      "requirement": "command mutation: expected version",
+      "testEvidence": "Case T: Same command + changed expected source version -> conflict: raises MODIFICATION_COMMAND_CONFLICT"
+    },
+    {
+      "requirement": "command mutation: principal",
+      "testEvidence": "Case U: Same command + changed principal -> rejected without disclosure: raises MODIFICATION_AUTHORIZATION_DENIED"
+    },
+    {
+      "requirement": "command mutation: reservation",
+      "testEvidence": "Case V: Same command + changed reservation -> rejected: raises MODIFICATION_AUTHORIZATION_DENIED"
+    },
+    {
+      "requirement": "same-command concurrency",
+      "testEvidence": "Case W: Same-command two-connection race creates exactly 1 row: concurrent identical commands serialize cleanly via unique_violation exception handling and idempotent return"
+    },
+    {
+      "requirement": "distinct-command concurrency",
+      "testEvidence": "Case X: Distinct-command same-source requests are both allowed: two separate commands on same reservation both succeed and persist distinct rows"
+    },
+    {
+      "requirement": "request immutability",
+      "testEvidence": "Case AB & Case Y: Table trigger rejects UPDATE and DELETE with CANONICAL_MODIFICATION_REQUEST_IMMUTABLE; structural check constraint chk_modification_request_source_version_shape enforces shape"
+    },
+    {
+      "requirement": "role isolation",
+      "testEvidence": "Case AB: Role isolation & immutability enforcement: unprivileged roles denied EXECUTE on routine; issuer restricted from table DML and non-routine tables"
+    },
+    {
+      "requirement": "no-op request",
+      "testEvidence": "Case Z: No-op quote succeeds with zero side effects: quote with identical dates/room succeeds with zero side effects"
+    },
+    {
+      "requirement": "write-set containment",
+      "testEvidence": "Case AA: Write-set containment: only request table modified; zero changes to inventory_days, booking_holds, canonical_reservations, canonical_reservation_revisions, etc."
+    },
+    {
+      "requirement": "no public route",
+      "testEvidence": "Case AC: Zero public ingress route / runtime caller evidence: committed diff touches ONLY 3 files with zero routes/controllers, git grep finds zero runtime callers"
+    },
+    {
+      "requirement": "no modification writer",
+      "testEvidence": "Case AC: Zero modification writer in pg_proc: no routine capable of publishing revisions exists in database"
+    }
+  ],
+  "casesVerified": [
+    "A: ACTIVE Encho Direct V1 + fresh quote + matching holder: succeeds, persists row, zero inventory mutation, zero target holds, zero revisions",
+    "B: Sealed V2 source captures exact revision; unsealed V3 ignored",
+    "C: Stale expected source version rejected: MODIFICATION_SOURCE_VERSION_MISMATCH",
+    "D: CANCELLATION_REQUESTED lifecycle rejected: MODIFICATION_LIFECYCLE_CONFLICT",
+    "E: CANCELLED lifecycle rejected: MODIFICATION_LIFECYCLE_CONFLICT",
+    "F: Quote expired rejected: MODIFICATION_QUOTE_EXPIRED",
+    "G: Quote expiry DURING LOCK WAIT evaluated with post-wait wall clock: MODIFICATION_QUOTE_EXPIRED",
+    "H: Reservation / quote holder mismatch rejected: MODIFICATION_AUTHORIZATION_DENIED / MODIFICATION_QUOTE_HOLDER_MISMATCH",
+    "I: Foreign authenticated principal rejected for create & replay: MODIFICATION_AUTHORIZATION_DENIED",
+    "J: Quote kind != ACCEPTED_OFFER rejected: MODIFICATION_QUOTE_KIND_INVALID",
+    "K: Different listing target quote rejected: MODIFICATION_LISTING_MISMATCH",
+    "L: Quote / offer static incoherence rejected: MODIFICATION_QUOTE_INCOHERENT",
+    "M: Superseded offer revision rejected: MODIFICATION_OFFER_SUPERSEDED",
+    "N: Current accepted revision succeeds",
+    "O: Exact idempotent replay returns same stored result: replayed = true",
+    "P: Replay after quote expiry succeeds without re-evaluating expiry: replayed = true",
+    "Q: Replay after offer succession succeeds without re-evaluating: replayed = true",
+    "R: Replay after lifecycle change succeeds without re-evaluating: replayed = true",
+    "S: Same command + changed target quote -> conflict: MODIFICATION_COMMAND_CONFLICT",
+    "T: Same command + changed expected source version -> conflict: MODIFICATION_COMMAND_CONFLICT",
+    "U: Same command + changed principal -> rejected without disclosure: MODIFICATION_AUTHORIZATION_DENIED",
+    "V: Same command + changed reservation -> rejected: MODIFICATION_AUTHORIZATION_DENIED",
+    "W: Same-command two-connection race creates exactly 1 row: unique_violation race recovery returns replayed = true",
+    "X: Distinct-command same-source requests are both allowed: persists distinct rows",
+    "Y: Invalid V2 source structural combinations rejected by constraints",
+    "Z: No-op quote succeeds with zero side effects",
+    "AA: Write-set containment: only request table modified",
+    "AB: Role isolation & immutability enforcement: unprivileged roles denied EXECUTE; table UPDATE/DELETE rejected",
+    "AC: Zero public ingress route / runtime caller evidence: dual evidence committed diff + caller search",
+    "AD: Stale W1 source facts rejected for NEW modification request: MODIFICATION_OFFER_SOURCE_STALE; zero rows inserted",
+    "AE: Replay after source drift succeeds without re-evaluating source currentness: replayed = true",
+    "AF: Same-listing different-room positive case: succeeds cleanly with zero inventory/hold/revision mutation"
+  ],
   "neighboringRegressions": {
     "w3_canonical_reservation": "PASS (13/13)",
     "w4a_canonical_lifecycle": "PASS (34/34)",
@@ -118,6 +249,12 @@
     "eslint": "PASS (npx eslint scripts/testing/w4c3-reservation-modification-request.mjs)",
     "jsonValidation": "PASS (python3 -m json.tool receipt)",
     "diffCheck": "PASS (git diff --check)"
+  },
+  "evidenceDetails": {
+    "noPublicRouteEvidence": "Evidence A: git diff --name-only affc14b185dedb3d54a3c414876f98f0f3e85061...HEAD touches only 3 files (migration, test, receipt) with zero files in src/server or src/routes. Evidence B: git grep -n 'canonical_request_reservation_modification' src/ finds zero application/runtime callers outside migration 059.",
+    "writeSetContainment": "Creation routine's only DML target is canonical_reservation_modification_requests based on SQL source audit. Supplementary database verification proves zero changes to inventory_days.booked_units, zero booking_holds, zero canonical_reservation_revisions, zero financial records.",
+    "w1SourceSnapshotInputs": "Derived from migration 049 public.sellable_offer_source_snapshot: listings (id, user_id, title, slug, publication_status, currency), room_types (id, name, type, currency, max_occupancy, inventory_count, min_stay_nights, description, specs, features, amenities), and media_assets (id, url, room_type_id, category, is_sleeping_area, moderation_status for approved media).",
+    "w1SourceHashAlgorithm": "Derived from migration 049: encode(sha256(convert_to(public.sellable_offer_source_snapshot(listing_id, room_type_id)::text, 'UTF8')), 'hex'). Evaluated directly without calling inventory-checking predicate stays_current_accepted_offer."
   },
   "nextSliceBoundary": {
     "w4c3Scope": "CANONICAL PENDING MODIFICATION REQUEST AUTHORITY ONLY",

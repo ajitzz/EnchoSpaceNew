@@ -117,6 +117,9 @@ DECLARE
   offer_rev_row RECORD;
   room_row RECORD;
   listing_row RECORD;
+  current_facts JSONB;
+  current_source_hash TEXT;
+  current_media_hash TEXT;
   new_req_id UUID;
   new_created_at TIMESTAMPTZ;
 BEGIN
@@ -303,12 +306,30 @@ BEGIN
     RAISE EXCEPTION 'MODIFICATION_LISTING_NOT_PUBLISHED';
   END IF;
 
-  -- 11. Mutable Gate 5: Wall-clock Quote Expiry check AFTER all locks
+  -- 11. Mutable Gate 5: Recompute PRESENT W1 source snapshot/hash (commercial source currentness without live inventory check)
+  current_facts := public.sellable_offer_source_snapshot(quote_row.listing_id, quote_row.room_type_id);
+  IF current_facts IS NULL THEN
+    RAISE EXCEPTION 'MODIFICATION_OFFER_SOURCE_STALE: current source facts not found';
+  END IF;
+
+  current_source_hash := encode(sha256(convert_to(current_facts::text, 'UTF8')), 'hex');
+  current_media_hash := encode(sha256(convert_to((current_facts->'media')::text, 'UTF8')), 'hex');
+
+  IF current_source_hash IS DISTINCT FROM offer_rev_row.source_hash
+     OR current_media_hash IS DISTINCT FROM offer_rev_row.media_hash
+     OR EXISTS(SELECT 1 FROM public.media_assets current_media WHERE current_media.entity_type = 'listing'
+       AND current_media.entity_id = quote_row.listing_id AND current_media.room_type_id = quote_row.room_type_id
+       AND current_media.moderation_status = 'approved'
+       AND NOT public.sellable_offer_media_url_safe(current_media.url)) THEN
+    RAISE EXCEPTION 'MODIFICATION_OFFER_SOURCE_STALE';
+  END IF;
+
+  -- 12. Mutable Gate 6: Wall-clock Quote Expiry check AFTER all locks
   IF quote_row.expires_at <= clock_timestamp() THEN
     RAISE EXCEPTION 'MODIFICATION_QUOTE_EXPIRED';
   END IF;
 
-  -- 12. Insert Immutable Request
+  -- 13. Insert Immutable Request
   BEGIN
     INSERT INTO public.canonical_reservation_modification_requests (
       reservation_id,
