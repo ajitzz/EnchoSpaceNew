@@ -1,0 +1,562 @@
+{
+  "task": "W4-C4 Task 1: Cross-Writer Inventory Lock-Order Diagnostic",
+  "canonicalBase": "e2479b1c7601e21a6198b7784fa93ac3a4e27dad",
+  "workerBranch": "worker/antigravity/w4-c4-lock-order-diagnostic",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "scope": {
+    "slice": "W4-C4 TASK 1: DIAGNOSTIC / PROOF ONLY",
+    "boundary": "Cross-writer PostgreSQL row lock analysis and two-connection concurrency probes across current accepted inventory writers; zero physical modification implementation; zero hardening fixes applied; zero W4-D; zero public ingress",
+    "activeNodeMajor": 24,
+    "nvmrcMajor": 20,
+    "nvmrcDrift": "KNOWN_PROCESS_DEBT_PRESERVED"
+  },
+  "currentAcceptedDirectInventoryWriters": [
+    {
+      "writerId": "WRITER-01-HOLD-ACQUIRE",
+      "routine": "acquireHold",
+      "sourceFile": "src/services/inventoryHoldService.ts",
+      "lines": "252-718",
+      "callingDomain": "Encho Stays / Booking Intent / Itinerary Hold",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.held_units (+units)",
+        "inventory_days.blocked_units (GREATEST(blocked_units, 1) during mapped legacy block reconciliation)"
+      ],
+      "otherRelevantRowsLocked": [
+        "stays_quotes (SELECT, read-only)",
+        "stays_expire_holds_for_itinerary (locks expired booking_holds then expired inventory_days)",
+        "sellable_offers via stays_current_accepted_offer (FOR SHARE)",
+        "room_types (SELECT, read-only)",
+        "room_calendar_blocks (SELECT, read-only)"
+      ],
+      "explicitLocks": "SELECT id, listing_id, calendar_date, total_units, held_units, booked_units, blocked_units FROM inventory_days WHERE room_type_id = $1 AND calendar_date = ANY($2::date[]) ORDER BY calendar_date ASC FOR UPDATE",
+      "implicitUpdateLocks": [
+        "UPDATE inventory_days SET held_units = held_units + $1 WHERE id = $2",
+        "INSERT INTO booking_holds",
+        "INSERT INTO booking_hold_nights"
+      ],
+      "transactionBoundary": "Explicit single transaction (client.query('BEGIN') ... COMMIT / ROLLBACK)",
+      "idempotencyAndReplay": "Checks active hold by (holder_principal, idempotency_key) prior to transaction; recovers on unique collision race",
+      "collectionOrder": "ORDER BY calendar_date ASC",
+      "evidenceType": "SOURCE_REVIEW"
+    },
+    {
+      "writerId": "WRITER-02A-HOLD-RELEASE",
+      "routine": "releaseHold",
+      "sourceFile": "src/services/inventoryHoldService.ts",
+      "lines": "828-935",
+      "callingDomain": "Guest / Admin Explicit Hold Release",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.held_units (-units)"
+      ],
+      "otherRelevantRowsLocked": [
+        "booking_holds (id) FOR UPDATE (Step 1)",
+        "booking_hold_nights (read-only)"
+      ],
+      "explicitLocks": "SELECT id, held_units, calendar_date FROM inventory_days WHERE room_type_id = $1 AND calendar_date >= $2::date AND calendar_date < $3::date ORDER BY calendar_date ASC FOR UPDATE (Step 3)",
+      "implicitUpdateLocks": [
+        "UPDATE inventory_days SET held_units = held_units - $1 WHERE id = $2",
+        "UPDATE booking_holds SET status = 'RELEASED', released_at = NOW(), release_reason = $1 WHERE id = $2"
+      ],
+      "transactionBoundary": "Explicit single transaction (BEGIN ... COMMIT / ROLLBACK)",
+      "idempotencyAndReplay": "If hold.status !== 'ACTIVE', commits immediately with releasedUnits: 0",
+      "collectionOrder": "booking_holds (id) FOR UPDATE -> inventory_days ORDER BY calendar_date ASC FOR UPDATE",
+      "evidenceType": "SOURCE_REVIEW"
+    },
+    {
+      "writerId": "WRITER-02B-HOLD-SWEEPER",
+      "routine": "sweepExpiredHolds",
+      "sourceFile": "src/services/inventoryHoldService.ts",
+      "lines": "939-1017",
+      "callingDomain": "Background Maintenance Worker (src/server/marketing/worker.ts)",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.held_units (-units)"
+      ],
+      "otherRelevantRowsLocked": [
+        "booking_holds (id) FOR UPDATE (per expired hold)"
+      ],
+      "explicitLocks": "SELECT bhn.inventory_day_id, bhn.units, iday.held_units, iday.calendar_date FROM booking_hold_nights bhn JOIN inventory_days iday ON iday.id = bhn.inventory_day_id WHERE bhn.hold_id = $1 ORDER BY bhn.stay_date ASC FOR UPDATE",
+      "implicitUpdateLocks": [
+        "UPDATE inventory_days SET held_units = held_units - $1 WHERE id = $2",
+        "UPDATE booking_holds SET status = 'EXPIRED', released_at = NOW(), release_reason = 'TTL_EXPIRED' WHERE id = $1"
+      ],
+      "transactionBoundary": "Individual transaction per expired hold (BEGIN ... COMMIT / ROLLBACK)",
+      "idempotencyAndReplay": "Selects status = 'ACTIVE' AND expires_at <= NOW(); skips holds already non-ACTIVE on lock",
+      "collectionOrder": "booking_holds (id) FOR UPDATE -> inventory_days ORDER BY bhn.stay_date ASC FOR UPDATE",
+      "evidenceType": "SOURCE_REVIEW"
+    },
+    {
+      "writerId": "WRITER-03-SQL-ITINERARY-EXPIRY",
+      "routine": "stays_expire_holds_for_itinerary",
+      "sourceFile": "src/migrations/050_accepted_offer_itinerary_quotes.sql",
+      "lines": "142-175",
+      "callingDomain": "Encho Stays Itinerary Pre-Hold Cleanup / acquireHold helper",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.held_units (-units)"
+      ],
+      "otherRelevantRowsLocked": [
+        "booking_holds (expires_at, id) FOR UPDATE in outer loop"
+      ],
+      "explicitLocks": "SELECT day.id, day.held_units, n.units FROM public.booking_hold_nights n JOIN public.inventory_days day ON day.id = n.inventory_day_id WHERE n.hold_id = hold_row.id ORDER BY n.stay_date FOR UPDATE OF day in inner loop",
+      "implicitUpdateLocks": [
+        "UPDATE public.inventory_days SET held_units = held_units - night_row.units WHERE id = night_row.id",
+        "UPDATE public.booking_holds SET status = 'EXPIRED', released_at = statement_timestamp() WHERE id = hold_row.id"
+      ],
+      "transactionBoundary": "PL/pgSQL function executing inside caller transaction",
+      "idempotencyAndReplay": "Processes strictly status = 'ACTIVE' AND expires_at <= statement_timestamp()",
+      "collectionOrder": "booking_holds (expires_at, id) FOR UPDATE -> inventory_days ORDER BY n.stay_date ASC FOR UPDATE OF day",
+      "evidenceType": "SQL_REVIEW"
+    },
+    {
+      "writerId": "WRITER-04-W3-FINALIZATION",
+      "routine": "canonical_finalize_direct_hold",
+      "sourceFile": "src/migrations/052_canonical_reservation_hold_finalization.sql",
+      "lines": "65-192",
+      "callingDomain": "Canonical Reservation Finalization Worker / Payment Composition",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.held_units (-units)",
+        "inventory_days.booked_units (+units)"
+      ],
+      "otherRelevantRowsLocked": [
+        "canonical_reservation_commands (command_id) FOR UPDATE (Step 1)",
+        "booking_holds (target_hold) FOR UPDATE (Step 2)",
+        "stays_quotes, sellable_offers, sellable_offer_revisions, listings, room_types FOR SHARE (Step 3)"
+      ],
+      "explicitLocks": "SELECT day.id, day.calendar_date, day.listing_id, day.held_units, allocation.units, allocation.stay_date, allocation.inventory_day_id FROM public.inventory_days day LEFT JOIN public.booking_hold_nights allocation ON allocation.inventory_day_id = day.id AND allocation.hold_id = target_hold WHERE day.room_type_id = held.room_type_id AND day.calendar_date >= held.check_in_date AND day.calendar_date < held.check_out_date ORDER BY day.calendar_date, day.id FOR UPDATE OF day (Step 5)",
+      "implicitUpdateLocks": [
+        "INSERT INTO canonical_reservations",
+        "INSERT INTO canonical_reservation_nights",
+        "UPDATE public.inventory_days SET held_units = held_units - night.units, booked_units = booked_units + night.units WHERE id = night.id",
+        "UPDATE public.booking_holds SET status = 'CONSUMED' WHERE id = target_hold AND status = 'ACTIVE'",
+        "UPDATE public.canonical_reservation_commands SET reservation_id = saved_id WHERE command_id = target_command"
+      ],
+      "transactionBoundary": "PL/pgSQL function executing in caller transaction",
+      "idempotencyAndReplay": "Command fence check returns (fence.reservation_id, TRUE) on duplicate command_id with matching fingerprint",
+      "collectionOrder": "canonical_reservation_commands -> booking_holds -> stays_quotes/offers/rooms (SHARE) -> inventory_days ORDER BY day.calendar_date, day.id FOR UPDATE OF day",
+      "evidenceType": "SQL_REVIEW"
+    },
+    {
+      "writerId": "WRITER-06-CANCELLATION",
+      "routine": "canonical_complete_reservation_cancellation",
+      "sourceFile": "src/migrations/058_version_aware_cancellation_release.sql",
+      "lines": "102-395",
+      "callingDomain": "Internal Cancellation Decision Executor (W4-B / W4-C2)",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.booked_units (-released units)"
+      ],
+      "otherRelevantRowsLocked": [
+        "canonical_reservations (target_reservation_id) FOR UPDATE (Lock Order Step 1)",
+        "canonical_reservation_cancellation_authorizations (target_authorization_id) FOR UPDATE (Lock Order Step 2)"
+      ],
+      "explicitLocks": "V1: SELECT day.id, day.calendar_date, day.booked_units, day.held_units, day.total_units, crn.units AS units_to_release FROM public.canonical_reservation_nights crn JOIN public.inventory_days day ON day.id = crn.inventory_day_id WHERE crn.reservation_id = target_reservation_id ORDER BY day.calendar_date ASC, day.id ASC FOR UPDATE OF day; V2+: SELECT day.id, day.calendar_date, day.booked_units, day.held_units, day.total_units, rrn.units AS units_to_release FROM public.canonical_reservation_revision_nights rrn JOIN public.inventory_days day ON day.id = rrn.inventory_day_id WHERE rrn.revision_id = eff_rec.effective_revision_id ORDER BY day.calendar_date ASC, day.id ASC FOR UPDATE OF day (Lock Order Step 5)",
+      "implicitUpdateLocks": [
+        "UPDATE public.inventory_days SET booked_units = booked_units - day_rec.units_to_release WHERE id = day_rec.id",
+        "INSERT INTO public.canonical_reservation_events",
+        "INSERT INTO public.canonical_reservation_cancellation_inventory_releases",
+        "UPDATE public.canonical_reservation_cancellation_authorizations SET consumed_at = NOW(), consumed_by_event_id = new_event_id",
+        "INSERT INTO public.canonical_reservation_lifecycle_commands"
+      ],
+      "transactionBoundary": "PL/pgSQL function executing in caller transaction",
+      "idempotencyAndReplay": "Command receipt replay check returns stored release event and release_id with replayed = true",
+      "collectionOrder": "canonical_reservations -> canonical_reservation_cancellation_authorizations -> inventory_days ORDER BY day.calendar_date ASC, day.id ASC FOR UPDATE OF day",
+      "evidenceType": "SQL_REVIEW"
+    },
+    {
+      "writerId": "WRITER-07A-CALENDAR-CREATE-BLOCK",
+      "routine": "CalendarService.create",
+      "sourceFile": "src/server/calendar.ts",
+      "lines": "118-135",
+      "callingDomain": "Host Calendar Management / Host UI",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.blocked_units (+1)"
+      ],
+      "otherRelevantRowsLocked": [
+        "Advisory transaction lock: pg_advisory_xact_lock(hashtextextended('calendar:${actorId}:${requestId}', 0))",
+        "users (actorId) FOR SHARE",
+        "listings (listingId) FOR SHARE",
+        "room_types (roomTypeId, listingId) FOR SHARE"
+      ],
+      "explicitLocks": "SELECT id FROM inventory_days WHERE room_type_id=$1 AND calendar_date=ANY($2::date[]) ORDER BY calendar_date FOR UPDATE (line 126)",
+      "implicitUpdateLocks": [
+        "INSERT INTO room_calendar_blocks ... RETURNING id",
+        "UPDATE inventory_days SET blocked_units=blocked_units+1, updated_at=now() WHERE room_type_id=$1 AND calendar_date=ANY($2::date[]) (line 132, all rows already locked by SELECT ... FOR UPDATE above)"
+      ],
+      "transactionBoundary": "Scoped database transaction (BEGIN ... COMMIT / ROLLBACK)",
+      "idempotencyAndReplay": "Advisory transaction lock + calendar_operations table lookup by (actor_id, request_id)",
+      "collectionOrder": "Advisory lock -> listings/room_types (SHARE) -> inventory_days ORDER BY calendar_date FOR UPDATE",
+      "evidenceType": "SOURCE_REVIEW"
+    },
+    {
+      "writerId": "WRITER-07B-CALENDAR-REMOVE-BLOCK",
+      "routine": "CalendarService.remove",
+      "sourceFile": "src/server/calendar.ts",
+      "lines": "136-151",
+      "callingDomain": "Host Calendar Management / Host UI",
+      "classification": "ACCEPTED_RUNTIME_DIRECT",
+      "countersMutated": [
+        "inventory_days.blocked_units (-1)"
+      ],
+      "otherRelevantRowsLocked": [
+        "Advisory transaction lock: pg_advisory_xact_lock(hashtextextended('calendar:${actorId}:${requestId}', 0))",
+        "users (actorId) FOR SHARE",
+        "listings (listingId) FOR SHARE",
+        "room_calendar_blocks (blockId, listingId) FOR UPDATE (line 139)"
+      ],
+      "explicitLocks": "SELECT id FROM inventory_days WHERE room_type_id=$1 AND calendar_date=ANY($2::date[]) ORDER BY calendar_date FOR UPDATE (line 143)",
+      "implicitUpdateLocks": [
+        "UPDATE inventory_days SET blocked_units=blocked_units-1, updated_at=now() WHERE room_type_id=$1 AND calendar_date=ANY($2::date[]) (line 147, all rows already locked by SELECT ... FOR UPDATE above)",
+        "DELETE FROM room_calendar_blocks WHERE id=$1 AND listing_id=$2"
+      ],
+      "transactionBoundary": "Scoped database transaction (BEGIN ... COMMIT / ROLLBACK)",
+      "idempotencyAndReplay": "Advisory transaction lock + calendar_operations table lookup by (actor_id, request_id)",
+      "collectionOrder": "Advisory lock -> room_calendar_blocks (id) FOR UPDATE -> inventory_days ORDER BY calendar_date FOR UPDATE",
+      "evidenceType": "SOURCE_REVIEW"
+    }
+  ],
+  "currentAcceptedIndirectInventoryWriters": [
+    {
+      "writerId": "WRITER-05-COMPOSITION",
+      "routine": "canonical_compose_payment_reservation",
+      "sourceFile": "src/migrations/054_canonical_payment_reservation_composition.sql",
+      "lines": "201-445",
+      "callingDomain": "Payment Webhook Processing / Settlement Worker",
+      "classification": "ACCEPTED_RUNTIME_INDIRECT",
+      "countersMutated": [
+        "Mutates inventory counters solely by delegating to canonical_finalize_direct_hold"
+      ],
+      "preFinalizationLocks": [
+        "canonical_payment_reservations (command_id) FOR UPDATE (Step 2)",
+        "canonical_payment_attempts (target_payment_attempt_id) FOR UPDATE (Step 3)",
+        "canonical_payment_reservations (payment_attempt_id) FOR UPDATE (Step 3)",
+        "booking_holds (attempt.hold_id) FOR UPDATE (Step 7)"
+      ],
+      "lockOrderRelationshipWithInventory": "Pre-locks booking_holds matching canonical_finalize_direct_hold; does not lock inventory_days directly; zero cross-domain reversal",
+      "evidenceType": "SQL_REVIEW"
+    }
+  ],
+  "ownerTestOnlyWriters": [
+    {
+      "writerId": "WRITER-08-M4-HOST-BLOCK-HELPER",
+      "routine": "createHostCalendarBlock",
+      "sourceFile": "src/services/inventoryHoldService.ts:723-823",
+      "callingDomain": "m4_inventory_holds.test.ts fixture test helper",
+      "classification": "OWNER_TEST_ONLY",
+      "countersMutated": [
+        "inventory_days.blocked_units (+1)"
+      ],
+      "lockOrder": "room_types read -> inventory_days ORDER BY calendar_date ASC FOR UPDATE -> UPDATE inventory_days -> INSERT room_calendar_blocks"
+    },
+    {
+      "writerId": "WRITER-TEST-RAW-DML",
+      "routine": "Direct SQL UPDATE inventory_days",
+      "sourceFiles": [
+        "src/test/harvo/w4b_canonical_cancellation_pg.test.ts",
+        "src/test/harvo/destination_pools.test.ts",
+        "src/test/harvo/w1_review_fingerprint_pg.test.ts",
+        "src/test/harvo/w3_canonical_reservation_pg.test.ts",
+        "src/test/m4_inventory_holds.test.ts",
+        "src/test/harvo/calendar_boundary.test.ts"
+      ],
+      "classification": "OWNER_TEST_ONLY"
+    }
+  ],
+  "legacyOutOfScopeWriters": [],
+  "futureAbsentWriters": [
+    {
+      "writerId": "WRITER-FUTURE-PHYSICAL-MODIFICATION",
+      "routine": "physical reservation modification / inventory replacement writer",
+      "classification": "FUTURE_ABSENT",
+      "presenceInPgProc": 0
+    }
+  ],
+  "resourceOrderGraph": {
+    "resourceHierarchy": [
+      "Level 1: Command / Advisory Locks (canonical_reservation_commands, canonical_payment_reservations, canonical_reservation_lifecycle_commands, pg_advisory_xact_lock)",
+      "Level 2: Payment Attempts (canonical_payment_attempts)",
+      "Level 3: Reservation Root (canonical_reservations)",
+      "Level 4: Cancellation Authorization (canonical_reservation_cancellation_authorizations)",
+      "Level 5: Hold Root (booking_holds)",
+      "Level 6: Commercial Authority / Room Scope (stays_quotes, sellable_offers, room_types, listings) [FOR SHARE]",
+      "Level 7: Calendar Block Entity (room_calendar_blocks)",
+      "Level 8: Physical Inventory Days (inventory_days locked strictly in calendar_date ASC order, tie-broken by id ASC)"
+    ],
+    "edges": [
+      { "from": "Command", "to": "Hold", "writer": "canonical_finalize_direct_hold, canonical_compose_payment_reservation" },
+      { "from": "Command", "to": "Payment Attempt", "writer": "canonical_compose_payment_reservation" },
+      { "from": "Payment Attempt", "to": "Hold", "writer": "canonical_compose_payment_reservation" },
+      { "from": "Reservation", "to": "Cancellation Authorization", "writer": "canonical_complete_reservation_cancellation" },
+      { "from": "Cancellation Authorization", "to": "inventory_days", "writer": "canonical_complete_reservation_cancellation" },
+      { "from": "Hold", "to": "Commercial Authority (SHARE)", "writer": "canonical_finalize_direct_hold" },
+      { "from": "Commercial Authority (SHARE)", "to": "inventory_days", "writer": "canonical_finalize_direct_hold" },
+      { "from": "Hold", "to": "inventory_days", "writer": "releaseHold, sweepExpiredHolds, stays_expire_holds_for_itinerary" },
+      { "from": "Advisory Lock", "to": "Listings/Rooms (SHARE)", "writer": "CalendarService.create, CalendarService.remove" },
+      { "from": "Listings/Rooms (SHARE)", "to": "Calendar Block", "writer": "CalendarService.remove" },
+      { "from": "Calendar Block", "to": "inventory_days", "writer": "CalendarService.remove" },
+      { "from": "Listings/Rooms (SHARE)", "to": "inventory_days", "writer": "CalendarService.create" }
+    ],
+    "cycles": "NONE; graph is a strict Directed Acyclic Graph (DAG) with zero backward edges from inventory_days to earlier entities",
+    "evidenceType": "SOURCE_REVIEW"
+  },
+  "inventoryRowOrdering": {
+    "singleRoomDeterminism": "Every current runtime writer queries inventory_days with explicit ORDER BY calendar_date ASC (or ORDER BY day.calendar_date, day.id / ORDER BY calendar_date ASC, id ASC)",
+    "uniquenessGuarantee": "Migration 005 enforces uq_inventory_days_room_date UNIQUE(room_type_id, calendar_date); for any single room_type_id, at most one row exists per date",
+    "arrayInputIndependence": "WHERE calendar_date = ANY($dates) evaluates without preserving input array order; the query plan sorts by ORDER BY calendar_date ASC before LockRows executes; two-connection probe confirmed descending array input locks in identical calendar_date ASC order",
+    "calendarTsPreLocking": "CalendarService.create and CalendarService.remove execute SELECT id FROM inventory_days ... ORDER BY calendar_date FOR UPDATE immediately before multi-row UPDATE statements; statement updates execute only on already-locked rows in the identical deterministic date order",
+    "evidenceType": "TWO_CONNECTION_PROBE"
+  },
+  "pairwiseCompatibilityMatrix": [
+    {
+      "pair": "hold acquire vs hold acquire",
+      "legitimateOverlap": "YES (same room_type_id and overlapping dates)",
+      "sharedLockableResources": "inventory_days rows",
+      "writerAOrder": "inventory_days (ORDER BY calendar_date ASC)",
+      "writerBOrder": "inventory_days (ORDER BY calendar_date ASC)",
+      "serializedEarlierBy": "NONE",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Both contenders acquire inventory_days rows in identical calendar_date ASC order; second contender waits cleanly on first date and fails closed on capacity exhaustion if units are consumed"
+    },
+    {
+      "pair": "hold acquire vs hold release",
+      "legitimateOverlap": "YES (same room_type_id and overlapping inventory_days)",
+      "sharedLockableResources": "inventory_days rows",
+      "writerAOrder": "inventory_days (ORDER BY calendar_date ASC)",
+      "writerBOrder": "booking_holds (id) -> inventory_days (ORDER BY calendar_date ASC)",
+      "serializedEarlierBy": "NONE (different hold IDs; hold acquire creates a new hold, release operates on existing hold)",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Shared contention is restricted to inventory_days, which both writers lock in identical calendar_date ASC order"
+    },
+    {
+      "pair": "hold acquire vs SQL itinerary expiry",
+      "legitimateOverlap": "YES (acquireHold calls stays_expire_holds_for_itinerary before acquiring inventory hold)",
+      "sharedLockableResources": "inventory_days rows (and expired booking_holds)",
+      "writerAOrder": "stays_expire_holds_for_itinerary completes first -> inventory_days (ORDER BY calendar_date ASC)",
+      "writerBOrder": "booking_holds -> inventory_days (ORDER BY n.stay_date ASC)",
+      "serializedEarlierBy": "Sequential execution inside acquireHold transaction; or hold header lock if concurrent worker",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Within a transaction, expiry runs strictly before hold locking; across concurrent transactions, both order inventory_days by calendar_date ASC"
+    },
+    {
+      "pair": "hold acquire vs W3 finalization",
+      "legitimateOverlap": "YES (competing for same room_type_id inventory_days)",
+      "sharedLockableResources": "inventory_days rows",
+      "writerAOrder": "inventory_days (ORDER BY calendar_date ASC) -> inserts new hold",
+      "writerBOrder": "canonical_reservation_commands -> booking_holds -> commercial authority (SHARE) -> inventory_days (ORDER BY day.calendar_date, day.id)",
+      "serializedEarlierBy": "NONE (different hold identity)",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Finalizer never locks the new hold being created by acquire; acquire never locks the hold being finalized; on inventory_days, both lock in calendar_date ASC order"
+    },
+    {
+      "pair": "hold acquire vs calendar block",
+      "legitimateOverlap": "YES (same room_type_id and overlapping stay dates)",
+      "sharedLockableResources": "inventory_days rows",
+      "writerAOrder": "inventory_days (ORDER BY calendar_date ASC)",
+      "writerBOrder": "advisory lock -> listings/room_types (SHARE) -> inventory_days (ORDER BY calendar_date)",
+      "serializedEarlierBy": "NONE",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "acquireHold only takes MVCC read on room_types/listings without row locks; on inventory_days, both acquire in calendar_date ASC order"
+    },
+    {
+      "pair": "hold release vs W3 finalization",
+      "legitimateOverlap": "YES (target the same active booking_holds row)",
+      "sharedLockableResources": "booking_holds row, inventory_days rows",
+      "writerAOrder": "booking_holds (id) FOR UPDATE -> inventory_days (ORDER BY calendar_date ASC)",
+      "writerBOrder": "canonical_reservation_commands -> booking_holds (id) FOR UPDATE -> inventory_days (ORDER BY day.calendar_date, day.id)",
+      "serializedEarlierBy": "booking_holds (id) row lock",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Serialized at root level on booking_holds (id); loser transaction wakes up, observes non-ACTIVE hold status (CONSUMED or RELEASED), and cleanly aborts without touching inventory_days"
+    },
+    {
+      "pair": "SQL expiry vs W3 finalization",
+      "legitimateOverlap": "YES (target the same expired/expiring booking_holds row)",
+      "sharedLockableResources": "booking_holds row, inventory_days rows",
+      "writerAOrder": "booking_holds (id) FOR UPDATE -> inventory_days (ORDER BY stay_date ASC)",
+      "writerBOrder": "canonical_reservation_commands -> booking_holds (id) FOR UPDATE -> inventory_days (ORDER BY day.calendar_date, day.id)",
+      "serializedEarlierBy": "booking_holds (id) row lock",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Serialized at root level on booking_holds (id); if expiry locks first, finalizer rechecks expires_at post-lock and throws RESERVATION_HOLD_EXPIRED"
+    },
+    {
+      "pair": "W3 finalization vs calendar block",
+      "legitimateOverlap": "YES (same room_type_id inventory_days)",
+      "sharedLockableResources": "inventory_days rows",
+      "writerAOrder": "commands -> booking_holds -> inventory_days (ORDER BY day.calendar_date, day.id)",
+      "writerBOrder": "advisory lock -> listings/room_types (SHARE) -> inventory_days (ORDER BY calendar_date)",
+      "serializedEarlierBy": "NONE",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Both contenders lock inventory_days rows in calendar_date ASC order; finalizer takes room_types FOR SHARE which is compatible with calendar block FOR SHARE"
+    },
+    {
+      "pair": "cancellation vs calendar block",
+      "legitimateOverlap": "YES (same room_type_id inventory_days)",
+      "sharedLockableResources": "inventory_days rows",
+      "writerAOrder": "canonical_reservations -> authorizations -> inventory_days (ORDER BY day.calendar_date ASC, day.id ASC)",
+      "writerBOrder": "advisory lock -> listings/room_types (SHARE) -> inventory_days (ORDER BY calendar_date)",
+      "serializedEarlierBy": "NONE",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Disjoint root entities; on inventory_days, both acquire strictly in calendar_date ASC order"
+    },
+    {
+      "pair": "cancellation vs other booked-unit operations",
+      "legitimateOverlap": "YES (cancellation vs cancellation on different reservations)",
+      "sharedLockableResources": "inventory_days rows",
+      "writerAOrder": "canonical_reservations (R1) -> authorizations -> inventory_days (ORDER BY calendar_date ASC, id ASC)",
+      "writerBOrder": "canonical_reservations (R2) -> authorizations -> inventory_days (ORDER BY calendar_date ASC, id ASC)",
+      "serializedEarlierBy": "canonical_reservations (id) if same reservation; disjoint root if different",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Both cancellations lock inventory_days in identical (calendar_date ASC, id ASC) order"
+    },
+    {
+      "pair": "two cancellations on same reservation",
+      "legitimateOverlap": "YES (duplicate or concurrent cancellation request for same reservation)",
+      "sharedLockableResources": "canonical_reservations row",
+      "writerAOrder": "canonical_reservations (id) FOR UPDATE -> authorizations -> inventory_days",
+      "writerBOrder": "canonical_reservations (id) FOR UPDATE -> authorizations -> inventory_days",
+      "serializedEarlierBy": "canonical_reservations (id) row lock",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Strictly serialized at Step 1 on canonical_reservations row lock; second cancellation replays existing receipt or encounters LIFECYCLE_STATE_CONFLICT"
+    },
+    {
+      "pair": "two calendar blocks",
+      "legitimateOverlap": "YES (concurrent block creations on same listing/room)",
+      "sharedLockableResources": "inventory_days rows (and advisory lock if same actor/request)",
+      "writerAOrder": "advisory lock -> inventory_days (ORDER BY calendar_date)",
+      "writerBOrder": "advisory lock -> inventory_days (ORDER BY calendar_date)",
+      "serializedEarlierBy": "pg_advisory_xact_lock if same actor/request; inventory_days calendar_date order if different",
+      "lockOrderCompatible": "YES",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "NO",
+      "why": "Both acquire inventory_days rows in calendar_date ASC order"
+    }
+  ],
+  "twoConnectionProbes": [
+    {
+      "probeId": "PROBE-1",
+      "name": "Positive Determinism & Opposite Input Array Order",
+      "description": "Connection 1 passes descending date array [d2, d1] while Connection 2 passes ascending [d1, d2] to SELECT ... ORDER BY calendar_date ASC FOR UPDATE",
+      "observedBehavior": "Connection 1 locks d1 then d2; Connection 2 blocks on d1 and times out cleanly with 55P03; after Connection 1 commits, Connection 2 retries and locks both rows without error",
+      "classification": "EXPECTED BLOCK THEN SUCCESS",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    },
+    {
+      "probeId": "PROBE-2",
+      "name": "Hold Release vs Hold Finalization on Same Hold",
+      "description": "Connection 1 locks active booking_holds row FOR UPDATE simulating releaseHold; Connection 2 invokes canonical_finalize_direct_hold",
+      "observedBehavior": "Connection 2 blocks on booking_holds (id) row lock before any inventory_days lock is requested; after Connection 1 marks hold RELEASED and commits, Connection 2 cleanly aborts with RESERVATION_HOLD_NOT_ACTIVE with zero inventory mutation",
+      "classification": "SERIALIZED_BY_EARLIER_ROOT_LOCK",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    },
+    {
+      "probeId": "PROBE-3",
+      "name": "Concurrent Hold Acquisitions on Same Dates",
+      "description": "Two connections attempt to acquire hold on same room and dates with limited capacity",
+      "observedBehavior": "Both contenders acquire inventory_days in calendar_date ASC order; Connection 2 waits on d1 behind Connection 1; zero deadlock occurs",
+      "classification": "EXPECTED BLOCK THEN SUCCESS",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    },
+    {
+      "probeId": "PROBE-4",
+      "name": "Calendar Block Creation vs Hold Acquisition",
+      "description": "Connection 1 locks inventory_days simulating CalendarService.create; Connection 2 simulates acquireHold with opposite array order",
+      "observedBehavior": "Connection 2 blocks on d1 in calendar_date ASC order and times out cleanly; Connection 1 increments blocked_units and commits; zero deadlock cycle",
+      "classification": "EXPECTED BLOCK THEN SUCCESS",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    },
+    {
+      "probeId": "PROBE-5",
+      "name": "Reservation Cancellation vs Calendar Block Mutation",
+      "description": "Connection 1 locks inventory_days simulating canonical_complete_reservation_cancellation (calendar_date ASC, id ASC); Connection 2 simulates calendar block create (calendar_date ASC)",
+      "observedBehavior": "Both contenders follow compatible calendar_date ASC order; Connection 2 waits cleanly on d1 behind Connection 1; zero cycle",
+      "classification": "EXPECTED BLOCK THEN SUCCESS",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    },
+    {
+      "probeId": "PROBE-6",
+      "name": "SQL Itinerary Expiry vs Hold Finalization",
+      "description": "Expired hold targeted concurrently by expiry loop and finalizer",
+      "observedBehavior": "Expiry worker locks booking_holds FOR UPDATE; finalizer blocks on booking_holds row lock; expiry marks hold EXPIRED and commits; finalizer aborts cleanly with RESERVATION_HOLD_EXPIRED",
+      "classification": "SERIALIZED_BY_EARLIER_ROOT_LOCK",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    },
+    {
+      "probeId": "PROBE-7",
+      "name": "Multi-Room Future Modifier Simulation (ABBA Demonstration vs Union Sort Resolution)",
+      "description": "Simulates concurrent multi-room modifications (Room A -> Room B vs Room B -> Room A) with un-sorted access vs deterministic UNION sort",
+      "observedBehavior": "Part 7a: Un-sorted room access (Tx 1 locks A then B; Tx 2 locks B then A) triggers ABBA deadlock (40P01) / lock timeout (55P03); Part 7b: Locking UNION(Room A, Room B) sorted deterministically by (calendar_date ASC, room_type_id ASC) converts contending operations into clean serial execution with zero deadlock",
+      "classification": "ABBA_DEADLOCK_PROVEN_WITHOUT_UNION / DETERMINISTIC_UNION_LOCK_PREVENTS_DEADLOCK",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    }
+  ],
+  "auditConclusions": {
+    "currentDeadlockCycle": "ABSENT",
+    "nondeterministicMultiRowAcquisition": "ABSENT",
+    "currentHardeningRequired": "NO",
+    "rationale": "Every accepted runtime inventory writer operates on a single room_type_id and acquires inventory_days rows in strict calendar_date ASC order; where earlier entities exist (booking_holds, canonical_reservations), root-level row locks serialize contending operations prior to inventory acquisition; zero current cycles exist"
+  },
+  "futureModifierContract": {
+    "sharedResourceContract": [
+      "1. canonical_reservations (id) FOR UPDATE (Locks reservation root; serializes all concurrent modifications, cancellations, and status transitions on this reservation)",
+      "2. canonical_reservation_modification_requests (id) FOR UPDATE (Locks pending C3 intent evidence; verifies unconsumed authorization)",
+      "3. stays_quotes / sellable_offers (target_quote_id) FOR SHARE (Freezes target commercial truth and pricing parameters)",
+      "4. inventory_days UNION set FOR UPDATE (Deduplicated union of all affected old and new inventory_days rows locked in a single atomic pass)"
+    ],
+    "oldNewUnionLock": "RECOMMENDED",
+    "proposedInventorySortKey": "ORDER BY calendar_date ASC, room_type_id ASC, id ASC FOR UPDATE",
+    "unionSortRationale": "When modifying a reservation across rooms or disjoint date ranges, locking old allocation rows followed by new allocation rows exposes concurrent bidirectional modifications (e.g. Room A -> Room B vs Room B -> Room A) to ABBA deadlock cycles as proven in Probe 7a; acquiring the deduplicated UNION(old_allocation_inventory_days, new_allocation_inventory_days) sorted by (calendar_date ASC, room_type_id ASC) in a single query guarantees global compatibility with all current single-room writers and completely eliminates multi-room cross-writer deadlocks as proven in Probe 7b",
+    "compatibleWithCurrentWriters": "YES"
+  },
+  "capacityDriftObservation": {
+    "relevantToLockContract": "NO",
+    "rationale": "Modifying room_types.inventory_count does not update existing inventory_days.total_units rows, leading to observable capacity drift; however, capacity values only influence numerical availability checks (avail >= quantity) and do not alter row lock acquisition order or the set of locked rows; row locks ensure isolation regardless of total_units values; capacity drift is an inventory accounting concern, not a concurrency lock-order defect",
+    "evidenceType": "SOURCE_REVIEW"
+  },
+  "explicitLimits": {
+    "genericDbAuthorityClosure": "NOT EVALUATED",
+    "actorPoolClosure": "OUT OF SCOPE",
+    "physicalModificationWriter": "ABSENT",
+    "w4dFinancialClearance": "NOT IMPLEMENTED",
+    "guestHostPublicIngress": "ABSENT",
+    "providerChannelExecution": "NOT EVALUATED",
+    "productionDatabase": "NOT EVALUATED"
+  },
+  "regressionSummary": {
+    "w4c4Diagnostic": "PASS (1/1)",
+    "w2InventoryHolds": "PASS (21/21 in src/test/m4_inventory_holds.test.ts)",
+    "w1AcceptedOffers": "PASS (10/10 in src/test/harvo/w1_accepted_offers_pg.test.ts)",
+    "w3CanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts)",
+    "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts)",
+    "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs)"
+  },
+  "staticChecks": {
+    "eslint": "PASS (npx eslint scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs)",
+    "jsonValidation": "PASS (python3 -m json.tool)",
+    "diffCheck": "PASS (git diff --check)"
+  }
+}
