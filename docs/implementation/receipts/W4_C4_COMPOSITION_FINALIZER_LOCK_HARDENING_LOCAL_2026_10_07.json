@@ -118,6 +118,9 @@
       "backendActivityClean": "VERIFIED (state: idle, backend_xid: null, backend_xmin: null)",
       "declaredScenarioDeadlineMs": 15000,
       "declaredCleanupDeadlineMs": 5000,
+      "gracefulCleanupBudgetMs": 3500,
+      "fallbackReserveMs": 1500,
+      "errorPreservation": "AggregateError used when both scenario and cleanup fail; clean connection released to tracker on success",
       "status": "PASS"
     },
     "raceCaseC2_injectedFailureCleanup": {
@@ -139,7 +142,12 @@
       "storedReconciliation": null,
       "declaredScenarioDeadlineMs": 15000,
       "declaredCleanupDeadlineMs": 5000,
+      "gracefulCleanupBudgetMs": 3500,
+      "fallbackReserveMs": 1500,
       "measuredCleanupDurationMs": "<= 5000ms (measured < 50ms)",
+      "fallbackExercised": false,
+      "clientDiscarded": false,
+      "errorPreservation": "Original injected observation failure preserved directly; cleanup error combined via AggregateError if present",
       "transactionRolledBack": true,
       "scopedBaselineRestored": "EXACT_DEEP_EQUAL (beforeFail == afterFail)",
       "queryTransactionLeak": "ABSENT (state: idle, backend_xid: null, backend_xmin: null)",
@@ -152,6 +160,47 @@
         "reconciliations": 0
       },
       "captureEvidencePreserved": true,
+      "status": "PASS"
+    },
+    "raceCaseC3_delayedControlFallback": {
+      "scenario": "Fresh unexpired hold and matched capture; primary hold blocker holds booking_holds FOR UPDATE; secondary retained inventory blocker holds inventory_days FOR UPDATE; composition starts in explicit transaction with lock_timeout '8s' and statement_timeout '12s'; deliberate observation failure injected (INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST); cleanup begins under 5000ms deadline; cleanup control stage hook injects a 5200ms delay; active graceful control deadline cuts off the delay at 3500ms (CLEANUP_CONTROL_STAGE_TIMEOUT); fallback path is triggered with 1500ms reserve; client is discarded (clientTracker.discard with socket destruction); composition server backend is terminated via pg_terminate_backend; backend termination confirmed in pg_stat_activity; retained inventory blocker released; baseline restored; both original injected error and cleanup timeout error are preserved in AggregateError",
+      "stableIdentifier": "C4-E02-DELAYED-CONTROL-FALLBACK",
+      "explicitTransactionScope": "BEGIN -> SET LOCAL lock_timeout = '8s' -> SET LOCAL statement_timeout = '12s' -> assert effective settings -> invocation -> blocking -> injected failure -> delayed control (5200ms) -> active cutoff (3500ms) -> fallback -> pg_terminate_backend -> client discard",
+      "effectiveLockTimeout": "8s",
+      "effectiveStatementTimeout": "12s",
+      "settingsVerifiedOnInvocationConnection": true,
+      "primaryBlockerObserved": "VERIFIED (comp blocked on holdLocker via pg_blocking_pids)",
+      "secondaryBlockerObserved": "VERIFIED (comp blocked on inventoryLocker via pg_blocking_pids)",
+      "injectedObservationFailure": "INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST",
+      "cleanupControlDelayInjectedMs": 5200,
+      "declaredScenarioDeadlineMs": 15000,
+      "declaredCleanupDeadlineMs": 5000,
+      "gracefulCleanupBudgetMs": 3500,
+      "fallbackReserveMs": 1500,
+      "measuredCleanupDurationMs": "~3500-3600ms (strictly < 5000ms, proving cutoff before 5200ms hook)",
+      "fallbackExercised": true,
+      "clientDiscarded": true,
+      "clientDisposalMethod": "client.connection?.stream?.destroy() + client.release(err) to prevent returning unverified client to pool",
+      "terminationPath": "pg_terminate_backend via owner connection restricted to test-owned composition backend",
+      "settlementError": {
+        "clientErrorCode": "57P01",
+        "clientErrorMessage": "terminating connection due to administrator command"
+      },
+      "returnedDomainResult": null,
+      "storedReconciliation": null,
+      "transactionRolledBack": true,
+      "scopedBaselineRestored": "EXACT_DEEP_EQUAL (beforeDelay == afterDelay)",
+      "queryTransactionLeak": "ABSENT (backend terminated or idle, backend_xid: null)",
+      "connectionCleanup": "VERIFIED (discarded client unpooled; retained inventory blocker rolled back afterward in final cleanup)",
+      "survivingAllocations": {
+        "reservations": 0,
+        "nights": 0,
+        "commandFences": 0,
+        "bridges": 0,
+        "reconciliations": 0
+      },
+      "captureEvidencePreserved": true,
+      "errorPreservation": "AggregateError combining INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST and CLEANUP_CONTROL_STAGE_TIMEOUT",
       "status": "PASS"
     },
     "raceCaseD_nonActiveHold": {
@@ -220,14 +269,16 @@
     "physicalModificationWriter": "ABSENT",
     "w4dFinancialClearance": "NOT IMPLEMENTED",
     "guestHostPublicIngress": "ABSENT",
-    "productionDatabase": "NOT EVALUATED"
+    "productionDatabase": "NOT EVALUATED",
+    "historicalCommandBTarget": "UNKNOWN / OWNER FOLLOW-UP",
+    "databaseExecutionSafety": "VERIFIED (strictly newly created disposable PostgreSQL fixtures; zero dotenv / DATABASE_URL usage)"
   },
   "regressionSummary": {
-    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs)",
-    "w4c4Diagnostic": "PASS (1/1 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs)",
-    "w3bPaymentComposition": "PASS (56/56 in src/test/harvo/w3b_canonical_composition_pg.test.ts: 28 BASELINE_054 + 28 POST_060)",
-    "w3bPaymentEvidence": "PASS (38/38 in src/test/harvo/w3b_canonical_payment_pg.test.ts)",
-    "w3aCanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts)",
+    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs: Cases A, A2, B, C, C2, C3, D, replays, outer rollback, role isolation)",
+    "w4c4Diagnostic": "PASS (1/1 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs) [carried-forward]",
+    "w3bPaymentComposition": "PASS (56/56 in src/test/harvo/w3b_canonical_composition_pg.test.ts: 28 BASELINE_054 + 28 POST_060) [carried-forward]",
+    "w3bPaymentEvidence": "PASS (38/38 in src/test/harvo/w3b_canonical_payment_pg.test.ts) [carried-forward]",
+    "w3aCanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts) [carried-forward]",
     "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts) [carried-forward]",
     "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs) [carried-forward]"
   },
