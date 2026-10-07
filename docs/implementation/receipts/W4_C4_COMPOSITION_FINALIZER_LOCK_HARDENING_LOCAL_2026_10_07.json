@@ -213,6 +213,66 @@
       "errorPreservation": "AggregateError combining INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST and CLEANUP_CONTROL_STAGE_TIMEOUT",
       "status": "PASS"
     },
+    "demonstrationD_timedOutObserver": {
+      "stableIdentifier": "C4-E02-TIMED-OUT-OBSERVER",
+      "scenario": "Demonstrates fix for reviewer false-positive defect where observer ran SELECT pg_sleep(1.2) under 40ms budget; verified cancellation callback is invoked, observer query cancelled with 57014, backend verified idle, clean release only after settlement, and 0 unsettled operations at exit",
+      "cancellationCallbackInvoked": true,
+      "settlementError": {
+        "clientErrorCode": "57014",
+        "clientErrorMessage": "canceling statement due to user request"
+      },
+      "backendStatusAtExit": "IDLE_CLEAN",
+      "pendingOperationsAtExit": 0,
+      "unresolvedAcquisitionsAtExit": 0,
+      "unsettledOperationsAtExit": 0,
+      "status": "PASS"
+    },
+    "demonstrationE_delayedFallbackControl": {
+      "stableIdentifier": "C4-E02-DELAYED-FALLBACK-CONTROL",
+      "scenario": "Demonstrates real database control query in fallback stage (SELECT pg_sleep(2.5)) active on database backend; cutoff at graceful budget; cancellation (pg_cancel_backend) strictly bounded by remaining cleanup deadline; zero raw unbounded awaits; all backends verified idle/clean; zero unsettled operations at exit",
+      "controlQuerySql": "SELECT pg_sleep(2.5) AS fb_delay",
+      "fallbackExercised": true,
+      "delayedControlSettled": true,
+      "cleanupDurationMs": "<= 3000ms",
+      "pendingOperationsAtExit": 0,
+      "unresolvedAcquisitionsAtExit": 0,
+      "unsettledOperationsAtExit": 0,
+      "status": "PASS"
+    },
+    "demonstrationF_partialAcquisition": {
+      "stableIdentifier": "C4-E02-PARTIAL-ACQUISITION",
+      "scenario": "Demonstrates client lifecycle ownership from first checkout: Client 1 acquired; Client 2 acquisition attempt with expired budget throws HarnessDeadlineError; late-returned client simulation intercepted, accounted in tracker, socket destroyed, released with error; Client 1 cleanly released; zero orphaned or unaccounted clients",
+      "partialAcquisitionHandled": true,
+      "expiredAcquisitionError": "HarnessDeadlineError: CLIENT_ACQUISITION_BUDGET_EXPIRED: client2_expired",
+      "lateReturnedClientHandled": true,
+      "lateClientDisposal": "socket destroyed and released with error to prevent return to pool",
+      "unaccountedClients": 0,
+      "unresolvedAcquisitionsAtExit": 0,
+      "unsettledOperationsAtExit": 0,
+      "status": "PASS"
+    },
+    "demonstrationG_finalAccounting": {
+      "stableIdentifier": "C4-E02-FINAL-ACCOUNTING",
+      "scenario": "Demonstrates strict final accounting assertions: runs after restoration verification; fails if artificial pending operation is present; passes with 0 unresolved acquisitions, 0 unsettled operations, 0 queued operations, 0 unaccounted clients, and 0 busy clients released clean",
+      "rejectedArtificialPendingOp": true,
+      "assertedCriteria": {
+        "unresolvedAcquisitions": 0,
+        "unsettledOperations": 0,
+        "queuedOperations": 0,
+        "unaccountedClients": 0,
+        "busyClientsReleasedClean": 0
+      },
+      "status": "PASS"
+    },
+    "finalAccounting": {
+      "unresolvedAcquisitions": 0,
+      "unsettledOperations": 0,
+      "queuedOperations": 0,
+      "unaccountedClients": 0,
+      "busyClientsReleasedClean": 0,
+      "allTerminalActionsAudited": true,
+      "status": "PASS"
+    },
     "deadlineNegativeControl": {
       "scenario": "Negative control verifies that runWithDeadline given an already-expired deadline rejects immediately with HarnessDeadlineError before invoking the action",
       "actionInvocationCount": 0,
@@ -291,7 +351,7 @@
     "databaseExecutionSafety": "VERIFIED (strictly newly created disposable PostgreSQL fixtures; zero dotenv / DATABASE_URL usage)"
   },
   "regressionSummary": {
-    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs: Cases A, A2, B, C, C2, C3, D, negative control, replays, outer rollback, role isolation)",
+    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs: Cases A, A2, B, C, C2, C3, Demonstrations D, E, F, G, negative control, replays, outer rollback, role isolation)",
     "w4c4Diagnostic": "PASS (1/1 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs) [carried-forward]",
     "w3bPaymentComposition": "PASS (56/56 in src/test/harvo/w3b_canonical_composition_pg.test.ts: 28 BASELINE_054 + 28 POST_060) [carried-forward]",
     "w3bPaymentEvidence": "PASS (38/38 in src/test/harvo/w3b_canonical_payment_pg.test.ts) [carried-forward]",

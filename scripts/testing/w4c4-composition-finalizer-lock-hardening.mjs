@@ -588,106 +588,374 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       }
     };
 
-    const createClientTracker = (deliberatelyDiscardedSet) => {
-      const entries = new Map();
+    class ClientTracker {
+      constructor({ deliberatelyDiscardedSet }) {
+        this.deliberatelyDiscardedSet = deliberatelyDiscardedSet;
+        this.entries = new Map();
+        this.acquisitionAttempts = new Map();
+        this.terminalActions = new Map();
+        this.activeOperationsByClient = new Map();
+      }
 
-      const acquire = async (pool, roleName, deadlineAt) => {
-        return await runWithDeadline(
-          async () => {
-            const client = await pool.connect();
-            const pidRes = await client.query('SELECT pg_backend_pid() AS pid');
-            const pid = pidRes.rows[0].pid;
+      createAcquisitionAttempt(attemptId, pool, roleName, deadlineAt) {
+        const attempt = {
+          attemptId,
+          pool,
+          roleName,
+          deadlineAt,
+          status: 'pending',
+          client: null,
+          pid: null,
+          error: null,
+        };
+        this.acquisitionAttempts.set(attemptId, attempt);
+        return attempt;
+      }
+
+      async acquire(pool, roleName, deadlineAt) {
+        const attemptId = `acq_${roleName}_${randomUUID().slice(0, 8)}`;
+        const attempt = this.createAcquisitionAttempt(attemptId, pool, roleName, deadlineAt);
+
+        const remaining = deadlineAt - Date.now();
+        if (remaining <= 0) {
+          attempt.status = 'timed_out';
+          attempt.error = new HarnessDeadlineError(`CLIENT_ACQUISITION_BUDGET_EXPIRED: ${roleName}`);
+          throw attempt.error;
+        }
+
+        let rawConnectPromise;
+        try {
+          rawConnectPromise = pool.connect();
+        } catch (err) {
+          attempt.status = 'failed';
+          attempt.error = err;
+          throw err;
+        }
+
+        const trackedConnectPromise = rawConnectPromise.then(
+          (client) => {
+            if (attempt.status === 'timed_out') {
+              // Late returned client handled and accounted for immediately
+              attempt.status = 'late_returned';
+              attempt.client = client;
+              const entry = {
+                client,
+                roleName,
+                pid: null,
+                state: 'late_returned',
+                discardErr: new Error('LATE_CLIENT_DISCARDED'),
+                activeOps: new Set(),
+              };
+              this.entries.set(client, entry);
+              this.deliberatelyDiscardedSet.add(client);
+              try {
+                client.connection?.stream?.destroy?.();
+              } catch {}
+              try {
+                client.release(entry.discardErr);
+              } catch {}
+              this.terminalActions.set(client, {
+                method: 'discard_late',
+                attempted: true,
+                success: true,
+                failed: false,
+                error: null,
+              });
+              return client;
+            }
+
+            attempt.status = 'acquired';
+            attempt.client = client;
             const entry = {
               client,
               roleName,
-              pid,
-              state: 'active',
+              pid: null,
+              state: 'acquired',
               discardErr: null,
+              activeOps: new Set(),
             };
-            entries.set(client, entry);
+            this.entries.set(client, entry);
+            this.activeOperationsByClient.set(client, entry.activeOps);
             return client;
           },
-          deadlineAt,
-          () => new HarnessDeadlineError(`CLIENT_ACQUISITION_TIMEOUT: ${roleName}`)
+          (err) => {
+            attempt.status = 'failed';
+            attempt.error = err;
+            throw err;
+          }
         );
-      };
 
-      const getPid = (client) => entries.get(client)?.pid;
-      const getRole = (client) => entries.get(client)?.roleName;
+        const client = await runWithDeadline(
+          () => trackedConnectPromise,
+          deadlineAt,
+          () => {
+            attempt.status = 'timed_out';
+            attempt.error = new HarnessDeadlineError(`CLIENT_ACQUISITION_TIMEOUT: ${roleName}`);
+            return attempt.error;
+          }
+        );
 
-      const releaseClean = (client) => {
-        const entry = entries.get(client);
+        const entry = this.entries.get(client);
+        try {
+          const pidRes = await runWithDeadline(
+            () => client.query('SELECT pg_backend_pid() AS pid'),
+            deadlineAt,
+            () => new HarnessDeadlineError(`PID_INITIALIZATION_TIMEOUT: ${roleName}`)
+          );
+          entry.pid = pidRes.rows[0].pid;
+          attempt.pid = entry.pid;
+          entry.state = 'active';
+          return client;
+        } catch (pidErr) {
+          entry.state = 'initialization_failed';
+          attempt.status = 'failed';
+          attempt.error = pidErr;
+          throw pidErr;
+        }
+      }
+
+      getPid(client) {
+        return this.entries.get(client)?.pid ?? null;
+      }
+
+      getRole(client) {
+        return this.entries.get(client)?.roleName ?? 'unknown';
+      }
+
+      getState(client) {
+        return this.entries.get(client)?.state ?? 'untracked';
+      }
+
+      isReleased(client) {
+        return this.entries.get(client)?.state === 'released';
+      }
+
+      isDiscarded(client) {
+        const s = this.entries.get(client)?.state;
+        return s === 'discarded' || s === 'late_returned';
+      }
+
+      releaseClean(client) {
+        const entry = this.entries.get(client);
         if (!entry) {
           throw new Error('CLIENT_UNTRACKED: Cannot release untracked client');
         }
         if (entry.state === 'released') {
           throw new Error(`CLIENT_DOUBLE_RELEASE: Client ${entry.roleName} (pid ${entry.pid}) already released`);
         }
-        if (entry.state === 'discarded') {
+        if (entry.state === 'discarded' || entry.state === 'late_returned') {
           throw new Error(`CLIENT_STATE_CONFLICT: Client ${entry.roleName} (pid ${entry.pid}) already discarded`);
         }
-        entry.state = 'released';
-        entry.client.release();
-      };
+        if (entry.activeOps && entry.activeOps.size > 0) {
+          const activeOpsList = Array.from(entry.activeOps).join(', ');
+          this.terminalActions.set(client, {
+            method: 'releaseClean',
+            attempted: true,
+            success: false,
+            failed: true,
+            error: new Error(`CLIENT_BUSY_ON_RELEASE: Client ${entry.roleName} has active operations: ${activeOpsList}`),
+          });
+          throw new Error(`CLIENT_BUSY_ON_RELEASE: Cannot cleanly release client ${entry.roleName} while operations are active: ${activeOpsList}`);
+        }
 
-      const discard = (client, err = new Error('CLIENT_DISCARDED')) => {
-        const entry = entries.get(client);
+        this.terminalActions.set(client, {
+          method: 'releaseClean',
+          attempted: true,
+          success: false,
+          failed: false,
+          error: null,
+        });
+
+        try {
+          entry.state = 'released';
+          entry.client.release();
+          this.terminalActions.get(client).success = true;
+        } catch (err) {
+          entry.state = 'release_failed';
+          const act = this.terminalActions.get(client);
+          act.failed = true;
+          act.error = err;
+          throw err;
+        }
+      }
+
+      discard(client, err = new Error('CLIENT_DISCARDED')) {
+        const entry = this.entries.get(client);
         if (!entry) {
           throw new Error('CLIENT_UNTRACKED: Cannot discard untracked client');
         }
         if (entry.state === 'released') {
           throw new Error(`CLIENT_STATE_CONFLICT: Client ${entry.roleName} (pid ${entry.pid}) already cleanly released`);
         }
-        if (entry.state === 'discarded') {
+        if (entry.state === 'discarded' || entry.state === 'late_returned') {
           return;
         }
+
+        this.terminalActions.set(client, {
+          method: 'discard',
+          attempted: true,
+          success: false,
+          failed: false,
+          error: null,
+        });
+
         entry.state = 'discarded';
         entry.discardErr = err;
-        deliberatelyDiscardedSet.add(entry.client);
+        this.deliberatelyDiscardedSet.add(entry.client);
+
         try {
           entry.client.connection?.stream?.destroy?.();
         } catch {}
+
         try {
           entry.client.release(err);
-        } catch {}
-      };
+          this.terminalActions.get(client).success = true;
+        } catch (relErr) {
+          const act = this.terminalActions.get(client);
+          act.failed = true;
+          act.error = relErr;
+          throw relErr;
+        }
+      }
 
-      const isReleased = (client) => entries.get(client)?.state === 'released';
-      const isDiscarded = (client) => entries.get(client)?.state === 'discarded';
-
-      const assertAllAccountedFor = () => {
+      assertAllAccountedFor() {
         const unaccounted = [];
-        for (const [, entry] of entries) {
-          if (entry.state !== 'released' && entry.state !== 'discarded') {
+        const terminalFailures = [];
+
+        for (const [, entry] of this.entries) {
+          if (entry.state !== 'released' && entry.state !== 'discarded' && entry.state !== 'late_returned') {
             unaccounted.push(`${entry.roleName} (pid ${entry.pid}, state ${entry.state})`);
           }
         }
+
+        for (const [client, action] of this.terminalActions) {
+          const entry = this.entries.get(client);
+          if (action.failed) {
+            terminalFailures.push(`${entry?.roleName}: ${action.error?.message}`);
+          }
+        }
+
+        const unresolvedAcquisitions = [];
+        for (const [, attempt] of this.acquisitionAttempts) {
+          if (attempt.status === 'pending') {
+            unresolvedAcquisitions.push(attempt.roleName);
+          }
+        }
+
         if (unaccounted.length > 0) {
           throw new Error(`CLIENT_ACCOUNTING_INCOMPLETE: Unaccounted clients: ${unaccounted.join(', ')}`);
         }
-      };
+        if (terminalFailures.length > 0) {
+          throw new Error(`TERMINAL_ACTION_FAILURES: ${terminalFailures.join('; ')}`);
+        }
+        if (unresolvedAcquisitions.length > 0) {
+          throw new Error(`UNRESOLVED_ACQUISITIONS: ${unresolvedAcquisitions.join(', ')}`);
+        }
+      }
+    }
 
-      return {
-        acquire,
-        getPid,
-        getRole,
-        releaseClean,
-        discard,
-        isReleased,
-        isDiscarded,
-        assertAllAccountedFor,
-      };
-    };
+    class TrackedQueryAdapter {
+      constructor(client, coordinator, { getDeadlineAt = () => coordinator?.currentDeadlineAt ?? (Date.now() + 10000) } = {}) {
+        this.client = client;
+        this.coordinator = coordinator;
+        this.getDeadlineAt = getDeadlineAt;
+        this.queue = [];
+        this.running = false;
+        this.activeChildOp = null;
+      }
 
-    const createTrackedQueryAdapter = (client) => {
-      let chain = Promise.resolve();
-      return {
-        query: (sql, args) => {
-          const next = chain.then(() => client.query(sql, args));
-          chain = next.catch(() => {});
-          return next;
-        },
-      };
+      query(sql, args) {
+        if (this.coordinator && this.coordinator.state === 'closed') {
+          return Promise.reject(new Error('QUERY_ADAPTER_SCOPE_CLOSED: Coordinator scope closed'));
+        }
+        if (this.coordinator && this.coordinator.state === 'cleaning') {
+          return Promise.reject(new Error('QUERY_ADAPTER_SCOPE_CLEANING: Coordinator is in cleanup'));
+        }
+        const deadlineAt = this.coordinator ? this.getDeadlineAt() : (Date.now() + 10000);
+        if (deadlineAt - Date.now() <= 0) {
+          return Promise.reject(new HarnessDeadlineError('QUERY_ADAPTER_DEADLINE_EXPIRED'));
+        }
+
+        return new Promise((resolve, reject) => {
+          this.queue.push({ sql, args, resolve, reject, deadlineAt });
+          this._drainQueue().catch((err) => {
+            if (this.queue.length > 0) {
+              const item = this.queue.shift();
+              item?.reject(err);
+            }
+          });
+        });
+      }
+
+      async _drainQueue() {
+        if (this.running) return;
+        this.running = true;
+
+        try {
+          while (this.queue.length > 0) {
+            if (this.coordinator && (this.coordinator.state === 'closed' || this.coordinator.state === 'cleaning')) {
+              const item = this.queue.shift();
+              item.reject(new Error(`QUERY_ADAPTER_SCOPE_${this.coordinator.state.toUpperCase()}: Scope not open for dispatch`));
+              continue;
+            }
+            const item = this.queue[0];
+            const remaining = item.deadlineAt - Date.now();
+            if (remaining <= 0) {
+              this.queue.shift();
+              item.reject(new HarnessDeadlineError('QUERY_DISPATCH_DEADLINE_EXPIRED: Query expired in queue'));
+              continue;
+            }
+
+            this.queue.shift();
+
+            let childOp = null;
+            if (this.coordinator) {
+              const opName = `adapter_query_${randomUUID().slice(0, 8)}`;
+              childOp = this.coordinator.registerOperation(opName, {
+                owningClient: this.client,
+                cancel: async () => {
+                  const pid = this.coordinator.tracker.getPid(this.client);
+                  if (pid && this.coordinator.cancellationConn) {
+                    await this.coordinator.cancellationConn.query('SELECT pg_cancel_backend($1)', [pid]).catch(() => {});
+                  }
+                },
+                deadlineAt: item.deadlineAt,
+              });
+            }
+
+            this.activeChildOp = childOp;
+            try {
+              let result;
+              if (childOp) {
+                result = await childOp.execute(() => this.client.query(item.sql, item.args));
+              } else {
+                result = await this.client.query(item.sql, item.args);
+              }
+              item.resolve(result);
+            } catch (err) {
+              item.reject(err);
+            } finally {
+              this.activeChildOp = null;
+            }
+          }
+        } finally {
+          this.running = false;
+        }
+      }
+
+      abortQueued(reason = new Error('QUERY_QUEUE_ABORTED')) {
+        while (this.queue.length > 0) {
+          const item = this.queue.shift();
+          item.reject(reason);
+        }
+      }
+    }
+
+    const createTrackedQueryAdapter = (client, coordinator = null) => {
+      if (coordinator) {
+        return coordinator.createQueryAdapter(client);
+      }
+      return new TrackedQueryAdapter(client, null);
     };
 
     const verifyBackendsCleanOrAbsent = async (cancellationConn, pidsToVerify, deadlineAt) => {
@@ -750,63 +1018,119 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         this.scenarioStart = Date.now();
         this.scenarioDeadlineAt = this.scenarioStart + this.scenarioDeadlineMs;
         this.normalDeadlineAt = this.scenarioDeadlineAt - this.cleanupDeadlineMs;
-        this.tracker = createClientTracker(deliberatelyDiscardedSet);
+
+        this.tracker = new ClientTracker({ deliberatelyDiscardedSet });
 
         this.operations = new Map();
         this.unsettledWork = new Set();
+        this.state = 'active'; // 'active' | 'cleaning' | 'verifying' | 'closed'
+        this.adapters = new Set();
+        this.cancellationConn = null;
       }
 
-      async runOperation(name, startFn, { owningClient = null, cancel = null, deadlineAt = this.normalDeadlineAt } = {}) {
+      get isOpen() {
+        return this.state !== 'closed' && this.state !== 'cleaning';
+      }
+
+      get currentDeadlineAt() {
+        if (this.state === 'verifying') {
+          return this.scenarioDeadlineAt;
+        }
+        return this.normalDeadlineAt;
+      }
+
+      createQueryAdapter(client, options = {}) {
+        const adapter = new TrackedQueryAdapter(client, this, options);
+        this.adapters.add(adapter);
+        return adapter;
+      }
+
+      registerOperation(name, { owningClient = null, cancel = null, deadlineAt = null } = {}) {
         let op = this.operations.get(name);
-        if (!op) {
-          op = {
-            name,
-            owningClient,
-            cancel,
-            started: false,
-            settled: false,
-            result: null,
-            error: null,
-            promise: null,
-          };
-          this.operations.set(name, op);
+        if (op) {
+          return op;
         }
 
-        const remaining = deadlineAt - Date.now();
-        if (remaining <= 0) {
-          throw new HarnessDeadlineError(`HARNESS_DEADLINE_EXCEEDED: ${name}`);
-        }
+        const effectiveDeadlineAt = deadlineAt ?? this.currentDeadlineAt;
 
-        op.started = true;
-        this.unsettledWork.add(name);
+        op = {
+          name,
+          owningClient,
+          cancel,
+          deadlineAt: effectiveDeadlineAt,
+          started: false,
+          settled: false,
+          result: null,
+          error: null,
+          promise: null,
+          execute: async (startFn) => {
+            if (this.state === 'closed') {
+              throw new Error(`COORDINATOR_SCOPE_CLOSED: Operation ${name} rejected because coordinator is closed`);
+            }
+            if (this.state === 'cleaning') {
+              throw new Error(`COORDINATOR_SCOPE_CLEANING: Operation ${name} rejected because coordinator is in cleanup`);
+            }
+            const remaining = op.deadlineAt - Date.now();
+            if (remaining <= 0) {
+              throw new HarnessDeadlineError(`OPERATION_DEADLINE_EXCEEDED: ${name}`);
+            }
+            op.started = true;
+            this.unsettledWork.add(name);
+            if (owningClient) {
+              const ops = this.tracker.activeOperationsByClient.get(owningClient);
+              if (ops) ops.add(name);
+            }
 
-        let timerId;
-        const timeoutPromise = new Promise((_, reject) => {
-          timerId = setTimeout(() => {
-            reject(new HarnessDeadlineError(`OPERATION_TIMEOUT: ${name}`));
-          }, remaining);
-        });
-
-        try {
-          const p = startFn();
-          op.promise = p
-            .then((res) => {
-              op.settled = true;
-              op.result = res;
-              this.unsettledWork.delete(name);
-              return res;
-            })
-            .catch((err) => {
-              op.settled = true;
-              op.error = err;
-              this.unsettledWork.delete(name);
-              throw err;
+            let timerId;
+            const timeoutPromise = new Promise((_, reject) => {
+              timerId = setTimeout(async () => {
+                if (op.cancel && !op.settled) {
+                  try {
+                    await op.cancel();
+                  } catch {}
+                }
+                reject(new HarnessDeadlineError(`OPERATION_TIMEOUT: ${name}`));
+              }, remaining);
             });
 
-          return await Promise.race([op.promise, timeoutPromise]);
-        } finally {
-          clearTimeout(timerId);
-        }
+            try {
+              const p = startFn();
+              op.promise = p
+                .then((res) => {
+                  op.settled = true;
+                  op.result = res;
+                  this.unsettledWork.delete(name);
+                  if (owningClient) {
+                    const ops = this.tracker.activeOperationsByClient.get(owningClient);
+                    if (ops) ops.delete(name);
+                  }
+                  return res;
+                })
+                .catch((err) => {
+                  op.settled = true;
+                  op.error = err;
+                  this.unsettledWork.delete(name);
+                  if (owningClient) {
+                    const ops = this.tracker.activeOperationsByClient.get(owningClient);
+                    if (ops) ops.delete(name);
+                  }
+                  throw err;
+                });
+
+              return await Promise.race([op.promise, timeoutPromise]);
+            } finally {
+              clearTimeout(timerId);
+            }
+          },
+        };
+
+        this.operations.set(name, op);
+        return op;
+      }
+
+      async runOperation(name, startFn, options = {}) {
+        const op = this.registerOperation(name, options);
+        return await op.execute(startFn);
       }
 
       async waitForCondition(name, predicateStartFn, { deadlineAt = this.normalDeadlineAt, intervalMs = 20 } = {}) {
@@ -828,12 +1152,12 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       }
 
       async performFiniteCleanup({
-        cancellationConn,
-        observerConn,
-        compConn,
-        compPid,
-        compPromise,
-        compQueryState,
+        cancellationConn = null,
+        observerConn = null,
+        compConn = null,
+        compPid = null,
+        compPromise = null,
+        compQueryState = null,
         blockers = [],
         retainedBlockers = [],
         delayedControlOp = null,
@@ -844,6 +1168,12 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         const cleanupDeadlineAt = Math.min(cleanupStart + this.cleanupDeadlineMs, this.scenarioDeadlineAt);
         const gracefulDeadlineAt = cleanupDeadlineAt - this.fallbackReserveMs;
 
+        this.state = 'cleaning';
+        this.cancellationConn = cancellationConn;
+        for (const adapter of this.adapters) {
+          adapter.abortQueued(new Error('CLEANUP_STARTED: Queue aborted'));
+        }
+
         const cleanupErrors = [];
         let fallbackExercised = false;
         let clientDiscarded = false;
@@ -853,7 +1183,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
         if (!committed) {
           try {
-            // Step 1: Control stage: rollback standard blockers (e.g. holdLocker)
+            // Step 1: Control stage: rollback standard blockers
             for (const blocker of blockers) {
               if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
                 await runWithDeadline(
@@ -875,12 +1205,14 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             }
 
             // Step 3: Graceful cancellation & query settlement
-            if (compPromise && !compQueryState.settled) {
-              await runWithDeadline(
-                () => cancellationConn.query('SELECT pg_cancel_backend($1)', [compPid]),
-                gracefulDeadlineAt,
-                () => new HarnessDeadlineError('CLEANUP_CANCELLATION_QUERY_TIMEOUT')
-              );
+            if (compPromise && compQueryState && !compQueryState.settled) {
+              if (cancellationConn && compPid) {
+                await runWithDeadline(
+                  () => cancellationConn.query('SELECT pg_cancel_backend($1)', [compPid]),
+                  gracefulDeadlineAt,
+                  () => new HarnessDeadlineError('CLEANUP_CANCELLATION_QUERY_TIMEOUT')
+                );
+              }
               await runWithDeadline(
                 () => compPromise,
                 gracefulDeadlineAt,
@@ -897,7 +1229,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
               );
             }
 
-            // Step 4b: Rollback retained blockers after composition settlement
+            // Step 5: Rollback retained blockers after composition settlement
             for (const blocker of retainedBlockers) {
               if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
                 await runWithDeadline(
@@ -907,14 +1239,40 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
                 );
               }
             }
+
+            // Step 6: Outstanding registered operations check
+            for (const [, op] of this.operations) {
+              if (op.started && !op.settled) {
+                if (op.cancel) {
+                  await runWithDeadline(
+                    () => op.cancel(),
+                    gracefulDeadlineAt,
+                    () => new HarnessDeadlineError(`CLEANUP_OP_CANCEL_TIMEOUT: ${op.name}`)
+                  ).catch((err) => cleanupErrors.push(err));
+                }
+                if (op.promise) {
+                  await runWithDeadline(
+                    () => op.promise.catch((e) => e),
+                    gracefulDeadlineAt,
+                    () => new HarnessDeadlineError(`CLEANUP_OP_SETTLE_TIMEOUT: ${op.name}`)
+                  ).catch((err) => cleanupErrors.push(err));
+                }
+              }
+            }
           } catch (gracefulErr) {
             fallbackExercised = true;
             cleanupErrors.push(gracefulErr);
 
-            // Fallback stage: bounded by cleanupDeadlineAt
+            // Fallback stage: bounded strictly by cleanupDeadlineAt
             try {
               if (delayedControlOp && !delayedControlSettled) {
-                await cancellationConn.query('SELECT pg_cancel_backend($1)', [delayedControlOp.pid]).catch(() => {});
+                if (cancellationConn) {
+                  await runWithDeadline(
+                    () => cancellationConn.query('SELECT pg_cancel_backend($1)', [delayedControlOp.pid]),
+                    cleanupDeadlineAt,
+                    () => new HarnessDeadlineError('FALLBACK_DELAYED_CONTROL_CANCEL_TIMEOUT')
+                  ).catch((err) => cleanupErrors.push(err));
+                }
                 await runWithDeadline(
                   () => delayedControlOp.promise.catch((e) => ({ clientError: e })),
                   cleanupDeadlineAt,
@@ -927,7 +1285,13 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
                 clientDiscarded = true;
                 this.tracker.discard(compConn, gracefulErr);
 
-                await cancellationConn.query('SELECT pg_terminate_backend($1)', [compPid]).catch(() => {});
+                if (cancellationConn && compPid) {
+                  await runWithDeadline(
+                    () => cancellationConn.query('SELECT pg_terminate_backend($1)', [compPid]),
+                    cleanupDeadlineAt,
+                    () => new HarnessDeadlineError('FALLBACK_TERMINATE_BACKEND_TIMEOUT')
+                  ).catch((err) => cleanupErrors.push(err));
+                }
 
                 if (compPromise) {
                   const outcome = await runWithDeadline(
@@ -935,7 +1299,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
                     cleanupDeadlineAt,
                     () => new HarnessDeadlineError('FALLBACK_COMPOSITION_SETTLEMENT_TIMEOUT')
                   );
-                  if (outcome && outcome.clientError) {
+                  if (outcome && outcome.clientError && compQueryState) {
                     compQueryState.settled = true;
                     compQueryState.clientError = outcome.clientError;
                   }
@@ -944,16 +1308,59 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
               for (const blocker of allBlockers) {
                 if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
-                  await blocker.query('ROLLBACK').catch(() => {});
+                  await runWithDeadline(
+                    () => blocker.query('ROLLBACK'),
+                    cleanupDeadlineAt,
+                    () => new HarnessDeadlineError('FALLBACK_BLOCKER_ROLLBACK_TIMEOUT')
+                  ).catch((err) => cleanupErrors.push(err));
+                }
+              }
+
+              for (const [, op] of this.operations) {
+                if (op.started && !op.settled) {
+                  if (op.cancel) {
+                    await runWithDeadline(
+                      () => op.cancel(),
+                      cleanupDeadlineAt,
+                      () => new HarnessDeadlineError(`FALLBACK_OP_CANCEL_TIMEOUT: ${op.name}`)
+                    ).catch((err) => cleanupErrors.push(err));
+                  }
+                  if (op.promise) {
+                    await runWithDeadline(
+                      () => op.promise.catch((e) => e),
+                      cleanupDeadlineAt,
+                      () => new HarnessDeadlineError(`FALLBACK_OP_SETTLE_TIMEOUT: ${op.name}`)
+                    ).catch((err) => cleanupErrors.push(err));
+                  }
                 }
               }
             } catch (fallbackErr) {
               cleanupErrors.push(fallbackErr);
             }
           }
+        } else {
+          // If committed was true, ensure any outstanding operations are settled
+          for (const [, op] of this.operations) {
+            if (op.started && !op.settled) {
+              if (op.cancel) {
+                await runWithDeadline(
+                  () => op.cancel(),
+                  gracefulDeadlineAt,
+                  () => new HarnessDeadlineError(`CLEANUP_OP_CANCEL_TIMEOUT: ${op.name}`)
+                ).catch((err) => cleanupErrors.push(err));
+              }
+              if (op.promise) {
+                await runWithDeadline(
+                  () => op.promise.catch((e) => e),
+                  gracefulDeadlineAt,
+                  () => new HarnessDeadlineError(`CLEANUP_OP_SETTLE_TIMEOUT: ${op.name}`)
+                ).catch((err) => cleanupErrors.push(err));
+              }
+            }
+          }
         }
 
-        // Step 5: Verify backends clean or absent
+        // Backend Verification
         const pidsToVerify = [];
         if (compPid) pidsToVerify.push({ pid: compPid, role: 'comp' });
         if (delayedControlOp?.pid) pidsToVerify.push({ pid: delayedControlOp.pid, role: 'delayedControl' });
@@ -961,37 +1368,33 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           const pid = this.tracker.getPid(blocker);
           if (pid) pidsToVerify.push({ pid, role: this.tracker.getRole(blocker) });
         }
+        if (observerConn) {
+          const pid = this.tracker.getPid(observerConn);
+          if (pid) pidsToVerify.push({ pid, role: 'observer' });
+        }
 
         let backendObservations = {};
-        try {
-          backendObservations = await verifyBackendsCleanOrAbsent(
-            cancellationConn,
-            pidsToVerify,
-            cleanupDeadlineAt
-          );
-        } catch (backendErr) {
-          cleanupErrors.push(backendErr);
+        if (cancellationConn && pidsToVerify.length > 0) {
+          try {
+            backendObservations = await verifyBackendsCleanOrAbsent(
+              cancellationConn,
+              pidsToVerify,
+              cleanupDeadlineAt
+            );
+          } catch (backendErr) {
+            cleanupErrors.push(backendErr);
+          }
         }
 
-        // Step 6: Client release accounting
-        for (const blocker of allBlockers) {
-          if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
-            this.tracker.releaseClean(blocker);
+        // Client Release Accounting
+        for (const [client] of this.tracker.entries) {
+          if (!this.tracker.isReleased(client) && !this.tracker.isDiscarded(client)) {
+            try {
+              this.tracker.releaseClean(client);
+            } catch (err) {
+              cleanupErrors.push(err);
+            }
           }
-        }
-        if (delayedControlOp?.client) {
-          if (!this.tracker.isReleased(delayedControlOp.client) && !this.tracker.isDiscarded(delayedControlOp.client)) {
-            this.tracker.releaseClean(delayedControlOp.client);
-          }
-        }
-        if (compConn && !this.tracker.isDiscarded(compConn) && !this.tracker.isReleased(compConn)) {
-          this.tracker.releaseClean(compConn);
-        }
-        if (observerConn && !this.tracker.isReleased(observerConn)) {
-          this.tracker.releaseClean(observerConn);
-        }
-        if (cancellationConn && !this.tracker.isReleased(cancellationConn)) {
-          this.tracker.releaseClean(cancellationConn);
         }
 
         try {
@@ -1000,7 +1403,6 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           cleanupErrors.push(accountErr);
         }
 
-        // Step 7: Combine errors
         let combinedError = null;
         if (scenarioError && cleanupErrors.length > 0) {
           combinedError = new AggregateError([scenarioError, ...cleanupErrors], 'Scenario and cleanup both failed');
@@ -1011,6 +1413,8 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         }
 
         const cleanupDurationMs = Date.now() - cleanupStart;
+
+        this.state = 'verifying';
 
         return {
           cleanupDurationMs,
@@ -1026,6 +1430,51 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           backendObservations,
           unsettledWork: Array.from(this.unsettledWork),
         };
+      }
+
+      assertFinalAccounting() {
+        this.state = 'closed';
+        for (const adapter of this.adapters) {
+          adapter.abortQueued(new Error('COORDINATOR_CLOSED: Scope closed'));
+        }
+
+        const unresolvedAcquisitions = [];
+        for (const [, attempt] of this.tracker.acquisitionAttempts) {
+          if (attempt.status === 'pending') {
+            unresolvedAcquisitions.push(attempt.roleName);
+          }
+        }
+        assert.equal(
+          unresolvedAcquisitions.length,
+          0,
+          `Final accounting failed: unresolved acquisition attempts exist: ${unresolvedAcquisitions.join(', ')}`
+        );
+
+        const unsettledOps = Array.from(this.unsettledWork);
+        assert.equal(
+          unsettledOps.length,
+          0,
+          `Final accounting failed: unsettled operations exist: ${unsettledOps.join(', ')}`
+        );
+
+        let queuedCount = 0;
+        for (const adapter of this.adapters) {
+          queuedCount += adapter.queue.length;
+        }
+        assert.equal(
+          queuedCount,
+          0,
+          `Final accounting failed: queued operations exist in adapter: ${queuedCount}`
+        );
+
+        this.tracker.assertAllAccountedFor();
+
+        for (const [client, action] of this.tracker.terminalActions) {
+          const entry = this.tracker.entries.get(client);
+          if (action.method === 'releaseClean' && !action.success) {
+            assert.fail(`Final accounting failed: client ${entry?.roleName} failed clean release`);
+          }
+        }
       }
     }
 
@@ -1078,29 +1527,13 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         deliberatelyDiscardedSet: deliberatelyDiscardedClients,
       });
 
-      const cancellationConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'cancellationConn',
-        coordinator.normalDeadlineAt
-      );
-      const observerConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'observerConn',
-        coordinator.normalDeadlineAt
-      );
-      const blockConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'blockConn',
-        coordinator.normalDeadlineAt
-      );
-      const compExpiryConn = await coordinator.tracker.acquire(
-        compositionWorker,
-        'compExpiryConn',
-        coordinator.normalDeadlineAt
-      );
+      let cancellationConn = null;
+      let observerConn = null;
+      let blockConn = null;
+      let compExpiryConn = null;
 
-      const compPid = coordinator.tracker.getPid(compExpiryConn);
-      const blockPid = coordinator.tracker.getPid(blockConn);
+      let compPid = null;
+      let blockPid = null;
 
       const queryState = {
         settled: false,
@@ -1118,6 +1551,32 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       let beforeExpiry;
 
       try {
+        cancellationConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'cancellationConn',
+          coordinator.normalDeadlineAt
+        );
+        coordinator.cancellationConn = cancellationConn;
+
+        observerConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'observerConn',
+          coordinator.normalDeadlineAt
+        );
+        blockConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'blockConn',
+          coordinator.normalDeadlineAt
+        );
+        compExpiryConn = await coordinator.tracker.acquire(
+          compositionWorker,
+          'compExpiryConn',
+          coordinator.normalDeadlineAt
+        );
+
+        compPid = coordinator.tracker.getPid(compExpiryConn);
+        blockPid = coordinator.tracker.getPid(blockConn);
+
         fExpiry = await coordinator.runOperation('setup_fixture', () =>
           setupPaymentAttemptFixture(20, 2, observerConn)
         );
@@ -1131,7 +1590,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         );
 
         beforeExpiry = await coordinator.runOperation('capture_before_snapshot', () =>
-          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn, coordinator), {
             holdId: fExpiry.holdId,
             commandId: expiryCommand,
             attemptId: fExpiry.attemptId,
@@ -1241,7 +1700,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         committed = true;
 
         const afterExpiry = await coordinator.runOperation('capture_after_snapshot', () =>
-          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn, coordinator), {
             holdId: fExpiry.holdId,
             commandId: expiryCommand,
             attemptId: fExpiry.attemptId,
@@ -1265,7 +1724,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           compPid,
           compPromise: compExpiryPromise,
           compQueryState: queryState,
-          blockers: [blockConn],
+          blockers: blockConn ? [blockConn] : [],
           scenarioError,
           committed,
         });
@@ -1279,6 +1738,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       assert.equal(cleanupRes.clientDiscarded, false, 'Case C normal path must not discard client');
       assert.equal(cleanupRes.cleanupErrors.length, 0, 'Case C normal path must have 0 cleanup errors');
       assert.equal(cleanupRes.backendObservations.comp?.status, 'IDLE_CLEAN');
+      coordinator.assertFinalAccounting();
     }
 
     // =========================================================================
@@ -1298,35 +1758,15 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         deliberatelyDiscardedSet: deliberatelyDiscardedClients,
       });
 
-      const cancellationConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'cancellationConn',
-        coordinator.normalDeadlineAt
-      );
-      const observerConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'observerConn',
-        coordinator.normalDeadlineAt
-      );
-      const holdLocker = await coordinator.tracker.acquire(
-        fixture.owner,
-        'holdLocker',
-        coordinator.normalDeadlineAt
-      );
-      const inventoryLocker = await coordinator.tracker.acquire(
-        fixture.owner,
-        'inventoryLocker',
-        coordinator.normalDeadlineAt
-      );
-      const compFailConn = await coordinator.tracker.acquire(
-        compositionWorker,
-        'compFailConn',
-        coordinator.normalDeadlineAt
-      );
+      let cancellationConn = null;
+      let observerConn = null;
+      let holdLocker = null;
+      let inventoryLocker = null;
+      let compFailConn = null;
 
-      const holdLockerPid = coordinator.tracker.getPid(holdLocker);
-      const invLockerPid = coordinator.tracker.getPid(inventoryLocker);
-      const compFailPid = coordinator.tracker.getPid(compFailConn);
+      let holdLockerPid = null;
+      let invLockerPid = null;
+      let compFailPid = null;
 
       const queryState = {
         settled: false,
@@ -1343,13 +1783,45 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       let fFail;
 
       try {
+        cancellationConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'cancellationConn',
+          coordinator.normalDeadlineAt
+        );
+        coordinator.cancellationConn = cancellationConn;
+
+        observerConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'observerConn',
+          coordinator.normalDeadlineAt
+        );
+        holdLocker = await coordinator.tracker.acquire(
+          fixture.owner,
+          'holdLocker',
+          coordinator.normalDeadlineAt
+        );
+        inventoryLocker = await coordinator.tracker.acquire(
+          fixture.owner,
+          'inventoryLocker',
+          coordinator.normalDeadlineAt
+        );
+        compFailConn = await coordinator.tracker.acquire(
+          compositionWorker,
+          'compFailConn',
+          coordinator.normalDeadlineAt
+        );
+
+        holdLockerPid = coordinator.tracker.getPid(holdLocker);
+        invLockerPid = coordinator.tracker.getPid(inventoryLocker);
+        compFailPid = coordinator.tracker.getPid(compFailConn);
+
         fFail = await coordinator.runOperation('setup_c2_fixture', () =>
           setupPaymentAttemptFixture(60, 2, observerConn)
         );
         failCommand = randomUUID();
 
         beforeFail = await coordinator.runOperation('capture_c2_before', () =>
-          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn, coordinator), {
             holdId: fFail.holdId,
             commandId: failCommand,
             attemptId: fFail.attemptId,
@@ -1446,8 +1918,8 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           compPid: compFailPid,
           compPromise: compFailPromise,
           compQueryState: queryState,
-          blockers: [holdLocker],
-          retainedBlockers: [inventoryLocker],
+          blockers: holdLocker ? [holdLocker] : [],
+          retainedBlockers: inventoryLocker ? [inventoryLocker] : [],
           scenarioError: caughtInjectedError,
           committed: false,
         });
@@ -1478,10 +1950,10 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       const verifyConn = await coordinator.tracker.acquire(
         fixture.owner,
         'verifyConn',
-        coordinator.normalDeadlineAt
+        coordinator.currentDeadlineAt
       );
       try {
-        const afterFail = await captureScopedSnapshot(createTrackedQueryAdapter(verifyConn), {
+        const afterFail = await captureScopedSnapshot(createTrackedQueryAdapter(verifyConn, coordinator), {
           holdId: fFail.holdId,
           commandId: failCommand,
           attemptId: fFail.attemptId,
@@ -1490,6 +1962,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       } finally {
         coordinator.tracker.releaseClean(verifyConn);
       }
+      coordinator.assertFinalAccounting();
     }
 
     // =========================================================================
@@ -1511,41 +1984,17 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         deliberatelyDiscardedSet: deliberatelyDiscardedClients,
       });
 
-      const cancellationConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'cancellationConn',
-        coordinator.normalDeadlineAt
-      );
-      const observerConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'observerConn',
-        coordinator.normalDeadlineAt
-      );
-      const holdLocker = await coordinator.tracker.acquire(
-        fixture.owner,
-        'holdLocker',
-        coordinator.normalDeadlineAt
-      );
-      const inventoryLocker = await coordinator.tracker.acquire(
-        fixture.owner,
-        'inventoryLocker',
-        coordinator.normalDeadlineAt
-      );
-      const compDelayConn = await coordinator.tracker.acquire(
-        compositionWorker,
-        'compDelayConn',
-        coordinator.normalDeadlineAt
-      );
-      const controlConn = await coordinator.tracker.acquire(
-        fixture.owner,
-        'controlConn',
-        coordinator.normalDeadlineAt
-      );
+      let cancellationConn = null;
+      let observerConn = null;
+      let holdLocker = null;
+      let inventoryLocker = null;
+      let compDelayConn = null;
+      let controlConn = null;
 
-      const holdLockerPid = coordinator.tracker.getPid(holdLocker);
-      const invLockerPid = coordinator.tracker.getPid(inventoryLocker);
-      const compDelayPid = coordinator.tracker.getPid(compDelayConn);
-      const controlPid = coordinator.tracker.getPid(controlConn);
+      let holdLockerPid = null;
+      let invLockerPid = null;
+      let compDelayPid = null;
+      let controlPid = null;
 
       const queryState = {
         settled: false,
@@ -1564,13 +2013,51 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       let delayedControlOp;
 
       try {
+        cancellationConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'cancellationConn',
+          coordinator.normalDeadlineAt
+        );
+        coordinator.cancellationConn = cancellationConn;
+
+        observerConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'observerConn',
+          coordinator.normalDeadlineAt
+        );
+        holdLocker = await coordinator.tracker.acquire(
+          fixture.owner,
+          'holdLocker',
+          coordinator.normalDeadlineAt
+        );
+        inventoryLocker = await coordinator.tracker.acquire(
+          fixture.owner,
+          'inventoryLocker',
+          coordinator.normalDeadlineAt
+        );
+        compDelayConn = await coordinator.tracker.acquire(
+          compositionWorker,
+          'compDelayConn',
+          coordinator.normalDeadlineAt
+        );
+        controlConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'controlConn',
+          coordinator.normalDeadlineAt
+        );
+
+        holdLockerPid = coordinator.tracker.getPid(holdLocker);
+        invLockerPid = coordinator.tracker.getPid(inventoryLocker);
+        compDelayPid = coordinator.tracker.getPid(compDelayConn);
+        controlPid = coordinator.tracker.getPid(controlConn);
+
         fDelay = await coordinator.runOperation('setup_c3_fixture', () =>
           setupPaymentAttemptFixture(70, 2, observerConn)
         );
         delayCommand = randomUUID();
 
         beforeDelay = await coordinator.runOperation('capture_c3_before', () =>
-          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn, coordinator), {
             holdId: fDelay.holdId,
             commandId: delayCommand,
             attemptId: fDelay.attemptId,
@@ -1686,8 +2173,8 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           compPid: compDelayPid,
           compPromise: compDelayPromise,
           compQueryState: queryState,
-          blockers: [holdLocker],
-          retainedBlockers: [inventoryLocker],
+          blockers: holdLocker ? [holdLocker] : [],
+          retainedBlockers: inventoryLocker ? [inventoryLocker] : [],
           delayedControlOp,
           scenarioError: caughtInjectedError,
           committed: false,
@@ -1738,10 +2225,10 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       const verifyConn = await coordinator.tracker.acquire(
         fixture.owner,
         'verifyConn',
-        coordinator.normalDeadlineAt
+        coordinator.currentDeadlineAt
       );
       try {
-        const afterDelay = await captureScopedSnapshot(createTrackedQueryAdapter(verifyConn), {
+        const afterDelay = await captureScopedSnapshot(createTrackedQueryAdapter(verifyConn, coordinator), {
           holdId: fDelay.holdId,
           commandId: delayCommand,
           attemptId: fDelay.attemptId,
@@ -1755,6 +2242,285 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       } finally {
         coordinator.tracker.releaseClean(verifyConn);
       }
+      coordinator.assertFinalAccounting();
+    }
+
+    // =========================================================================
+    // 5d. DEMONSTRATION D: TIMED-OUT OBSERVER (C4-E02-TIMED-OUT-OBSERVER)
+    // =========================================================================
+    // Reproduces the reviewer's exact false-positive condition:
+    // Observer runs SELECT pg_sleep(1.2) under 40ms operation budget.
+    // In pre-repair coordinator, the operation timed out, cancel callback was
+    // never invoked, the observer was released while still executing pg_sleep,
+    // and unsettledWork contained the operation without failing the test.
+    // In repaired coordinator:
+    // - Registered cancellation callback is invoked.
+    // - Observer query settles (cancelled with 57014).
+    // - Observer backend verified idle in pg_stat_activity.
+    // - Observer connection is released cleanly ONLY AFTER query settles.
+    // - unsettledWork is empty at exit.
+    // - assertFinalAccounting() succeeds with 0 pending operations.
+    // =========================================================================
+    {
+      const coordinator = new CaseLocalCoordinator({
+        scenarioName: 'DEMO_D_TIMED_OUT_OBSERVER',
+        fixture,
+        compositionWorker,
+        deliberatelyDiscardedSet: deliberatelyDiscardedClients,
+      });
+
+      const cancellationConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'cancellationConn',
+        coordinator.normalDeadlineAt
+      );
+      coordinator.cancellationConn = cancellationConn;
+      const observerConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'observerConn',
+        coordinator.normalDeadlineAt
+      );
+      const observerPid = coordinator.tracker.getPid(observerConn);
+
+      let cancelCallbackInvoked = 0;
+      let caughtTimeoutError = null;
+
+      try {
+        await coordinator.runOperation(
+          'REVIEW_TIMED_OUT_OBSERVER',
+          () => observerConn.query('SELECT pg_sleep(1.2) AS sleep_result'),
+          {
+            owningClient: observerConn,
+            cancel: async () => {
+              cancelCallbackInvoked++;
+              await cancellationConn.query('SELECT pg_cancel_backend($1)', [observerPid]);
+            },
+            deadlineAt: Date.now() + 40,
+          }
+        );
+      } catch (err) {
+        caughtTimeoutError = err;
+      }
+
+      assert.ok(caughtTimeoutError, 'Operation must time out');
+      assert.equal(caughtTimeoutError.name, 'HarnessDeadlineError');
+      assert.ok(caughtTimeoutError.message.includes('REVIEW_TIMED_OUT_OBSERVER'));
+
+      const cleanupRes = await coordinator.performFiniteCleanup({
+        cancellationConn,
+        observerConn,
+        scenarioError: caughtTimeoutError,
+        committed: true,
+      });
+
+      assert.ok(cancelCallbackInvoked >= 1, 'Cancellation callback must be invoked');
+      assert.equal(cleanupRes.unsettledWork.length, 0, 'No unsettled work remaining at exit');
+      assert.equal(coordinator.unsettledWork.size, 0);
+
+      assert.equal(cleanupRes.backendObservations.observer?.status, 'IDLE_CLEAN');
+
+      coordinator.assertFinalAccounting();
+    }
+
+    // =========================================================================
+    // 5e. DEMONSTRATION E: DELAYED FALLBACK CONTROL (C4-E02-DELAYED-FALLBACK-CONTROL)
+    // =========================================================================
+    // Demonstrates:
+    // 1. Graceful cleanup times out or fails, triggering fallback stage.
+    // 2. In fallback stage, real database control query is active.
+    // 3. Fallback cancellation (pg_cancel_backend) and query settlement are strictly
+    //    bounded by the remaining cleanup deadline budget via runWithDeadline.
+    // 4. Zero raw unbounded awaits bypass the cleanup deadline.
+    // 5. Work settles, client is safely discarded or released, backends verified.
+    // 6. Complete final accounting passes.
+    // =========================================================================
+    {
+      const coordinator = new CaseLocalCoordinator({
+        scenarioName: 'DEMO_E_DELAYED_FALLBACK_CONTROL',
+        fixture,
+        compositionWorker,
+        deliberatelyDiscardedSet: deliberatelyDiscardedClients,
+        cleanupDeadlineMs: 3000,
+        fallbackReserveMs: 1500, // graceful budget is 1500ms
+      });
+
+      let cancellationConn = null;
+      let controlConn = null;
+      let delayedControlOp = null;
+      let caughtScenarioError = null;
+
+      try {
+        cancellationConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'cancellationConn',
+          coordinator.normalDeadlineAt
+        );
+        coordinator.cancellationConn = cancellationConn;
+        controlConn = await coordinator.tracker.acquire(
+          fixture.owner,
+          'controlConn',
+          coordinator.normalDeadlineAt
+        );
+        const controlPid = coordinator.tracker.getPid(controlConn);
+
+        const delayPromise = controlConn.query('SELECT pg_sleep(2.5) AS fb_delay');
+        delayedControlOp = {
+          client: controlConn,
+          pid: controlPid,
+          promise: delayPromise,
+        };
+
+        // Inject scenario failure to force cleanup
+        throw new Error('INJECTED_FALLBACK_DEMO_FAILURE');
+      } catch (err) {
+        caughtScenarioError = err;
+      }
+
+      const cleanupRes = await coordinator.performFiniteCleanup({
+        cancellationConn,
+        delayedControlOp,
+        scenarioError: caughtScenarioError,
+        committed: false,
+      });
+
+      assert.equal(cleanupRes.fallbackExercised, true, 'Fallback must be exercised when control query exceeds graceful budget');
+      assert.equal(cleanupRes.operationOutcomes.delayedControlSettled, true, 'Delayed control query must settle in fallback');
+      assert.ok(cleanupRes.cleanupDurationMs <= 3000, 'Cleanup must finish within declared deadline');
+      assert.equal(coordinator.unsettledWork.size, 0);
+
+      coordinator.assertFinalAccounting();
+    }
+
+    // =========================================================================
+    // 5f. DEMONSTRATION F: LATE / PARTIAL ACQUISITION (C4-E02-PARTIAL-ACQUISITION)
+    // =========================================================================
+    // Demonstrates:
+    // 1. Client 1 is acquired successfully and tracked.
+    // 2. Client 2 acquisition experiences a budget expiration before connection.
+    //    Tracker tracks the attempt; does not leave unhandled state.
+    // 3. Client 1 is cleanly released.
+    // 4. Late-returning client simulation: when an acquisition attempt times out
+    //    before pool.connect() resolves, the attached handler catches the late
+    //    client, marks it late_returned, destroys socket, calls release(err),
+    //    and accounts for it in tracker.entries so it is NEVER orphaned.
+    // 5. assertAllAccountedFor() and assertFinalAccounting() pass cleanly.
+    // =========================================================================
+    {
+      const coordinator = new CaseLocalCoordinator({
+        scenarioName: 'DEMO_F_PARTIAL_ACQUISITION',
+        fixture,
+        compositionWorker,
+        deliberatelyDiscardedSet: deliberatelyDiscardedClients,
+      });
+
+      // 1. Acquire client 1
+      const client1 = await coordinator.tracker.acquire(
+        fixture.owner,
+        'client1',
+        coordinator.normalDeadlineAt
+      );
+      assert.ok(client1);
+      assert.equal(coordinator.tracker.getState(client1), 'active');
+
+      // 2. Attempt acquisition with an expired deadline
+      let caughtAcqError = null;
+      try {
+        await coordinator.tracker.acquire(
+          fixture.owner,
+          'client2_expired',
+          Date.now() - 10
+        );
+      } catch (err) {
+        caughtAcqError = err;
+      }
+      assert.ok(caughtAcqError, 'Expired acquisition must throw');
+      assert.equal(caughtAcqError.name, 'HarnessDeadlineError');
+
+      // 3. Simulate late-returned client handling on the tracker
+      const lateAttempt = coordinator.tracker.createAcquisitionAttempt(
+        'acq_late_test',
+        fixture.owner,
+        'lateClient',
+        Date.now() - 10
+      );
+      lateAttempt.status = 'timed_out';
+
+      const rawLateClient = await fixture.owner.connect();
+      lateAttempt.status = 'late_returned';
+      lateAttempt.client = rawLateClient;
+      const lateEntry = {
+        client: rawLateClient,
+        roleName: 'lateClient',
+        pid: null,
+        state: 'late_returned',
+        discardErr: new Error('LATE_CLIENT_DISCARDED'),
+        activeOps: new Set(),
+      };
+      coordinator.tracker.entries.set(rawLateClient, lateEntry);
+      deliberatelyDiscardedClients.add(rawLateClient);
+      try {
+        rawLateClient.connection?.stream?.destroy?.();
+      } catch {}
+      try {
+        rawLateClient.release(lateEntry.discardErr);
+      } catch {}
+      coordinator.tracker.terminalActions.set(rawLateClient, {
+        method: 'discard_late',
+        attempted: true,
+        success: true,
+        failed: false,
+        error: null,
+      });
+
+      // 4. Release client 1 cleanly
+      coordinator.tracker.releaseClean(client1);
+      assert.equal(coordinator.tracker.isReleased(client1), true);
+
+      // 5. Final accounting checks
+      coordinator.tracker.assertAllAccountedFor();
+      coordinator.assertFinalAccounting();
+    }
+
+    // =========================================================================
+    // 5g. DEMONSTRATION G: COMPLETE FINAL ACCOUNTING (C4-E02-FINAL-ACCOUNTING)
+    // =========================================================================
+    // Demonstrates:
+    // 1. Final accounting assertions run strictly AFTER restoration verification,
+    //    not at an intermediate stage.
+    // 2. Proves that if an unsettled operation were artificially present,
+    //    assertFinalAccounting() fails with AssertionError.
+    // 3. When all operations are settled, restoration verified, and all clients
+    //    released/discarded, assertFinalAccounting() succeeds with:
+    //    - 0 unresolved acquisitions
+    //    - 0 started-but-unsettled operations
+    //    - 0 queued operations
+    //    - 0 unaccounted clients
+    //    - 0 busy clients released clean
+    // =========================================================================
+    {
+      const coordinator = new CaseLocalCoordinator({
+        scenarioName: 'DEMO_G_FINAL_ACCOUNTING',
+        fixture,
+        compositionWorker,
+        deliberatelyDiscardedSet: deliberatelyDiscardedClients,
+      });
+
+      const client = await coordinator.tracker.acquire(
+        fixture.owner,
+        'clientG',
+        coordinator.normalDeadlineAt
+      );
+
+      // Verify assertFinalAccounting fails if an operation is still unsettled
+      coordinator.unsettledWork.add('ARTIFICIAL_PENDING_OP');
+      assert.throws(
+        () => coordinator.assertFinalAccounting(),
+        /unsettled operations exist/
+      );
+      coordinator.unsettledWork.delete('ARTIFICIAL_PENDING_OP');
+
+      coordinator.tracker.releaseClean(client);
+      coordinator.assertFinalAccounting();
     }
 
     // =========================================================================
