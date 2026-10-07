@@ -1,0 +1,123 @@
+{
+  "task": "W4-C4: Payment Composition Lock-Order Hardening",
+  "canonicalBase": "e2479b1c7601e21a6198b7784fa93ac3a4e27dad",
+  "originalWorkerCommit": "f768af6b8f3db63c77f8c66aedada82340f67543",
+  "correctedDiagnosticCommit": "2ff6c39da4c4a1ae44bcd384df32cb208d5a36c2",
+  "hardeningCommit": "SELF (worker/antigravity/w4-c4-lock-order-diagnostic HEAD)",
+  "workerBranch": "worker/antigravity/w4-c4-lock-order-diagnostic",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "migration060": {
+    "path": "src/migrations/060_canonical_payment_composition_lock_order_hardening.sql",
+    "sha256": "0823b6d434ebad6a6bce11196671a6ad8ff0a567049ca001fc7f4c3e9708548c",
+    "functionRedefined": "canonical_compose_payment_reservation(UUID, UUID)",
+    "oldLockOrder": "canonical_payment_attempts (id) FOR UPDATE -> booking_holds (id) FOR UPDATE -> canonical_reservation_commands (command_id) FOR UPDATE -> inventory_days",
+    "newLockOrder": "canonical_payment_attempts (id) FOR UPDATE -> canonical_reservation_commands (command_id) FOR UPDATE -> booking_holds (id) FOR UPDATE -> inventory_days"
+  },
+  "preFixEvidence": {
+    "defect": "C4-01: CURRENT LOCK-ORDER DEFECT (Deadlock between direct finalizer and payment composition on same hold and same command)",
+    "preFixDirectFinalizerOrder": "canonical_reservation_commands -> booking_holds -> inventory_days",
+    "preFixCompositionOrder": "canonical_payment_attempts -> booking_holds -> canonical_reservation_commands -> inventory_days",
+    "preFixPostgresError": "40P01",
+    "preFixReconciliation": "RECONCILIATION_REQUIRED / FINALIZER_FAILURE with details.error_code = '40P01'",
+    "proofReference": "Probe 8 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs (Commit A: 2ff6c39)"
+  },
+  "postFixVerification": {
+    "raceCaseA_directWins": {
+      "scenario": "Direct finalizer completes first on hold H1 with command C1; concurrent/subsequent composition arrives on same hold",
+      "postgresSqlState": "00000 (NO 40P01)",
+      "compositionState": "RECONCILIATION_REQUIRED",
+      "reconciliationReason": "HOLD_EXPIRED",
+      "reservationCount": 1,
+      "bridgeCount": 0,
+      "inventoryMovement": "EXACTLY_ONCE",
+      "status": "PASS"
+    },
+    "raceCaseB_compositionWins": {
+      "scenario": "Composition arrives first for hold H1 and command C1; concurrent direct finalizer targets same hold and command",
+      "postgresSqlState": "00000 (NO 40P01)",
+      "compositionState": "COMMITTED",
+      "finalizerResult": "REPLAYED (replayed = true, matching reservation_id)",
+      "reservationCount": 1,
+      "bridgeCount": 1,
+      "inventoryMovement": "EXACTLY_ONCE",
+      "status": "PASS"
+    },
+    "raceCaseC_expiryWhileWaiting": {
+      "scenario": "Hold expires while finalizer is waiting behind hold lock",
+      "wallClockEvaluation": "clock_timestamp() post-lock re-check in finalizer",
+      "finalizerException": "RESERVATION_HOLD_EXPIRED",
+      "compositionState": "RECONCILIATION_REQUIRED",
+      "reconciliationReason": "HOLD_EXPIRED",
+      "reservationCount": 0,
+      "inventoryIncrement": 0,
+      "status": "PASS"
+    },
+    "raceCaseD_nonActiveHold": {
+      "scenario": "Hold is RELEASED prior to composition",
+      "finalizerException": "RESERVATION_HOLD_NOT_ACTIVE",
+      "mappedReconciliationReason": "HOLD_EXPIRED (preserves pre-060 reconciliation contract)",
+      "compositionState": "RECONCILIATION_REQUIRED",
+      "reservationCount": 0,
+      "bridgeCount": 0,
+      "inventoryResurrection": 0,
+      "status": "PASS"
+    },
+    "replayCases": {
+      "exactCompositionReplay": "PASS (returns stored canonical_payment_reservations record with replayed = true, no second finalizer mutation)",
+      "directFinalizerCommandReplay": "PASS (unchanged, returns stored reservation_id with replayed = true)",
+      "changedCommandForComposedAttempt": "PASS (throws PAYMENT_ALREADY_COMPOSED)",
+      "changedAttemptForComposedCommand": "PASS (throws COMPOSITION_COMMAND_CONFLICT)",
+      "outsideCompositionFinalizerReplay": "PASS (rejected into RECONCILIATION_REQUIRED / FINALIZER_FAILURE with reason FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT; zero adoption into COMMITTED bridge)"
+    },
+    "outerTransactionRollback": {
+      "injectedFailure": "Temporary trigger raises exception on canonical_payment_reservations insert",
+      "rollbackVerification": "Entire outer transaction rolls back: zero canonical_reservations, zero canonical_reservation_nights, hold status remains ACTIVE, zero inventory increments",
+      "status": "PASS"
+    },
+    "roleIsolation": {
+      "encho_composition_worker": {
+        "canExecuteComposition": true,
+        "canDirectlyExecuteFinalizer": false,
+        "rawTableDml": false
+      },
+      "encho_reservation_worker": {
+        "canDirectlyExecuteFinalizer": true
+      },
+      "privilegeEscalations": "NONE (no superuser, no bypassrls, no createdb, no createrole)",
+      "status": "PASS"
+    }
+  },
+  "lockOrderSummary": {
+    "postFixDirectFinalizerOrder": "canonical_reservation_commands -> booking_holds -> inventory_days",
+    "postFixCompositionOrder": "canonical_payment_attempts -> canonical_reservation_commands -> booking_holds -> inventory_days",
+    "postFixLockInversion": "ABSENT",
+    "postFix40P01": "ABSENT",
+    "currentDeadlockCycleAfter060": "ABSENT for the bounded C4 writer graph",
+    "currentHardeningRequiredAfter060": "NO"
+  },
+  "futureModifierContract": {
+    "futureOldNewUnion": "RECOMMENDED",
+    "unionClaim": "NARROW / INVENTORY-ROW ABBA ONLY",
+    "unionWording": "A deterministic lock of the deduplicated OLD+NEW inventory-day union prevents the demonstrated inventory-row ABBA pattern among writers using that order; it does not establish global cross-resource deadlock freedom."
+  },
+  "auditLimits": {
+    "genericDbAuthorityClosure": "NOT EVALUATED",
+    "actorPoolClosure": "OUT OF SCOPE",
+    "physicalModificationWriter": "ABSENT",
+    "w4dFinancialClearance": "NOT IMPLEMENTED",
+    "guestHostPublicIngress": "ABSENT",
+    "productionDatabase": "NOT EVALUATED"
+  },
+  "regressionSummary": {
+    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs)",
+    "w3aCanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts)",
+    "w3bPaymentComposition": "PASS (28/28 in src/test/harvo/w3b_canonical_composition_pg.test.ts)",
+    "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts)",
+    "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs)"
+  },
+  "staticChecks": {
+    "eslint": "PASS (npx eslint scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs)",
+    "jsonValidation": "PASS (python3 -m json.tool)",
+    "diffCheck": "PASS (git diff --check)"
+  }
+}
