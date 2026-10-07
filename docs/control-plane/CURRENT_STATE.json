@@ -1,0 +1,11 @@
+{
+  "canonicalBranch": "codex/canonical-development",
+  "canonicalHead": "16250e7ffff8a2b4a5bd3c5c356ff3720b17f5e5",
+  "latestAcceptedSlice": "W4-C3",
+  "nextSlice": "W4-C4 Task 1",
+  "latestMigration": 59,
+  "latestReceipt": "docs/implementation/receipts/W4_C3_RESERVATION_MODIFICATION_REQUEST_LOCAL_2026_10_07.json",
+  "integrationLedger": "docs/implementation/AGENT_INTEGRATION_LEDGER.md",
+  "publicCanonicalJourneyStopsAt": "TEMPORARY_HOLD",
+  "productionEvaluated": false
+}
