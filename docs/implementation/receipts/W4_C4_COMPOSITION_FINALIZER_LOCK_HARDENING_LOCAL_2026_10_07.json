@@ -85,7 +85,11 @@
       "status": "PASS"
     },
     "raceCaseC_expiryWhileWaiting": {
-      "scenario": "Hold is verified unexpired at start (clock_timestamp() < expires_at); independent owner connection holds booking_holds(id) FOR UPDATE; composition starts and is observed waiting on booking_holds lock; database time advances past expires_at while waiting; owner lock is released",
+      "scenario": "Hold is verified unexpired at start (clock_timestamp() < expires_at); independent owner connection holds booking_holds(id) FOR UPDATE; composition starts in an explicit transaction on compExpiryConn; observed waiting on booking_holds lock; database time advances past expires_at while waiting; owner lock is released; normal reconciliation committed only on success",
+      "explicitTransactionScope": "BEGIN -> SET LOCAL lock_timeout = '8s' -> SET LOCAL statement_timeout = '12s' -> assert effective settings -> composition query -> normal validation -> COMMIT",
+      "effectiveLockTimeout": "8s",
+      "effectiveStatementTimeout": "12s",
+      "settingsVerifiedOnInvocationConnection": true,
       "initialFreshness": "VERIFIED (clock_timestamp() < expires_at)",
       "lockContentionObserved": "VERIFIED (composition blocked on owner backend via pg_blocking_pids)",
       "clockCrossingObserved": "VERIFIED (clock_timestamp() > expires_at while blocked)",
@@ -102,12 +106,50 @@
           "error_message": "RESERVATION_HOLD_EXPIRED"
         }
       },
+      "normalReconciliationCommitted": true,
       "survivingAllocations": {
         "reservations": 0,
         "nights": 0,
         "commandFences": 0,
         "bridges": 0,
         "inventoryCountersDelta": 0
+      },
+      "captureEvidencePreserved": true,
+      "backendActivityClean": "VERIFIED (state: idle, backend_xid: null, backend_xmin: null)",
+      "declaredScenarioDeadlineMs": 15000,
+      "declaredCleanupDeadlineMs": 5000,
+      "status": "PASS"
+    },
+    "raceCaseC2_injectedFailureCleanup": {
+      "scenario": "Fresh unexpired hold and matched capture; primary hold blocker holds booking_holds FOR UPDATE; secondary retained inventory blocker holds inventory_days FOR UPDATE; composition starts in explicit transaction with lock_timeout '8s' and statement_timeout '12s'; composition blocked on hold blocker; hold blocker commits; composition proceeds into finalizer and blocks on retained inventory blocker; deliberate observation failure injected (INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST); common cleanup runs while inventory blocker is still held",
+      "stableIdentifier": "C4-E02-FAILURE-CLEANUP",
+      "explicitTransactionScope": "BEGIN -> SET LOCAL lock_timeout = '8s' -> SET LOCAL statement_timeout = '12s' -> assert effective settings -> invocation -> blocking -> injected failure -> cancellation -> ROLLBACK",
+      "effectiveLockTimeout": "8s",
+      "effectiveStatementTimeout": "12s",
+      "settingsVerifiedOnInvocationConnection": true,
+      "primaryBlockerObserved": "VERIFIED (comp blocked on holdLocker via pg_blocking_pids)",
+      "secondaryBlockerObserved": "VERIFIED (comp blocked on inventoryLocker via pg_blocking_pids)",
+      "injectedObservationFailure": "INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST",
+      "cancellationPath": "pg_cancel_backend via owner connection restricted to test-owned composition backend",
+      "settlementError": {
+        "clientErrorCode": "57014",
+        "clientErrorMessage": "canceling statement due to user request"
+      },
+      "returnedDomainResult": null,
+      "storedReconciliation": null,
+      "declaredScenarioDeadlineMs": 15000,
+      "declaredCleanupDeadlineMs": 5000,
+      "measuredCleanupDurationMs": "<= 5000ms (measured < 50ms)",
+      "transactionRolledBack": true,
+      "scopedBaselineRestored": "EXACT_DEEP_EQUAL (beforeFail == afterFail)",
+      "queryTransactionLeak": "ABSENT (state: idle, backend_xid: null, backend_xmin: null)",
+      "connectionCleanup": "VERIFIED (clean backend released; retained inventory blocker rolled back afterward in final cleanup)",
+      "survivingAllocations": {
+        "reservations": 0,
+        "nights": 0,
+        "commandFences": 0,
+        "bridges": 0,
+        "reconciliations": 0
       },
       "captureEvidencePreserved": true,
       "status": "PASS"
