@@ -236,7 +236,7 @@
         "canonical_payment_reservations (payment_attempt_id) FOR UPDATE (Step 3)",
         "booking_holds (attempt.hold_id) FOR UPDATE (Step 7)"
       ],
-      "lockOrderRelationshipWithInventory": "Pre-locks booking_holds matching canonical_finalize_direct_hold; does not lock inventory_days directly; zero cross-domain reversal",
+      "lockOrderRelationshipWithInventory": "Pre-locks booking_holds (id) FOR UPDATE before delegating to canonical_finalize_direct_hold. Direct finalizer takes canonical_reservation_commands (command_id) FOR UPDATE before booking_holds (id) FOR UPDATE. This introduces a lock order inversion on same-hold / same-command concurrent races: composition locks Hold -> Command, while finalizer locks Command -> Hold.",
       "evidenceType": "SQL_REVIEW"
     }
   ],
@@ -287,9 +287,9 @@
       "Level 8: Physical Inventory Days (inventory_days locked strictly in calendar_date ASC order, tie-broken by id ASC)"
     ],
     "edges": [
-      { "from": "Command", "to": "Hold", "writer": "canonical_finalize_direct_hold, canonical_compose_payment_reservation" },
-      { "from": "Command", "to": "Payment Attempt", "writer": "canonical_compose_payment_reservation" },
+      { "from": "Command", "to": "Hold", "writer": "canonical_finalize_direct_hold" },
       { "from": "Payment Attempt", "to": "Hold", "writer": "canonical_compose_payment_reservation" },
+      { "from": "Hold", "to": "Command", "writer": "canonical_compose_payment_reservation (via delegation to canonical_finalize_direct_hold)" },
       { "from": "Reservation", "to": "Cancellation Authorization", "writer": "canonical_complete_reservation_cancellation" },
       { "from": "Cancellation Authorization", "to": "inventory_days", "writer": "canonical_complete_reservation_cancellation" },
       { "from": "Hold", "to": "Commercial Authority (SHARE)", "writer": "canonical_finalize_direct_hold" },
@@ -300,7 +300,7 @@
       { "from": "Calendar Block", "to": "inventory_days", "writer": "CalendarService.remove" },
       { "from": "Listings/Rooms (SHARE)", "to": "inventory_days", "writer": "CalendarService.create" }
     ],
-    "cycles": "NONE; graph is a strict Directed Acyclic Graph (DAG) with zero backward edges from inventory_days to earlier entities",
+    "cycles": "PRESENT; lock inversion cycle exists between canonical_finalize_direct_hold (canonical_reservation_commands -> booking_holds) and pre-repair canonical_compose_payment_reservation (booking_holds -> canonical_reservation_commands) on same-hold / same-command concurrent races, causing PostgreSQL 40P01 deadlock.",
     "evidenceType": "SOURCE_REVIEW"
   },
   "inventoryRowOrdering": {
@@ -394,6 +394,18 @@
       "potentialWait": "YES",
       "potentialDeadlockCycle": "NO",
       "why": "Serialized at root level on booking_holds (id); if expiry locks first, finalizer rechecks expires_at post-lock and throws RESERVATION_HOLD_EXPIRED"
+    },
+    {
+      "pair": "direct finalizer vs payment composition (same hold + same command)",
+      "legitimateOverlap": "YES (same booking_holds row and same target command_id)",
+      "sharedLockableResources": "booking_holds row, canonical_reservation_commands row",
+      "writerAOrder": "canonical_reservation_commands (command_id) FOR UPDATE -> booking_holds (id) FOR UPDATE -> inventory_days",
+      "writerBOrder": "canonical_payment_attempts (id) FOR UPDATE -> booking_holds (id) FOR UPDATE -> canonical_reservation_commands (command_id) FOR UPDATE -> inventory_days",
+      "serializedEarlierBy": "NONE (lock inversion occurs: finalizer takes command then hold; composition takes hold then command)",
+      "lockOrderCompatible": "NO",
+      "potentialWait": "YES",
+      "potentialDeadlockCycle": "YES (40P01 deadlock on same hold + same command race)",
+      "why": "Composition acquires booking_holds FOR UPDATE before delegating to canonical_finalize_direct_hold. The finalizer begins by acquiring canonical_reservation_commands FOR UPDATE then re-acquiring booking_holds FOR UPDATE. Concurrent execution on the same hold and command causes a classic ABBA deadlock (Command -> Hold vs Hold -> Command) yielding PostgreSQL error 40P01."
     },
     {
       "pair": "W3 finalization vs calendar block",
@@ -508,17 +520,27 @@
     {
       "probeId": "PROBE-7",
       "name": "Multi-Room Future Modifier Simulation (ABBA Demonstration vs Union Sort Resolution)",
-      "description": "Simulates concurrent multi-room modifications (Room A -> Room B vs Room B -> Room A) with un-sorted access vs deterministic UNION sort",
-      "observedBehavior": "Part 7a: Un-sorted room access (Tx 1 locks A then B; Tx 2 locks B then A) triggers ABBA deadlock (40P01) / lock timeout (55P03); Part 7b: Locking UNION(Room A, Room B) sorted deterministically by (calendar_date ASC, room_type_id ASC) converts contending operations into clean serial execution with zero deadlock",
-      "classification": "ABBA_DEADLOCK_PROVEN_WITHOUT_UNION / DETERMINISTIC_UNION_LOCK_PREVENTS_DEADLOCK",
+      "description": "Simulates concurrent multi-room modifications (Room A -> Room B vs Room B -> Room A) with un-sorted access vs deterministic UNION sort; Probe 7a strictly asserts PostgreSQL 40P01 deadlock with deadlock_timeout = 100ms and lock_timeout = 3000ms",
+      "observedBehavior": "Part 7a: Un-sorted room access (Tx 1 locks A then B; Tx 2 locks B then A) triggers PostgreSQL 40P01 deadlock (strictly asserting 40P01, distinguishing from 55P03 lock timeout); Part 7b: Locking UNION(Room A, Room B) sorted deterministically by (calendar_date ASC, room_type_id ASC) converts contending operations into clean serial execution with zero deadlock",
+      "classification": "ABBA_DEADLOCK_40P01_PROVEN_WITHOUT_UNION / DETERMINISTIC_UNION_LOCK_PREVENTS_DEADLOCK",
+      "evidenceType": "TWO_CONNECTION_PROBE"
+    },
+    {
+      "probeId": "PROBE-8",
+      "name": "Pre-Repair Direct Finalizer vs Payment Composition Lock Inversion (Same Hold + Same Command)",
+      "description": "Concurrent race between direct finalizer (Command -> Hold) and pre-repair composition (Hold -> Command) on the same hold H1 and same command C1 with real W1/W2/W3-B fixtures and MATCHED_CAPTURE payment attempt",
+      "observedBehavior": "Tx 1 locks canonical_reservation_commands(C1) FOR UPDATE; Tx 2 enters canonical_compose_payment_reservation, locks booking_holds(H1) FOR UPDATE and blocks in finalizer waiting for C1; Tx 1 attempts to lock booking_holds(H1) FOR UPDATE and blocks on Tx 2; PostgreSQL deadlock detector raises 40P01 at 100ms; composition catches 40P01 and records RECONCILIATION_REQUIRED / FINALIZER_FAILURE with details.error_code = '40P01' (or Tx 1 receives 40P01 directly)",
+      "classification": "PRE_REPAIR_40P01_DEADLOCK_CONFIRMED",
       "evidenceType": "TWO_CONNECTION_PROBE"
     }
   ],
   "auditConclusions": {
-    "currentDeadlockCycle": "ABSENT",
+    "currentDeadlockCycle": "PRESENT",
     "nondeterministicMultiRowAcquisition": "ABSENT",
-    "currentHardeningRequired": "NO",
-    "rationale": "Every accepted runtime inventory writer operates on a single room_type_id and acquires inventory_days rows in strict calendar_date ASC order; where earlier entities exist (booking_holds, canonical_reservations), root-level row locks serialize contending operations prior to inventory acquisition; zero current cycles exist"
+    "currentHardeningRequired": "YES",
+    "c4_01": "CONFIRMED",
+    "c4_02": "CORRECTED",
+    "rationale": "A pre-repair lock order inversion exists between canonical_finalize_direct_hold (canonical_reservation_commands -> booking_holds) and canonical_compose_payment_reservation (booking_holds -> canonical_reservation_commands). When competing concurrently for the same hold and same target command, PostgreSQL deadlock 40P01 is triggered. Hardening is required via migration 060 to eliminate the pre-finalization booking_holds FOR UPDATE lock from composition."
   },
   "futureModifierContract": {
     "sharedResourceContract": [
@@ -528,8 +550,9 @@
       "4. inventory_days UNION set FOR UPDATE (Deduplicated union of all affected old and new inventory_days rows locked in a single atomic pass)"
     ],
     "oldNewUnionLock": "RECOMMENDED",
+    "unionClaim": "NARROW / INVENTORY-ROW ABBA ONLY",
     "proposedInventorySortKey": "ORDER BY calendar_date ASC, room_type_id ASC, id ASC FOR UPDATE",
-    "unionSortRationale": "When modifying a reservation across rooms or disjoint date ranges, locking old allocation rows followed by new allocation rows exposes concurrent bidirectional modifications (e.g. Room A -> Room B vs Room B -> Room A) to ABBA deadlock cycles as proven in Probe 7a; acquiring the deduplicated UNION(old_allocation_inventory_days, new_allocation_inventory_days) sorted by (calendar_date ASC, room_type_id ASC) in a single query guarantees global compatibility with all current single-room writers and completely eliminates multi-room cross-writer deadlocks as proven in Probe 7b",
+    "unionSortRationale": "A deterministic lock of the deduplicated OLD+NEW inventory-day union prevents the demonstrated inventory-row ABBA pattern among writers using that order; it does not establish global cross-resource deadlock freedom.",
     "compatibleWithCurrentWriters": "YES"
   },
   "capacityDriftObservation": {

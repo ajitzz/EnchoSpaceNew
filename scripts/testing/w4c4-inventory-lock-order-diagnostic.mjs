@@ -20,7 +20,7 @@
  */
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 process.env.TZ = 'UTC';
@@ -30,6 +30,7 @@ import { AcceptedOfferService } from '../../src/server/offers/acceptedOfferServi
 import { PostgresWorkforceAuthorization } from '../../src/lib/iam/postgresAuthorization.js';
 import { createItineraryQuote } from '../../src/services/itineraryQuoteService.js';
 import { acquireHold } from '../../src/services/inventoryHoldService.js';
+import { createPaymentAttempt, ingestProviderEvent } from '../../src/services/canonicalPaymentService.js';
 import { addDays, createW1AcceptedOfferFixture } from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.js';
 import { applyIsolatedMigration } from '../../src/test/harvo/helpers/isolatedMigration.js';
 
@@ -63,6 +64,7 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
   let stays;
   let reservationWorker;
   let compositionWorker;
+  let paymentWorker;
   let cancellationExecutor;
 
   try {
@@ -111,6 +113,7 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
     stays = new pg.Pool({ ...fixture.owner.options, user: 'encho_stays_web' });
     reservationWorker = new pg.Pool({ ...fixture.owner.options, user: 'encho_reservation_worker' });
     compositionWorker = new pg.Pool({ ...fixture.owner.options, user: 'encho_composition_worker' });
+    paymentWorker = new pg.Pool({ ...fixture.owner.options, user: 'encho_payment_worker' });
     cancellationExecutor = new pg.Pool({ ...fixture.owner.options, user: 'encho_cancellation_executor' });
 
     // Seed inventory days for roomTypeId 101 and 102
@@ -631,10 +634,10 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
       try {
         await conn1.query('BEGIN');
         await conn2.query('BEGIN');
-        await conn1.query("SET deadlock_timeout = '150ms'");
-        await conn2.query("SET deadlock_timeout = '150ms'");
-        await conn1.query("SET lock_timeout = '400ms'");
-        await conn2.query("SET lock_timeout = '400ms'");
+        await conn1.query("SET deadlock_timeout = '100ms'");
+        await conn2.query("SET deadlock_timeout = '100ms'");
+        await conn1.query("SET lock_timeout = '3000ms'");
+        await conn2.query("SET lock_timeout = '3000ms'");
 
         // Tx 1 locks Room A first
         await conn1.query(`
@@ -652,7 +655,6 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
 
         // Tx 1 attempts to lock Room B -> blocks waiting for Tx 2
         // Tx 2 attempts to lock Room A -> creates ABBA cycle!
-        let cycleDetected = false;
         const p1 = conn1.query(`
           SELECT id FROM inventory_days
           WHERE room_type_id = $1 AND calendar_date = $2::date
@@ -667,12 +669,29 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
 
         const [r1, r2] = await Promise.all([p1, p2]);
 
-        if ((r1 && (r1.code === '40P01' || r1.code === '55P03')) ||
-            (r2 && (r2.code === '40P01' || r2.code === '55P03'))) {
-          cycleDetected = true;
+        let deadlockObserved = false;
+        let lockTimeoutObserved = false;
+        let observedSqlState = null;
+
+        if (r1 && r1.code === '40P01') {
+          deadlockObserved = true;
+          observedSqlState = '40P01';
+        } else if (r1 && r1.code === '55P03') {
+          lockTimeoutObserved = true;
+          observedSqlState = '55P03';
         }
 
-        assert.ok(cycleDetected, 'Opposite room order without union sort must encounter deadlock (40P01) or timeout (55P03)');
+        if (r2 && r2.code === '40P01') {
+          deadlockObserved = true;
+          observedSqlState = '40P01';
+        } else if (r2 && r2.code === '55P03') {
+          lockTimeoutObserved = true;
+          observedSqlState = '55P03';
+        }
+
+        assert.ok(!lockTimeoutObserved, 'Probe 7a: 55P03 LOCK_TIMEOUT is rejected; actual 40P01 deadlock required');
+        assert.ok(deadlockObserved, 'Probe 7a: Opposite room order without union sort must encounter actual PostgreSQL 40P01 deadlock');
+        assert.equal(observedSqlState, '40P01', 'Probe 7a: SQLSTATE must be 40P01');
 
         await conn1.query('ROLLBACK');
         await conn2.query('ROLLBACK');
@@ -750,10 +769,165 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
       }
     }
 
+    // -------------------------------------------------------------------------
+    // PROBE 8: Pre-Repair Direct Finalizer vs Payment Composition Lock Inversion
+    // (Same Hold + Same Command)
+    // Proves:
+    // Direct finalizer locks: canonical_reservation_commands -> booking_holds -> inventory_days
+    // Pre-repair composition locks: booking_holds -> canonical_reservation_commands -> inventory_days
+    // Contending operations on same hold H1 and same command C1 trigger PostgreSQL 40P01 deadlock,
+    // recorded in canonical_payment_reconciliations as FINALIZER_FAILURE / 40P01,
+    // or thrown directly as 40P01 on the direct finalizer transaction.
+    // -------------------------------------------------------------------------
+    {
+      const checkIn = addDays(fixture.today, 40);
+      const checkOut = addDays(fixture.today, 42);
+
+      const quote = await createItineraryQuote(
+        stays,
+        {
+          offerId,
+          revision: 1,
+          checkIn,
+          checkOut,
+          guestCount: 2,
+          requestId: randomUUID(),
+        },
+        'user:10'
+      );
+
+      const holdRes = await acquireHold(stays, {
+        roomTypeId: 101,
+        checkIn,
+        checkOut,
+        quantity: 1,
+        idempotencyKey: randomUUID(),
+        quoteId: quote.id,
+        holderPrincipal: 'user:10',
+        userId: 10,
+      });
+      assert.equal(holdRes.success, true);
+      const holdId = holdRes.hold.id;
+      const expectedAmount = Number(quote.roomSubtotalMinor);
+
+      // Approved payable authority
+      const payableId = randomUUID();
+      const contractHash = 'b'.repeat(64);
+      await fixture.owner.query(
+        `INSERT INTO canonical_payable_authorities (
+          id, quote_id, currency, payable_amount_paise, authority_kind, contract_hash, status
+        ) VALUES ($1, $2, 'INR', $3, 'DISPOSABLE TEST FIXTURE ONLY', $4, 'APPROVED')`,
+        [payableId, quote.id, expectedAmount, contractHash]
+      );
+
+      // Payment attempt
+      const orderRef = 'order_test_' + randomUUID();
+      const paymentRef = 'pay_test_' + randomUUID();
+      const attempt = await createPaymentAttempt(paymentWorker, {
+        commandId: randomUUID(),
+        holderPrincipal: 'user:10',
+        originKind: 'RAZORPAY',
+        quoteId: quote.id,
+        holdId,
+        providerOrderRef: orderRef,
+      });
+
+      // Ingest PAYMENT_CAPTURED -> enters MATCHED_CAPTURE
+      await ingestProviderEvent(paymentWorker, {
+        attemptId: attempt.attemptId,
+        originKind: 'RAZORPAY',
+        providerEventId: 'evt_cap_' + randomUUID(),
+        normalizedEventType: 'PAYMENT_CAPTURED',
+        reportedAmountPaise: expectedAmount,
+        reportedCurrency: 'INR',
+        providerPaymentRef: paymentRef,
+        providerOrderRef: orderRef,
+        evidencePayload: { pay_id: paymentRef, amount: expectedAmount },
+      });
+
+      const targetCommand = randomUUID();
+      const conn1 = await fixture.owner.connect();
+      const conn2 = await fixture.owner.connect();
+
+      try {
+        await conn1.query('BEGIN');
+        await conn1.query("SET deadlock_timeout = '100ms'");
+        await conn1.query("SET lock_timeout = '3000ms'");
+        await conn1.query("SELECT set_config('app.stays_principal', $1, true)", ['user:10']);
+
+        await conn2.query("SET deadlock_timeout = '100ms'");
+        await conn2.query("SET lock_timeout = '3000ms'");
+
+        // Conn 1 (Direct finalizer) locks canonical_reservation_commands for targetCommand
+        const fingerprint = createHash('sha256').update(`user:10:${holdId}:${quote.id}`).digest('hex');
+        await conn1.query(
+          `INSERT INTO canonical_reservation_commands(command_id, holder_principal, hold_id, quote_id, request_fingerprint)
+           VALUES ($1, 'user:10', $2, $3, $4)`,
+          [targetCommand, holdId, quote.id, fingerprint]
+        );
+        await conn1.query(`SELECT * FROM canonical_reservation_commands WHERE command_id = $1 FOR UPDATE`, [targetCommand]);
+
+        // Conn 2 invokes canonical_compose_payment_reservation
+        // Pre-repair composition locks booking_holds(holdId) FOR UPDATE, then calls
+        // canonical_finalize_direct_hold which blocks waiting on canonical_reservation_commands(targetCommand) held by Conn 1.
+        const p2 = conn2.query(
+          `SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)`,
+          [targetCommand, attempt.attemptId]
+        ).catch(err => ({ error: err }));
+
+        // Wait 100ms for Conn 2 to lock booking_holds and block in finalizer
+        await new Promise(r => setTimeout(r, 100));
+
+        // Conn 1 now attempts to lock booking_holds(holdId) FOR UPDATE -> blocks waiting on Conn 2!
+        const p1 = conn1.query(
+          `SELECT * FROM booking_holds WHERE id = $1 FOR UPDATE`,
+          [holdId]
+        ).catch(err => ({ error: err }));
+
+        const [r1, r2] = await Promise.all([p1, p2]);
+
+        // Inspect deadlock results
+        let observed40P01 = false;
+        let observed55P03 = false;
+
+        if (r1?.error?.code === '40P01') {
+          observed40P01 = true;
+        } else if (r1?.error?.code === '55P03') {
+          observed55P03 = true;
+        }
+
+        const recs = await fixture.owner.query(
+          `SELECT * FROM canonical_payment_reconciliations WHERE payment_attempt_id = $1`,
+          [attempt.attemptId]
+        );
+
+        const rec40P01 = recs.rows.find(
+          r => r.reason === 'FINALIZER_FAILURE' && r.details?.error_code === '40P01'
+        );
+        if (rec40P01) {
+          observed40P01 = true;
+        }
+
+        if (r2?.error?.code === '55P03') {
+          observed55P03 = true;
+        }
+
+        assert.ok(!observed55P03, 'Probe 8: 55P03 lock timeout observed instead of proving 40P01 deadlock');
+        assert.ok(observed40P01, 'Probe 8: Must observe PostgreSQL 40P01 deadlock between direct finalizer and composition');
+
+        await conn1.query('ROLLBACK').catch(() => {});
+        await conn2.query('ROLLBACK').catch(() => {});
+      } finally {
+        conn1.release();
+        conn2.release();
+      }
+    }
+
   } finally {
     if (stays) await stays.end();
     if (reservationWorker) await reservationWorker.end();
     if (compositionWorker) await compositionWorker.end();
+    if (paymentWorker) await paymentWorker.end();
     if (cancellationExecutor) await cancellationExecutor.end();
     await fixture?.close();
   }
