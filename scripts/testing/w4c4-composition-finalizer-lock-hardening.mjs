@@ -153,8 +153,24 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     paymentWorker = new pg.Pool({ ...fixture.owner.options, user: 'encho_payment_worker' });
     cancellationExecutor = new pg.Pool({ ...fixture.owner.options, user: 'encho_cancellation_executor' });
 
-    for (const p of [fixture.owner, stays, reservationWorker, compositionWorker, paymentWorker, cancellationExecutor]) {
-      p.on('error', () => {});
+    const deliberatelyDiscardedClients = new Set();
+    const unexpectedPoolErrors = [];
+
+    for (const [name, p] of Object.entries({
+      owner: fixture.owner,
+      stays,
+      reservationWorker,
+      compositionWorker,
+      paymentWorker,
+      cancellationExecutor,
+    })) {
+      p.on('error', (err, client) => {
+        if (client && deliberatelyDiscardedClients.has(client)) {
+          // Expected disposal event on a deliberately discarded client
+          return;
+        }
+        unexpectedPoolErrors.push({ pool: name, error: err, client });
+      });
     }
 
     // Seed inventory days for roomTypeId 101 and 102
@@ -205,7 +221,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     const offerId = draft.offerId;
 
     // Helper: Create valid matched-capture payment attempt fixture
-    const setupPaymentAttemptFixture = async (offsetDays = 10, nights = 2) => {
+    const setupPaymentAttemptFixture = async (offsetDays = 10, nights = 2, ownerClient = fixture.owner) => {
       const checkIn = addDays(fixture.today, offsetDays);
       const checkOut = addDays(fixture.today, offsetDays + nights);
 
@@ -238,7 +254,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
       const payableId = randomUUID();
       const contractHash = 'c'.repeat(64);
-      await fixture.owner.query(
+      await ownerClient.query(
         `INSERT INTO canonical_payable_authorities (
           id, quote_id, currency, payable_amount_paise, authority_kind, contract_hash, status
         ) VALUES ($1, $2, 'INR', $3, 'DISPOSABLE TEST FIXTURE ONLY', $4, 'APPROVED')`,
@@ -544,198 +560,498 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     const CLEANUP_DEADLINE_MS = 5000;
     const FALLBACK_RESERVE_MS = 1500; // Reserved fallback budget inside cleanup deadline
 
-    const runWithDeadline = async (action, deadlineAt, errorFactory) => {
+    class HarnessDeadlineError extends Error {
+      constructor(message = 'HARNESS_DEADLINE_EXCEEDED', details = {}) {
+        super(message);
+        this.name = 'HarnessDeadlineError';
+        this.code = 'HARNESS_DEADLINE_EXCEEDED';
+        this.details = details;
+      }
+    }
+
+    const runWithDeadline = async (startFn, deadlineAt, errorFactory) => {
       const remaining = deadlineAt - Date.now();
       if (remaining <= 0) {
-        throw errorFactory();
+        throw errorFactory ? errorFactory() : new HarnessDeadlineError('HARNESS_DEADLINE_EXCEEDED');
       }
       let timerId;
       const timeoutPromise = new Promise((_, reject) => {
         timerId = setTimeout(() => {
-          reject(errorFactory());
+          reject(errorFactory ? errorFactory() : new HarnessDeadlineError('HARNESS_DEADLINE_EXCEEDED'));
         }, remaining);
       });
-      const promise = typeof action === 'function' ? action() : action;
       try {
+        const promise = startFn();
         return await Promise.race([promise, timeoutPromise]);
       } finally {
         clearTimeout(timerId);
       }
     };
 
-    const createClientTracker = () => {
-      const tracked = new Map();
+    const createClientTracker = (deliberatelyDiscardedSet) => {
+      const entries = new Map();
+
+      const acquire = async (pool, roleName, deadlineAt) => {
+        return await runWithDeadline(
+          async () => {
+            const client = await pool.connect();
+            const pidRes = await client.query('SELECT pg_backend_pid() AS pid');
+            const pid = pidRes.rows[0].pid;
+            const entry = {
+              client,
+              roleName,
+              pid,
+              state: 'active',
+              discardErr: null,
+            };
+            entries.set(client, entry);
+            return client;
+          },
+          deadlineAt,
+          () => new HarnessDeadlineError(`CLIENT_ACQUISITION_TIMEOUT: ${roleName}`)
+        );
+      };
+
+      const getPid = (client) => entries.get(client)?.pid;
+      const getRole = (client) => entries.get(client)?.roleName;
+
+      const releaseClean = (client) => {
+        const entry = entries.get(client);
+        if (!entry) {
+          throw new Error('CLIENT_UNTRACKED: Cannot release untracked client');
+        }
+        if (entry.state === 'released') {
+          throw new Error(`CLIENT_DOUBLE_RELEASE: Client ${entry.roleName} (pid ${entry.pid}) already released`);
+        }
+        if (entry.state === 'discarded') {
+          throw new Error(`CLIENT_STATE_CONFLICT: Client ${entry.roleName} (pid ${entry.pid}) already discarded`);
+        }
+        entry.state = 'released';
+        entry.client.release();
+      };
+
+      const discard = (client, err = new Error('CLIENT_DISCARDED')) => {
+        const entry = entries.get(client);
+        if (!entry) {
+          throw new Error('CLIENT_UNTRACKED: Cannot discard untracked client');
+        }
+        if (entry.state === 'released') {
+          throw new Error(`CLIENT_STATE_CONFLICT: Client ${entry.roleName} (pid ${entry.pid}) already cleanly released`);
+        }
+        if (entry.state === 'discarded') {
+          return;
+        }
+        entry.state = 'discarded';
+        entry.discardErr = err;
+        deliberatelyDiscardedSet.add(entry.client);
+        try {
+          entry.client.connection?.stream?.destroy?.();
+        } catch {}
+        try {
+          entry.client.release(err);
+        } catch {}
+      };
+
+      const isReleased = (client) => entries.get(client)?.state === 'released';
+      const isDiscarded = (client) => entries.get(client)?.state === 'discarded';
+
+      const assertAllAccountedFor = () => {
+        const unaccounted = [];
+        for (const [, entry] of entries) {
+          if (entry.state !== 'released' && entry.state !== 'discarded') {
+            unaccounted.push(`${entry.roleName} (pid ${entry.pid}, state ${entry.state})`);
+          }
+        }
+        if (unaccounted.length > 0) {
+          throw new Error(`CLIENT_ACCOUNTING_INCOMPLETE: Unaccounted clients: ${unaccounted.join(', ')}`);
+        }
+      };
+
       return {
-        track: (client, name = 'client') => {
-          tracked.set(client, { name, released: false, discarded: false });
-          return client;
-        },
-        releaseClean: (client) => {
-          const entry = tracked.get(client);
-          if (!entry || entry.released) return;
-          entry.released = true;
-          try {
-            client.release();
-          } catch {}
-        },
-        discard: (client, err = new Error('CLIENT_DISCARDED')) => {
-          const entry = tracked.get(client);
-          if (!entry || entry.released) return;
-          entry.released = true;
-          entry.discarded = true;
-          try {
-            client.connection?.stream?.destroy?.();
-          } catch {}
-          try {
-            client.release(err);
-          } catch {}
-        },
-        isReleased: (client) => tracked.get(client)?.released ?? false,
-        isDiscarded: (client) => tracked.get(client)?.discarded ?? false,
+        acquire,
+        getPid,
+        getRole,
+        releaseClean,
+        discard,
+        isReleased,
+        isDiscarded,
+        assertAllAccountedFor,
       };
     };
 
-    const assertBackendIdleAndClean = async (ownerConn, pid) => {
-      const { rows } = await ownerConn.query(
-        `SELECT pid, state, query, backend_xid, backend_xmin
-         FROM pg_stat_activity
-         WHERE pid = $1`,
-        [pid]
-      );
-      if (rows.length === 0) return true;
-      const row = rows[0];
-      assert.equal(
-        row.state,
-        'idle',
-        `Backend ${pid} must be in idle state, got '${row.state}'`
-      );
-      assert.equal(
-        row.backend_xid,
-        null,
-        `Backend ${pid} must have null backend_xid, got ${row.backend_xid}`
-      );
-      assert.equal(
-        row.backend_xmin,
-        null,
-        `Backend ${pid} must have null backend_xmin, got ${row.backend_xmin}`
-      );
-      return true;
+    const createTrackedQueryAdapter = (client) => {
+      let chain = Promise.resolve();
+      return {
+        query: (sql, args) => {
+          const next = chain.then(() => client.query(sql, args));
+          chain = next.catch(() => {});
+          return next;
+        },
+      };
     };
 
-    const performFiniteCleanup = async ({
-      ownerConn,
-      compConn,
-      compPid,
-      queryState,
-      compPromise,
-      holdConn,
-      cleanupDeadlineMs = CLEANUP_DEADLINE_MS,
-      clientTracker,
-      controlDelayHook = null,
-    }) => {
-      const cleanupStart = Date.now();
-      const cleanupDeadlineAt = cleanupStart + cleanupDeadlineMs;
-      const gracefulDeadlineAt = cleanupDeadlineAt - FALLBACK_RESERVE_MS;
+    const verifyBackendsCleanOrAbsent = async (cancellationConn, pidsToVerify, deadlineAt) => {
+      return await runWithDeadline(
+        async () => {
+          const results = {};
+          for (const { pid, role } of pidsToVerify) {
+            const { rows } = await cancellationConn.query(
+              `SELECT pid, state, query, backend_xid, backend_xmin
+               FROM pg_stat_activity
+               WHERE pid = $1`,
+              [pid]
+            );
+            if (rows.length === 0) {
+              results[role] = { pid, status: 'ABSENT' };
+            } else {
+              const row = rows[0];
+              assert.equal(
+                row.state,
+                'idle',
+                `Backend ${pid} (${role}) must be idle, got '${row.state}'`
+              );
+              assert.equal(
+                row.backend_xid,
+                null,
+                `Backend ${pid} (${role}) must have null backend_xid, got ${row.backend_xid}`
+              );
+              assert.equal(
+                row.backend_xmin,
+                null,
+                `Backend ${pid} (${role}) must have null backend_xmin, got ${row.backend_xmin}`
+              );
+              results[role] = { pid, status: 'IDLE_CLEAN' };
+            }
+          }
+          return results;
+        },
+        deadlineAt,
+        () => new HarnessDeadlineError('BACKEND_VERIFICATION_TIMEOUT')
+      );
+    };
 
-      let cleanupStageError = null;
-      let fallbackExercised = false;
-      let clientDiscarded = false;
-      const cleanupErrors = [];
+    class CaseLocalCoordinator {
+      constructor({
+        scenarioName,
+        fixture: coordFixture,
+        compositionWorker: coordCompWorker,
+        deliberatelyDiscardedSet,
+        scenarioDeadlineMs = SCENARIO_DEADLINE_MS,
+        cleanupDeadlineMs = CLEANUP_DEADLINE_MS,
+        fallbackReserveMs = FALLBACK_RESERVE_MS,
+      }) {
+        this.scenarioName = scenarioName;
+        this.fixture = coordFixture;
+        this.compositionWorker = coordCompWorker;
+        this.scenarioDeadlineMs = scenarioDeadlineMs;
+        this.cleanupDeadlineMs = cleanupDeadlineMs;
+        this.fallbackReserveMs = fallbackReserveMs;
 
-      try {
-        // Step 1: Control stage (rollback holdConn and execute controlDelayHook if set)
-        if (holdConn) {
-          await runWithDeadline(
-            holdConn.query('ROLLBACK'),
-            gracefulDeadlineAt,
-            () => new Error('CLEANUP_HOLD_ROLLBACK_TIMEOUT')
-          );
+        this.scenarioStart = Date.now();
+        this.scenarioDeadlineAt = this.scenarioStart + this.scenarioDeadlineMs;
+        this.normalDeadlineAt = this.scenarioDeadlineAt - this.cleanupDeadlineMs;
+        this.tracker = createClientTracker(deliberatelyDiscardedSet);
+
+        this.operations = new Map();
+        this.unsettledWork = new Set();
+      }
+
+      async runOperation(name, startFn, { owningClient = null, cancel = null, deadlineAt = this.normalDeadlineAt } = {}) {
+        let op = this.operations.get(name);
+        if (!op) {
+          op = {
+            name,
+            owningClient,
+            cancel,
+            started: false,
+            settled: false,
+            result: null,
+            error: null,
+            promise: null,
+          };
+          this.operations.set(name, op);
         }
-        if (typeof controlDelayHook === 'function') {
-          await runWithDeadline(
-            controlDelayHook(),
-            gracefulDeadlineAt,
-            () => new Error('CLEANUP_CONTROL_STAGE_TIMEOUT')
-          );
+
+        const remaining = deadlineAt - Date.now();
+        if (remaining <= 0) {
+          throw new HarnessDeadlineError(`HARNESS_DEADLINE_EXCEEDED: ${name}`);
         }
 
-        // Step 2: Graceful cancellation & query settlement
-        if (!queryState.settled) {
-          queryState.cancelled = true;
-          await runWithDeadline(
-            ownerConn.query('SELECT pg_cancel_backend($1)', [compPid]),
-            gracefulDeadlineAt,
-            () => new Error('CLEANUP_CANCELLATION_QUERY_TIMEOUT')
-          );
-          await runWithDeadline(
-            compPromise,
-            gracefulDeadlineAt,
-            () => new Error('CLEANUP_SETTLEMENT_TIMEOUT')
-          );
-        }
+        op.started = true;
+        this.unsettledWork.add(name);
 
-        // Step 3: Rollback composition transaction
-        await runWithDeadline(
-          compConn.query('ROLLBACK'),
-          gracefulDeadlineAt,
-          () => new Error('CLEANUP_ROLLBACK_TIMEOUT')
-        );
+        let timerId;
+        const timeoutPromise = new Promise((_, reject) => {
+          timerId = setTimeout(() => {
+            reject(new HarnessDeadlineError(`OPERATION_TIMEOUT: ${name}`));
+          }, remaining);
+        });
 
-        // Step 4: Verify backend idle and clean
-        await runWithDeadline(
-          assertBackendIdleAndClean(ownerConn, compPid),
-          gracefulDeadlineAt,
-          () => new Error('CLEANUP_VERIFICATION_TIMEOUT')
-        );
-      } catch (err) {
-        fallbackExercised = true;
-        cleanupStageError = err;
-        cleanupErrors.push(err);
-
-        // Fallback: bounded by remaining budget up to cleanupDeadlineAt
         try {
-          clientDiscarded = true;
-          clientTracker.discard(compConn, cleanupStageError);
+          const p = startFn();
+          op.promise = p
+            .then((res) => {
+              op.settled = true;
+              op.result = res;
+              this.unsettledWork.delete(name);
+              return res;
+            })
+            .catch((err) => {
+              op.settled = true;
+              op.error = err;
+              this.unsettledWork.delete(name);
+              throw err;
+            });
 
-          await runWithDeadline(
-            (async () => {
-              await ownerConn.query('SELECT pg_terminate_backend($1)', [compPid]).catch(() => {});
-              if (!queryState.settled && compPromise) {
-                await compPromise.catch(() => {});
-              }
-              await waitFor(async () => {
-                const r = await ownerConn.query(
-                  'SELECT pid, state, backend_xid FROM pg_stat_activity WHERE pid = $1',
-                  [compPid]
-                );
-                return (
-                  r.rows.length === 0 ||
-                  (r.rows[0].state === 'idle' && r.rows[0].backend_xid === null)
-                );
-              }, 'backend cleanup after fallback', Math.max(100, cleanupDeadlineAt - Date.now()));
-            })(),
-            cleanupDeadlineAt,
-            () => new Error('CLEANUP_FALLBACK_DEADLINE_EXCEEDED')
-          );
-        } catch (fallbackErr) {
-          cleanupErrors.push(fallbackErr);
+          return await Promise.race([op.promise, timeoutPromise]);
+        } finally {
+          clearTimeout(timerId);
         }
       }
 
-      const cleanupDurationMs = Date.now() - cleanupStart;
-      assert.ok(
-        cleanupDurationMs <= cleanupDeadlineMs,
-        `Cleanup exceeded declared deadline: ${cleanupDurationMs}ms > ${cleanupDeadlineMs}ms`
-      );
+      async waitForCondition(name, predicateStartFn, { deadlineAt = this.normalDeadlineAt, intervalMs = 20 } = {}) {
+        while (true) {
+          const remaining = deadlineAt - Date.now();
+          if (remaining <= 0) {
+            throw new HarnessDeadlineError(`WAIT_FOR_CONDITION_TIMEOUT: ${name}`);
+          }
+          const matched = await this.runOperation(
+            `${name}_poll_${Date.now()}`,
+            predicateStartFn,
+            { deadlineAt }
+          );
+          if (matched) {
+            return matched;
+          }
+          await new Promise((r) => setTimeout(r, Math.min(intervalMs, remaining)));
+        }
+      }
 
-      return {
-        cleanupDurationMs,
-        fallbackExercised,
-        clientDiscarded,
-        cleanupStageError,
-        cleanupErrors,
-      };
-    };
+      async performFiniteCleanup({
+        cancellationConn,
+        observerConn,
+        compConn,
+        compPid,
+        compPromise,
+        compQueryState,
+        blockers = [],
+        retainedBlockers = [],
+        delayedControlOp = null,
+        scenarioError = null,
+        committed = false,
+      }) {
+        const cleanupStart = Date.now();
+        const cleanupDeadlineAt = Math.min(cleanupStart + this.cleanupDeadlineMs, this.scenarioDeadlineAt);
+        const gracefulDeadlineAt = cleanupDeadlineAt - this.fallbackReserveMs;
+
+        const cleanupErrors = [];
+        let fallbackExercised = false;
+        let clientDiscarded = false;
+        let delayedControlSettled = false;
+
+        const allBlockers = [...blockers, ...retainedBlockers];
+
+        if (!committed) {
+          try {
+            // Step 1: Control stage: rollback standard blockers (e.g. holdLocker)
+            for (const blocker of blockers) {
+              if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
+                await runWithDeadline(
+                  () => blocker.query('ROLLBACK'),
+                  gracefulDeadlineAt,
+                  () => new HarnessDeadlineError('CLEANUP_BLOCKER_ROLLBACK_TIMEOUT')
+                );
+              }
+            }
+
+            // Step 2: Delayed control query stage (if present)
+            if (delayedControlOp && delayedControlOp.promise) {
+              await runWithDeadline(
+                () => delayedControlOp.promise,
+                gracefulDeadlineAt,
+                () => new HarnessDeadlineError('CLEANUP_CONTROL_STAGE_TIMEOUT')
+              );
+              delayedControlSettled = true;
+            }
+
+            // Step 3: Graceful cancellation & query settlement
+            if (compPromise && !compQueryState.settled) {
+              await runWithDeadline(
+                () => cancellationConn.query('SELECT pg_cancel_backend($1)', [compPid]),
+                gracefulDeadlineAt,
+                () => new HarnessDeadlineError('CLEANUP_CANCELLATION_QUERY_TIMEOUT')
+              );
+              await runWithDeadline(
+                () => compPromise,
+                gracefulDeadlineAt,
+                () => new HarnessDeadlineError('CLEANUP_SETTLEMENT_TIMEOUT')
+              );
+            }
+
+            // Step 4: Rollback composition transaction
+            if (compConn && !this.tracker.isDiscarded(compConn)) {
+              await runWithDeadline(
+                () => compConn.query('ROLLBACK'),
+                gracefulDeadlineAt,
+                () => new HarnessDeadlineError('CLEANUP_ROLLBACK_TIMEOUT')
+              );
+            }
+
+            // Step 4b: Rollback retained blockers after composition settlement
+            for (const blocker of retainedBlockers) {
+              if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
+                await runWithDeadline(
+                  () => blocker.query('ROLLBACK'),
+                  gracefulDeadlineAt,
+                  () => new HarnessDeadlineError('CLEANUP_RETAINED_BLOCKER_ROLLBACK_TIMEOUT')
+                );
+              }
+            }
+          } catch (gracefulErr) {
+            fallbackExercised = true;
+            cleanupErrors.push(gracefulErr);
+
+            // Fallback stage: bounded by cleanupDeadlineAt
+            try {
+              if (delayedControlOp && !delayedControlSettled) {
+                await cancellationConn.query('SELECT pg_cancel_backend($1)', [delayedControlOp.pid]).catch(() => {});
+                await runWithDeadline(
+                  () => delayedControlOp.promise.catch((e) => ({ clientError: e })),
+                  cleanupDeadlineAt,
+                  () => new HarnessDeadlineError('FALLBACK_DELAYED_CONTROL_SETTLEMENT_TIMEOUT')
+                );
+                delayedControlSettled = true;
+              }
+
+              if (compConn && !this.tracker.isDiscarded(compConn)) {
+                clientDiscarded = true;
+                this.tracker.discard(compConn, gracefulErr);
+
+                await cancellationConn.query('SELECT pg_terminate_backend($1)', [compPid]).catch(() => {});
+
+                if (compPromise) {
+                  const outcome = await runWithDeadline(
+                    () => compPromise,
+                    cleanupDeadlineAt,
+                    () => new HarnessDeadlineError('FALLBACK_COMPOSITION_SETTLEMENT_TIMEOUT')
+                  );
+                  if (outcome && outcome.clientError) {
+                    compQueryState.settled = true;
+                    compQueryState.clientError = outcome.clientError;
+                  }
+                }
+              }
+
+              for (const blocker of allBlockers) {
+                if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
+                  await blocker.query('ROLLBACK').catch(() => {});
+                }
+              }
+            } catch (fallbackErr) {
+              cleanupErrors.push(fallbackErr);
+            }
+          }
+        }
+
+        // Step 5: Verify backends clean or absent
+        const pidsToVerify = [];
+        if (compPid) pidsToVerify.push({ pid: compPid, role: 'comp' });
+        if (delayedControlOp?.pid) pidsToVerify.push({ pid: delayedControlOp.pid, role: 'delayedControl' });
+        for (const blocker of allBlockers) {
+          const pid = this.tracker.getPid(blocker);
+          if (pid) pidsToVerify.push({ pid, role: this.tracker.getRole(blocker) });
+        }
+
+        let backendObservations = {};
+        try {
+          backendObservations = await verifyBackendsCleanOrAbsent(
+            cancellationConn,
+            pidsToVerify,
+            cleanupDeadlineAt
+          );
+        } catch (backendErr) {
+          cleanupErrors.push(backendErr);
+        }
+
+        // Step 6: Client release accounting
+        for (const blocker of allBlockers) {
+          if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
+            this.tracker.releaseClean(blocker);
+          }
+        }
+        if (delayedControlOp?.client) {
+          if (!this.tracker.isReleased(delayedControlOp.client) && !this.tracker.isDiscarded(delayedControlOp.client)) {
+            this.tracker.releaseClean(delayedControlOp.client);
+          }
+        }
+        if (compConn && !this.tracker.isDiscarded(compConn) && !this.tracker.isReleased(compConn)) {
+          this.tracker.releaseClean(compConn);
+        }
+        if (observerConn && !this.tracker.isReleased(observerConn)) {
+          this.tracker.releaseClean(observerConn);
+        }
+        if (cancellationConn && !this.tracker.isReleased(cancellationConn)) {
+          this.tracker.releaseClean(cancellationConn);
+        }
+
+        try {
+          this.tracker.assertAllAccountedFor();
+        } catch (accountErr) {
+          cleanupErrors.push(accountErr);
+        }
+
+        // Step 7: Combine errors
+        let combinedError = null;
+        if (scenarioError && cleanupErrors.length > 0) {
+          combinedError = new AggregateError([scenarioError, ...cleanupErrors], 'Scenario and cleanup both failed');
+        } else if (scenarioError) {
+          combinedError = scenarioError;
+        } else if (cleanupErrors.length > 0) {
+          combinedError = cleanupErrors.length === 1 ? cleanupErrors[0] : new AggregateError(cleanupErrors, 'Cleanup failed');
+        }
+
+        const cleanupDurationMs = Date.now() - cleanupStart;
+
+        return {
+          cleanupDurationMs,
+          fallbackExercised,
+          clientDiscarded,
+          cleanupErrors,
+          combinedError,
+          operationOutcomes: {
+            compSettled: compQueryState ? compQueryState.settled : true,
+            compClientError: compQueryState ? compQueryState.clientError : null,
+            delayedControlSettled,
+          },
+          backendObservations,
+          unsettledWork: Array.from(this.unsettledWork),
+        };
+      }
+    }
+
+    // =========================================================================
+    // NEGATIVE CONTROL: EXPIRED BUDGET MUST REJECT WITH ZERO ACTION INVOCATIONS
+    // =========================================================================
+    {
+      let negativeActionInvocations = 0;
+      const expiredBudgetAt = Date.now() - 50;
+      await assert.rejects(
+        () => runWithDeadline(
+          () => {
+            negativeActionInvocations++;
+            return Promise.resolve('SHOULD_NOT_EXECUTE');
+          },
+          expiredBudgetAt,
+          () => new HarnessDeadlineError('NEGATIVE_CONTROL_BUDGET_EXPIRED')
+        ),
+        (err) => {
+          assert.equal(err.name, 'HarnessDeadlineError');
+          assert.equal(err.message, 'NEGATIVE_CONTROL_BUDGET_EXPIRED');
+          assert.equal(negativeActionInvocations, 0, 'Expired budget must start zero actions');
+          return true;
+        }
+      );
+    }
 
     // =========================================================================
     // 5. RACE CASE C: HOLD EXPIRY WHILE WAITING ON LOCK
@@ -752,68 +1068,109 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     // - Normal path validation of domain result RECONCILIATION_REQUIRED / HOLD_EXPIRED.
     // - COMMIT issued only on successful normal path.
     // - Scoped snapshot shows zero new allocation, capture evidence preserved.
-    // - In the event of failure, bounded cleanup cancels query and rolls back.
+    // - Coordinated cleanup consumes combinedError and throws if any cleanup error occurred.
     // =========================================================================
     {
-      const scenarioStart = Date.now();
-      const scenarioDeadlineAt = scenarioStart + SCENARIO_DEADLINE_MS;
-      const tracker = createClientTracker();
-
-      const fExpiry = await runWithDeadline(
-        setupPaymentAttemptFixture(20, 2),
-        scenarioDeadlineAt,
-        () => new Error('CASE_C_FIXTURE_SETUP_TIMEOUT')
-      );
-      const expiryCommand = randomUUID();
-
-      await fixture.owner.query(
-        "UPDATE booking_holds SET expires_at = clock_timestamp() + interval '2 seconds' WHERE id = $1",
-        [fExpiry.holdId]
-      );
-
-      const beforeExpiry = await captureScopedSnapshot(fixture.owner, {
-        holdId: fExpiry.holdId,
-        commandId: expiryCommand,
-        attemptId: fExpiry.attemptId,
+      const coordinator = new CaseLocalCoordinator({
+        scenarioName: 'CASE_C_NORMAL_EXPIRY',
+        fixture,
+        compositionWorker,
+        deliberatelyDiscardedSet: deliberatelyDiscardedClients,
       });
 
-      const blockConn = tracker.track(await fixture.owner.connect(), 'blockConn');
-      const compExpiryConn = tracker.track(await compositionWorker.connect(), 'compExpiryConn');
-      const compPid = (await compExpiryConn.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-      const blockPid = (await blockConn.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      const cancellationConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'cancellationConn',
+        coordinator.normalDeadlineAt
+      );
+      const observerConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'observerConn',
+        coordinator.normalDeadlineAt
+      );
+      const blockConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'blockConn',
+        coordinator.normalDeadlineAt
+      );
+      const compExpiryConn = await coordinator.tracker.acquire(
+        compositionWorker,
+        'compExpiryConn',
+        coordinator.normalDeadlineAt
+      );
+
+      const compPid = coordinator.tracker.getPid(compExpiryConn);
+      const blockPid = coordinator.tracker.getPid(blockConn);
 
       const queryState = {
         settled: false,
         result: null,
         clientError: null,
-        cancelled: false,
       };
 
       let compExpiryPromise;
       let committed = false;
       let scenarioError = null;
+      let cleanupRes = null;
+
+      let fExpiry;
+      let expiryCommand;
+      let beforeExpiry;
 
       try {
-        await blockConn.query('BEGIN');
-        await blockConn.query('SELECT id FROM booking_holds WHERE id = $1 FOR UPDATE', [fExpiry.holdId]);
+        fExpiry = await coordinator.runOperation('setup_fixture', () =>
+          setupPaymentAttemptFixture(20, 2, observerConn)
+        );
+        expiryCommand = randomUUID();
 
-        const startFresh = (await fixture.owner.query(
-          'SELECT clock_timestamp() < expires_at AS fresh FROM booking_holds WHERE id = $1',
-          [fExpiry.holdId]
-        )).rows[0];
-        assert.equal(startFresh.fresh, true, 'Hold must be unexpired when test starts');
+        await coordinator.runOperation('update_expires_at', () =>
+          observerConn.query(
+            "UPDATE booking_holds SET expires_at = clock_timestamp() + interval '2 seconds' WHERE id = $1",
+            [fExpiry.holdId]
+          )
+        );
 
-        // BEGIN explicit transaction on compExpiryConn
-        await compExpiryConn.query('BEGIN');
-        await compExpiryConn.query("SET LOCAL lock_timeout = '8s'");
-        await compExpiryConn.query("SET LOCAL statement_timeout = '12s'");
+        beforeExpiry = await coordinator.runOperation('capture_before_snapshot', () =>
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+            holdId: fExpiry.holdId,
+            commandId: expiryCommand,
+            attemptId: fExpiry.attemptId,
+          })
+        );
 
-        // Verify effective settings on that SAME connection immediately before invocation
-        const settingsRes = (await compExpiryConn.query(
-          "SELECT current_setting('lock_timeout') AS lt, current_setting('statement_timeout') AS st"
-        )).rows[0];
-        assert.equal(settingsRes.lt, '8s', 'Effective lock_timeout must be 8s');
-        assert.equal(settingsRes.st, '12s', 'Effective statement_timeout must be 12s');
+        await coordinator.runOperation('block_hold_begin', () => blockConn.query('BEGIN'));
+        await coordinator.runOperation('block_hold_lock', () =>
+          blockConn.query('SELECT id FROM booking_holds WHERE id = $1 FOR UPDATE', [fExpiry.holdId])
+        );
+
+        const startFresh = await coordinator.runOperation('assert_fresh', async () => {
+          const r = (await observerConn.query(
+            'SELECT clock_timestamp() < expires_at AS fresh FROM booking_holds WHERE id = $1',
+            [fExpiry.holdId]
+          )).rows[0];
+          assert.equal(r.fresh, true, 'Hold must be unexpired when test starts');
+          return r;
+        });
+        assert.equal(startFresh.fresh, true);
+
+        // Explicit transaction on compExpiryConn
+        await coordinator.runOperation('comp_begin', () => compExpiryConn.query('BEGIN'));
+        await coordinator.runOperation('comp_set_lt', () =>
+          compExpiryConn.query("SET LOCAL lock_timeout = '8s'")
+        );
+        await coordinator.runOperation('comp_set_st', () =>
+          compExpiryConn.query("SET LOCAL statement_timeout = '12s'")
+        );
+
+        const settingsRes = await coordinator.runOperation('comp_verify_settings', async () => {
+          const r = (await compExpiryConn.query(
+            "SELECT current_setting('lock_timeout') AS lt, current_setting('statement_timeout') AS st"
+          )).rows[0];
+          assert.equal(r.lt, '8s', 'Effective lock_timeout must be 8s');
+          assert.equal(r.st, '12s', 'Effective statement_timeout must be 12s');
+          return r;
+        });
+        assert.equal(settingsRes.lt, '8s');
 
         compExpiryPromise = compExpiryConn
           .query('SELECT * FROM canonical_compose_payment_reservation($1, $2)', [
@@ -827,35 +1184,46 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           })
           .catch((e) => {
             queryState.settled = true;
-            queryState.clientError = { code: e.code, message: e.message };
-            return { clientError: { code: e.code, message: e.message }, result: null };
+            queryState.clientError = { code: e?.code, message: e?.message };
+            return { clientError: { code: e?.code, message: e?.message }, result: null };
           });
 
-        const expiryWait = await waitForLockWait(
-          fixture.owner,
-          compPid,
-          blockPid,
-          'Expiry waiting on hold'
+        const expiryWait = await coordinator.waitForCondition(
+          'expiry_wait_on_hold',
+          async () => {
+            const actRes = await observerConn.query(
+              `SELECT pid, usename, wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+               FROM pg_stat_activity WHERE pid = $1`,
+              [compPid]
+            );
+            const act = actRes.rows[0];
+            if (act && act.wait_event_type === 'Lock' && Array.isArray(act.blockers) && act.blockers.includes(blockPid)) {
+              return act;
+            }
+            return false;
+          }
         );
         assert.ok(expiryWait, 'Composition must be observed waiting on booking_holds lock');
 
-        const dbExpired = await waitFor(async () => {
-          const r = (await fixture.owner.query(
-            'SELECT clock_timestamp() AS observed_at, expires_at, clock_timestamp() > expires_at AS expired FROM booking_holds WHERE id = $1',
-            [fExpiry.holdId]
-          )).rows[0];
-          return r.expired ? r : false;
-        }, 'DB time after expiry', Math.max(100, scenarioDeadlineAt - Date.now()));
+        const dbExpired = await coordinator.waitForCondition(
+          'db_time_crosses_expires_at',
+          async () => {
+            const r = (await observerConn.query(
+              'SELECT clock_timestamp() AS observed_at, expires_at, clock_timestamp() > expires_at AS expired FROM booking_holds WHERE id = $1',
+              [fExpiry.holdId]
+            )).rows[0];
+            return r.expired ? r : false;
+          }
+        );
         assert.ok(dbExpired, 'DB clock must cross expires_at while composition is waiting');
 
-        await blockConn.query('COMMIT');
-        const compExpiryRes = await runWithDeadline(
-          compExpiryPromise,
-          scenarioDeadlineAt,
-          () => new Error('CASE_C_COMPOSITION_SETTLEMENT_TIMEOUT')
+        await coordinator.runOperation('release_block_conn', () => blockConn.query('COMMIT'));
+
+        const compExpiryRes = await coordinator.runOperation(
+          'await_comp_settlement',
+          () => compExpiryPromise
         );
 
-        // Normal-path validation
         assert.equal(compExpiryRes.clientError, null, 'Composition client error must be null');
         assert.equal(
           compExpiryRes.result.composition_state,
@@ -869,16 +1237,16 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         );
         assert.equal(compExpiryRes.result.replayed, false, 'replayed must be false');
 
-        // COMMIT only on the successful intended test path
-        await compExpiryConn.query('COMMIT');
+        await coordinator.runOperation('comp_commit', () => compExpiryConn.query('COMMIT'));
         committed = true;
 
-        // Verify durable state from owner connection after commit
-        const afterExpiry = await captureScopedSnapshot(fixture.owner, {
-          holdId: fExpiry.holdId,
-          commandId: expiryCommand,
-          attemptId: fExpiry.attemptId,
-        });
+        const afterExpiry = await coordinator.runOperation('capture_after_snapshot', () =>
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+            holdId: fExpiry.holdId,
+            commandId: expiryCommand,
+            attemptId: fExpiry.attemptId,
+          })
+        );
         assertNoNewAllocation(beforeExpiry, afterExpiry);
 
         assert.equal(afterExpiry.reconciliations[0].reason, 'HOLD_EXPIRED');
@@ -887,46 +1255,30 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         assert.equal(afterExpiry.attempt[0].payment_state, 'RECONCILIATION_REQUIRED');
         assert.equal(afterExpiry.attempt[0].reconciliation_reason, 'HOLD_EXPIRED');
         assert.ok(afterExpiry.attempt[0].matched_at, 'matched_at must be preserved');
-
-        await assertBackendIdleAndClean(fixture.owner, compPid);
-
-        const scenarioDurationMs = Date.now() - scenarioStart;
-        assert.ok(
-          scenarioDurationMs <= SCENARIO_DEADLINE_MS,
-          `Case C scenario duration exceeded bound: ${scenarioDurationMs}ms > ${SCENARIO_DEADLINE_MS}ms`
-        );
       } catch (err) {
         scenarioError = err;
       } finally {
-        let cleanupError = null;
-        if (!committed) {
-          try {
-            await performFiniteCleanup({
-              ownerConn: fixture.owner,
-              compConn: compExpiryConn,
-              compPid,
-              queryState,
-              compPromise: compExpiryPromise,
-              holdConn: blockConn,
-              clientTracker: tracker,
-            });
-          } catch (err) {
-            cleanupError = err;
-          }
-        }
-        tracker.releaseClean(blockConn);
-        if (!tracker.isDiscarded(compExpiryConn)) {
-          tracker.releaseClean(compExpiryConn);
-        }
+        cleanupRes = await coordinator.performFiniteCleanup({
+          cancellationConn,
+          observerConn,
+          compConn: compExpiryConn,
+          compPid,
+          compPromise: compExpiryPromise,
+          compQueryState: queryState,
+          blockers: [blockConn],
+          scenarioError,
+          committed,
+        });
 
-        if (scenarioError && cleanupError) {
-          throw new AggregateError([scenarioError, cleanupError], 'Case C scenario and cleanup both failed');
-        } else if (scenarioError) {
-          throw scenarioError;
-        } else if (cleanupError) {
-          throw cleanupError;
+        if (cleanupRes.combinedError) {
+          throw cleanupRes.combinedError;
         }
       }
+
+      assert.equal(cleanupRes.fallbackExercised, false, 'Case C normal path must not exercise fallback');
+      assert.equal(cleanupRes.clientDiscarded, false, 'Case C normal path must not discard client');
+      assert.equal(cleanupRes.cleanupErrors.length, 0, 'Case C normal path must have 0 cleanup errors');
+      assert.equal(cleanupRes.backendObservations.comp?.status, 'IDLE_CLEAN');
     }
 
     // =========================================================================
@@ -939,65 +1291,102 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     // Fallback is NOT exercised. Client is released cleanly.
     // =========================================================================
     {
-      const scenarioStart = Date.now();
-      const scenarioDeadlineAt = scenarioStart + SCENARIO_DEADLINE_MS;
-      const tracker = createClientTracker();
-
-      const fFail = await runWithDeadline(
-        setupPaymentAttemptFixture(60, 2),
-        scenarioDeadlineAt,
-        () => new Error('CASE_C2_FIXTURE_SETUP_TIMEOUT')
-      );
-      const failCommand = randomUUID();
-
-      const beforeFail = await captureScopedSnapshot(fixture.owner, {
-        holdId: fFail.holdId,
-        commandId: failCommand,
-        attemptId: fFail.attemptId,
+      const coordinator = new CaseLocalCoordinator({
+        scenarioName: 'CASE_C2_FAILURE_CLEANUP',
+        fixture,
+        compositionWorker,
+        deliberatelyDiscardedSet: deliberatelyDiscardedClients,
       });
 
-      const holdLocker = tracker.track(await fixture.owner.connect(), 'holdLocker');
-      const inventoryLocker = tracker.track(await fixture.owner.connect(), 'inventoryLocker');
-      const compFailConn = tracker.track(await compositionWorker.connect(), 'compFailConn');
+      const cancellationConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'cancellationConn',
+        coordinator.normalDeadlineAt
+      );
+      const observerConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'observerConn',
+        coordinator.normalDeadlineAt
+      );
+      const holdLocker = await coordinator.tracker.acquire(
+        fixture.owner,
+        'holdLocker',
+        coordinator.normalDeadlineAt
+      );
+      const inventoryLocker = await coordinator.tracker.acquire(
+        fixture.owner,
+        'inventoryLocker',
+        coordinator.normalDeadlineAt
+      );
+      const compFailConn = await coordinator.tracker.acquire(
+        compositionWorker,
+        'compFailConn',
+        coordinator.normalDeadlineAt
+      );
 
-      const holdLockerPid = (await holdLocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-      const invLockerPid = (await inventoryLocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-      const compFailPid = (await compFailConn.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      const holdLockerPid = coordinator.tracker.getPid(holdLocker);
+      const invLockerPid = coordinator.tracker.getPid(inventoryLocker);
+      const compFailPid = coordinator.tracker.getPid(compFailConn);
 
       const queryState = {
         settled: false,
         result: null,
         clientError: null,
-        cancelled: false,
       };
 
       let compFailPromise;
       let caughtInjectedError = null;
       let cleanupRes = null;
-      let cleanupError = null;
       let secondaryBlockObserved = false;
+      let beforeFail;
+      let failCommand;
+      let fFail;
 
       try {
-        await holdLocker.query('BEGIN');
-        await holdLocker.query('SELECT id FROM booking_holds WHERE id = $1 FOR UPDATE', [fFail.holdId]);
+        fFail = await coordinator.runOperation('setup_c2_fixture', () =>
+          setupPaymentAttemptFixture(60, 2, observerConn)
+        );
+        failCommand = randomUUID();
 
-        await inventoryLocker.query('BEGIN');
-        await inventoryLocker.query(
-          `SELECT room_type_id, calendar_date FROM inventory_days
-           WHERE room_type_id = 101 AND calendar_date >= $1 AND calendar_date < $2 FOR UPDATE`,
-          [fFail.checkIn, fFail.checkOut]
+        beforeFail = await coordinator.runOperation('capture_c2_before', () =>
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+            holdId: fFail.holdId,
+            commandId: failCommand,
+            attemptId: fFail.attemptId,
+          })
         );
 
-        // BEGIN explicit transaction on compFailConn
-        await compFailConn.query('BEGIN');
-        await compFailConn.query("SET LOCAL lock_timeout = '8s'");
-        await compFailConn.query("SET LOCAL statement_timeout = '12s'");
+        await coordinator.runOperation('hold_locker_begin', () => holdLocker.query('BEGIN'));
+        await coordinator.runOperation('hold_locker_lock', () =>
+          holdLocker.query('SELECT id FROM booking_holds WHERE id = $1 FOR UPDATE', [fFail.holdId])
+        );
 
-        const settingsFail = (await compFailConn.query(
-          "SELECT current_setting('lock_timeout') AS lt, current_setting('statement_timeout') AS st"
-        )).rows[0];
-        assert.equal(settingsFail.lt, '8s', 'Effective lock_timeout must be 8s');
-        assert.equal(settingsFail.st, '12s', 'Effective statement_timeout must be 12s');
+        await coordinator.runOperation('inv_locker_begin', () => inventoryLocker.query('BEGIN'));
+        await coordinator.runOperation('inv_locker_lock', () =>
+          inventoryLocker.query(
+            `SELECT room_type_id, calendar_date FROM inventory_days
+             WHERE room_type_id = 101 AND calendar_date >= $1 AND calendar_date < $2 FOR UPDATE`,
+            [fFail.checkIn, fFail.checkOut]
+          )
+        );
+
+        await coordinator.runOperation('comp_fail_begin', () => compFailConn.query('BEGIN'));
+        await coordinator.runOperation('comp_fail_lt', () =>
+          compFailConn.query("SET LOCAL lock_timeout = '8s'")
+        );
+        await coordinator.runOperation('comp_fail_st', () =>
+          compFailConn.query("SET LOCAL statement_timeout = '12s'")
+        );
+
+        const settingsFail = await coordinator.runOperation('comp_fail_verify_settings', async () => {
+          const r = (await compFailConn.query(
+            "SELECT current_setting('lock_timeout') AS lt, current_setting('statement_timeout') AS st"
+          )).rows[0];
+          assert.equal(r.lt, '8s', 'Effective lock_timeout must be 8s');
+          assert.equal(r.st, '12s', 'Effective statement_timeout must be 12s');
+          return r;
+        });
+        assert.equal(settingsFail.lt, '8s');
 
         compFailPromise = compFailConn
           .query('SELECT * FROM canonical_compose_payment_reservation($1, $2)', [
@@ -1011,180 +1400,214 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           })
           .catch((e) => {
             queryState.settled = true;
-            queryState.clientError = { code: e.code, message: e.message };
-            return { clientError: { code: e.code, message: e.message }, result: null };
+            queryState.clientError = { code: e?.code, message: e?.message };
+            return { clientError: { code: e?.code, message: e?.message }, result: null };
           });
 
-        // 1. Observe blocking on holdLocker
-        const holdWait = await waitForLockWait(
-          fixture.owner,
-          compFailPid,
-          holdLockerPid,
-          'Comp waiting on holdLocker'
-        );
+        const holdWait = await coordinator.waitForCondition('c2_hold_wait', async () => {
+          const actRes = await observerConn.query(
+            `SELECT pid, usename, wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+             FROM pg_stat_activity WHERE pid = $1`,
+            [compFailPid]
+          );
+          const act = actRes.rows[0];
+          if (act && act.wait_event_type === 'Lock' && Array.isArray(act.blockers) && act.blockers.includes(holdLockerPid)) {
+            return act;
+          }
+          return false;
+        });
         assert.ok(holdWait, 'Composition must wait on hold locker');
 
-        // 2. Commit holdLocker -> composition enters direct finalizer and hits inventoryLocker
-        await holdLocker.query('COMMIT');
+        await coordinator.runOperation('hold_locker_commit', () => holdLocker.query('COMMIT'));
 
-        // 3. Observe blocking on secondary retained inventory blocker
-        const invWait = await waitForLockWait(
-          fixture.owner,
-          compFailPid,
-          invLockerPid,
-          'Comp waiting on inventoryLocker'
-        );
+        const invWait = await coordinator.waitForCondition('c2_inv_wait', async () => {
+          const actRes = await observerConn.query(
+            `SELECT pid, usename, wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+             FROM pg_stat_activity WHERE pid = $1`,
+            [compFailPid]
+          );
+          const act = actRes.rows[0];
+          if (act && act.wait_event_type === 'Lock' && Array.isArray(act.blockers) && act.blockers.includes(invLockerPid)) {
+            return act;
+          }
+          return false;
+        });
         assert.ok(invWait, 'Composition must wait on secondary inventory locker');
         secondaryBlockObserved = true;
 
-        // 4. Inject distinctive observation failure
         throw new Error('INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST');
       } catch (err) {
         caughtInjectedError = err;
-
-        try {
-          cleanupRes = await performFiniteCleanup({
-            ownerConn: fixture.owner,
-            compConn: compFailConn,
-            compPid: compFailPid,
-            queryState,
-            compPromise: compFailPromise,
-            holdConn: holdLocker,
-            cleanupDeadlineMs: CLEANUP_DEADLINE_MS,
-            clientTracker: tracker,
-          });
-        } catch (cErr) {
-          cleanupError = cErr;
-        }
       } finally {
-        await inventoryLocker.query('ROLLBACK').catch(() => {});
-        tracker.releaseClean(inventoryLocker);
-        tracker.releaseClean(holdLocker);
-        if (!tracker.isDiscarded(compFailConn)) {
-          tracker.releaseClean(compFailConn);
-        }
-      }
-
-      if (cleanupError) {
-        throw new AggregateError(
-          [caughtInjectedError, cleanupError],
-          'Case C2 cleanup failed unexpectedly during failure regression'
-        );
+        cleanupRes = await coordinator.performFiniteCleanup({
+          cancellationConn,
+          observerConn,
+          compConn: compFailConn,
+          compPid: compFailPid,
+          compPromise: compFailPromise,
+          compQueryState: queryState,
+          blockers: [holdLocker],
+          retainedBlockers: [inventoryLocker],
+          scenarioError: caughtInjectedError,
+          committed: false,
+        });
       }
 
       assert.ok(caughtInjectedError, 'Injected observation failure must be caught');
       assert.equal(
         caughtInjectedError.message,
-        'INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST',
-        'Exact injected observation failure message must match'
+        'INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST'
       );
-      assert.equal(secondaryBlockObserved, true, 'Secondary blocking relationship must be observed');
+      assert.equal(secondaryBlockObserved, true);
       assert.equal(cleanupRes.fallbackExercised, false, 'Graceful immediate cancellation must not exercise fallback');
       assert.equal(cleanupRes.clientDiscarded, false, 'Client must not be discarded on graceful cleanup');
+      assert.equal(cleanupRes.cleanupErrors.length, 0, 'Cleanup errors must be empty on graceful path');
+      assert.equal(
+        cleanupRes.combinedError?.message,
+        'INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST',
+        'Combined error must be the exact injected observation failure directly'
+      );
       assert.ok(
         cleanupRes.cleanupDurationMs <= CLEANUP_DEADLINE_MS,
         `Cleanup must finish within declared deadline (${cleanupRes.cleanupDurationMs}ms <= ${CLEANUP_DEADLINE_MS}ms)`
       );
       assert.equal(queryState.settled, true, 'Operation promise must settle');
-      assert.equal(
-        queryState.clientError?.code,
-        '57014',
-        'PostgreSQL error code must be 57014 (query_canceled)'
-      );
+      assert.equal(queryState.clientError?.code, '57014', 'PostgreSQL error code must be 57014');
 
-      // Scoped database snapshot matches prepared baseline
-      const afterFail = await captureScopedSnapshot(fixture.owner, {
-        holdId: fFail.holdId,
-        commandId: failCommand,
-        attemptId: fFail.attemptId,
-      });
-      assert.deepEqual(
-        afterFail,
-        beforeFail,
-        'Scoped database snapshot must match baseline exactly after rollback'
+      // Verify baseline restored using explicitly tracked verifyConn
+      const verifyConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'verifyConn',
+        coordinator.normalDeadlineAt
       );
-      assert.equal(afterFail.reservations.length, 0, 'Zero reservations survive');
-      assert.equal(afterFail.bridges.length, 0, 'Zero bridges survive');
-      assert.equal(afterFail.reconciliations.length, 0, 'Zero reconciliations survive');
-      assert.equal(afterFail.attempt.length, 1, 'Payment attempt evidence remains');
-      assert.equal(afterFail.attempt[0].payment_state, 'MATCHED_CAPTURE', 'Payment attempt state remains MATCHED_CAPTURE');
-
-      const scenarioDurationMs = Date.now() - scenarioStart;
-      assert.ok(
-        scenarioDurationMs <= SCENARIO_DEADLINE_MS,
-        `Case C2 scenario duration exceeded bound: ${scenarioDurationMs}ms > ${SCENARIO_DEADLINE_MS}ms`
-      );
+      try {
+        const afterFail = await captureScopedSnapshot(createTrackedQueryAdapter(verifyConn), {
+          holdId: fFail.holdId,
+          commandId: failCommand,
+          attemptId: fFail.attemptId,
+        });
+        assert.deepEqual(afterFail, beforeFail, 'Baseline must be restored');
+      } finally {
+        coordinator.tracker.releaseClean(verifyConn);
+      }
     }
 
     // =========================================================================
     // 5c. RACE CASE C3: DELIBERATE DELAYED-CONTROL & FALLBACK CLEANUP REGRESSION
     // =========================================================================
-    // Tests that when the cleanup control path is delayed (e.g. by 5.2s), the active
-    // deadline cuts off the delayed control work at 3.5s (before the 5.0s total cleanup deadline),
-    // and exercises fallback: client is discarded, server backend is terminated,
-    // transaction is rolled back, baseline restored, with both the original observation
-    // error and the cleanup stage timeout error preserved and identifiable.
+    // Tests that when the cleanup control path is delayed by a real database query
+    // (SELECT pg_sleep(5.2)), the active deadline cuts off the delayed control work
+    // at graceful budget (3.5s), initiates active cancellation so the query does not
+    // leak on Postgres, and exercises fallback: client is discarded, server backend
+    // is terminated, transaction is rolled back, baseline restored, with both the
+    // original observation error and the cleanup stage timeout error preserved
+    // in an AggregateError.
     // =========================================================================
     {
-      const scenarioStart = Date.now();
-      const scenarioDeadlineAt = scenarioStart + SCENARIO_DEADLINE_MS;
-      const tracker = createClientTracker();
-
-      const fDelay = await runWithDeadline(
-        setupPaymentAttemptFixture(70, 2),
-        scenarioDeadlineAt,
-        () => new Error('CASE_C3_FIXTURE_SETUP_TIMEOUT')
-      );
-      const delayCommand = randomUUID();
-
-      const beforeDelay = await captureScopedSnapshot(fixture.owner, {
-        holdId: fDelay.holdId,
-        commandId: delayCommand,
-        attemptId: fDelay.attemptId,
+      const coordinator = new CaseLocalCoordinator({
+        scenarioName: 'CASE_C3_DELAYED_CONTROL_FALLBACK',
+        fixture,
+        compositionWorker,
+        deliberatelyDiscardedSet: deliberatelyDiscardedClients,
       });
 
-      const holdLocker = tracker.track(await fixture.owner.connect(), 'holdLocker');
-      const inventoryLocker = tracker.track(await fixture.owner.connect(), 'inventoryLocker');
-      const compDelayConn = tracker.track(await compositionWorker.connect(), 'compDelayConn');
+      const cancellationConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'cancellationConn',
+        coordinator.normalDeadlineAt
+      );
+      const observerConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'observerConn',
+        coordinator.normalDeadlineAt
+      );
+      const holdLocker = await coordinator.tracker.acquire(
+        fixture.owner,
+        'holdLocker',
+        coordinator.normalDeadlineAt
+      );
+      const inventoryLocker = await coordinator.tracker.acquire(
+        fixture.owner,
+        'inventoryLocker',
+        coordinator.normalDeadlineAt
+      );
+      const compDelayConn = await coordinator.tracker.acquire(
+        compositionWorker,
+        'compDelayConn',
+        coordinator.normalDeadlineAt
+      );
+      const controlConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'controlConn',
+        coordinator.normalDeadlineAt
+      );
 
-      const holdLockerPid = (await holdLocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-      const invLockerPid = (await inventoryLocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-      const compDelayPid = (await compDelayConn.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      const holdLockerPid = coordinator.tracker.getPid(holdLocker);
+      const invLockerPid = coordinator.tracker.getPid(inventoryLocker);
+      const compDelayPid = coordinator.tracker.getPid(compDelayConn);
+      const controlPid = coordinator.tracker.getPid(controlConn);
 
       const queryState = {
         settled: false,
         result: null,
         clientError: null,
-        cancelled: false,
       };
 
       let compDelayPromise;
       let caughtInjectedError = null;
       let cleanupRes = null;
-      let cleanupError = null;
       let secondaryBlockObserved = false;
+      let delayedControlStarted = false;
+      let beforeDelay;
+      let delayCommand;
+      let fDelay;
+      let delayedControlOp;
 
       try {
-        await holdLocker.query('BEGIN');
-        await holdLocker.query('SELECT id FROM booking_holds WHERE id = $1 FOR UPDATE', [fDelay.holdId]);
+        fDelay = await coordinator.runOperation('setup_c3_fixture', () =>
+          setupPaymentAttemptFixture(70, 2, observerConn)
+        );
+        delayCommand = randomUUID();
 
-        await inventoryLocker.query('BEGIN');
-        await inventoryLocker.query(
-          `SELECT room_type_id, calendar_date FROM inventory_days
-           WHERE room_type_id = 101 AND calendar_date >= $1 AND calendar_date < $2 FOR UPDATE`,
-          [fDelay.checkIn, fDelay.checkOut]
+        beforeDelay = await coordinator.runOperation('capture_c3_before', () =>
+          captureScopedSnapshot(createTrackedQueryAdapter(observerConn), {
+            holdId: fDelay.holdId,
+            commandId: delayCommand,
+            attemptId: fDelay.attemptId,
+          })
         );
 
-        // BEGIN explicit transaction on compDelayConn
-        await compDelayConn.query('BEGIN');
-        await compDelayConn.query("SET LOCAL lock_timeout = '8s'");
-        await compDelayConn.query("SET LOCAL statement_timeout = '12s'");
+        await coordinator.runOperation('hold_locker_begin_c3', () => holdLocker.query('BEGIN'));
+        await coordinator.runOperation('hold_locker_lock_c3', () =>
+          holdLocker.query('SELECT id FROM booking_holds WHERE id = $1 FOR UPDATE', [fDelay.holdId])
+        );
 
-        const settingsDelay = (await compDelayConn.query(
-          "SELECT current_setting('lock_timeout') AS lt, current_setting('statement_timeout') AS st"
-        )).rows[0];
-        assert.equal(settingsDelay.lt, '8s', 'Effective lock_timeout must be 8s');
-        assert.equal(settingsDelay.st, '12s', 'Effective statement_timeout must be 12s');
+        await coordinator.runOperation('inv_locker_begin_c3', () => inventoryLocker.query('BEGIN'));
+        await coordinator.runOperation('inv_locker_lock_c3', () =>
+          inventoryLocker.query(
+            `SELECT room_type_id, calendar_date FROM inventory_days
+             WHERE room_type_id = 101 AND calendar_date >= $1 AND calendar_date < $2 FOR UPDATE`,
+            [fDelay.checkIn, fDelay.checkOut]
+          )
+        );
+
+        await coordinator.runOperation('comp_delay_begin', () => compDelayConn.query('BEGIN'));
+        await coordinator.runOperation('comp_delay_lt', () =>
+          compDelayConn.query("SET LOCAL lock_timeout = '8s'")
+        );
+        await coordinator.runOperation('comp_delay_st', () =>
+          compDelayConn.query("SET LOCAL statement_timeout = '12s'")
+        );
+
+        const settingsDelay = await coordinator.runOperation('comp_delay_verify_settings', async () => {
+          const r = (await compDelayConn.query(
+            "SELECT current_setting('lock_timeout') AS lt, current_setting('statement_timeout') AS st"
+          )).rows[0];
+          assert.equal(r.lt, '8s', 'Effective lock_timeout must be 8s');
+          assert.equal(r.st, '12s', 'Effective statement_timeout must be 12s');
+          return r;
+        });
+        assert.equal(settingsDelay.lt, '8s');
 
         compDelayPromise = compDelayConn
           .query('SELECT * FROM canonical_compose_payment_reservation($1, $2)', [
@@ -1198,83 +1621,91 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           })
           .catch((e) => {
             queryState.settled = true;
-            queryState.clientError = { code: e.code, message: e.message };
-            return { clientError: { code: e.code, message: e.message }, result: null };
+            queryState.clientError = { code: e?.code, message: e?.message };
+            return { clientError: { code: e?.code, message: e?.message }, result: null };
           });
 
-        // 1. Observe blocking on holdLocker
-        const holdWait = await waitForLockWait(
-          fixture.owner,
-          compDelayPid,
-          holdLockerPid,
-          'Comp waiting on holdLocker'
-        );
+        const holdWait = await coordinator.waitForCondition('c3_hold_wait', async () => {
+          const actRes = await observerConn.query(
+            `SELECT pid, usename, wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+             FROM pg_stat_activity WHERE pid = $1`,
+            [compDelayPid]
+          );
+          const act = actRes.rows[0];
+          if (act && act.wait_event_type === 'Lock' && Array.isArray(act.blockers) && act.blockers.includes(holdLockerPid)) {
+            return act;
+          }
+          return false;
+        });
         assert.ok(holdWait, 'Composition must wait on hold locker');
 
-        // 2. Commit holdLocker -> composition enters direct finalizer and hits inventoryLocker
-        await holdLocker.query('COMMIT');
+        await coordinator.runOperation('hold_locker_commit_c3', () => holdLocker.query('COMMIT'));
 
-        // 3. Observe blocking on secondary retained inventory blocker
-        const invWait = await waitForLockWait(
-          fixture.owner,
-          compDelayPid,
-          invLockerPid,
-          'Comp waiting on inventoryLocker'
-        );
+        const invWait = await coordinator.waitForCondition('c3_inv_wait', async () => {
+          const actRes = await observerConn.query(
+            `SELECT pid, usename, wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+             FROM pg_stat_activity WHERE pid = $1`,
+            [compDelayPid]
+          );
+          const act = actRes.rows[0];
+          if (act && act.wait_event_type === 'Lock' && Array.isArray(act.blockers) && act.blockers.includes(invLockerPid)) {
+            return act;
+          }
+          return false;
+        });
         assert.ok(invWait, 'Composition must wait on secondary inventory locker');
         secondaryBlockObserved = true;
 
-        // 4. Inject distinctive observation failure
+        // Start REAL identifiable database control query on controlConn: SELECT pg_sleep(5.2) AS delay_result
+        const delayedControlPromise = controlConn.query('SELECT pg_sleep(5.2) AS delay_result');
+        delayedControlOp = {
+          client: controlConn,
+          pid: controlPid,
+          promise: delayedControlPromise,
+        };
+
+        // Verify delayed control query has actually started in pg_stat_activity
+        const controlStat = await coordinator.waitForCondition('control_query_started', async () => {
+          const r = (await observerConn.query(
+            "SELECT pid, state, query FROM pg_stat_activity WHERE pid = $1 AND query LIKE '%pg_sleep%'",
+            [controlPid]
+          )).rows[0];
+          return r || false;
+        });
+        assert.ok(controlStat, 'Delayed control query must be started and identifiable in pg_stat_activity');
+        delayedControlStarted = true;
+
         throw new Error('INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST');
       } catch (err) {
         caughtInjectedError = err;
-
-        try {
-          cleanupRes = await performFiniteCleanup({
-            ownerConn: fixture.owner,
-            compConn: compDelayConn,
-            compPid: compDelayPid,
-            queryState,
-            compPromise: compDelayPromise,
-            holdConn: holdLocker,
-            cleanupDeadlineMs: CLEANUP_DEADLINE_MS,
-            clientTracker: tracker,
-            controlDelayHook: () => new Promise((resolve) => setTimeout(resolve, 5200)),
-          });
-        } catch (cErr) {
-          cleanupError = cErr;
-        }
       } finally {
-        await inventoryLocker.query('ROLLBACK').catch(() => {});
-        tracker.releaseClean(inventoryLocker);
-        tracker.releaseClean(holdLocker);
-        if (!tracker.isDiscarded(compDelayConn)) {
-          tracker.releaseClean(compDelayConn);
-        }
+        cleanupRes = await coordinator.performFiniteCleanup({
+          cancellationConn,
+          observerConn,
+          compConn: compDelayConn,
+          compPid: compDelayPid,
+          compPromise: compDelayPromise,
+          compQueryState: queryState,
+          blockers: [holdLocker],
+          retainedBlockers: [inventoryLocker],
+          delayedControlOp,
+          scenarioError: caughtInjectedError,
+          committed: false,
+        });
       }
 
-      if (cleanupError) {
-        throw new AggregateError(
-          [caughtInjectedError, cleanupError],
-          'Case C3 fallback failed unexpectedly during delayed-control regression'
-        );
-      }
-
-      // Assertions on the delayed-control / fallback regression:
+      // Assertions on Case C3:
       assert.ok(caughtInjectedError, 'Injected observation failure must be caught');
       assert.equal(
         caughtInjectedError.message,
-        'INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST',
-        'Exact injected observation failure message must match'
+        'INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST'
       );
-      assert.equal(secondaryBlockObserved, true, 'Secondary blocking relationship must be observed');
+      assert.equal(secondaryBlockObserved, true);
+      assert.equal(delayedControlStarted, true, 'Delayed control query must have started');
       assert.equal(cleanupRes.fallbackExercised, true, 'Fallback must be exercised when control stage times out');
       assert.equal(cleanupRes.clientDiscarded, true, 'Client must be discarded on fallback');
-      assert.equal(
-        cleanupRes.cleanupStageError?.message,
-        'CLEANUP_CONTROL_STAGE_TIMEOUT',
-        'Cleanup stage error must be CLEANUP_CONTROL_STAGE_TIMEOUT'
-      );
+      assert.equal(cleanupRes.operationOutcomes.delayedControlSettled, true, 'Delayed control query must have settled');
+      assert.equal(cleanupRes.operationOutcomes.compSettled, true, 'Composition query must have settled');
       assert.ok(
         cleanupRes.cleanupDurationMs <= CLEANUP_DEADLINE_MS,
         `Cleanup must finish within declared deadline (${cleanupRes.cleanupDurationMs}ms <= ${CLEANUP_DEADLINE_MS}ms)`
@@ -1288,28 +1719,42 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         `Cleanup duration must be strictly less than total cleanup bound (${cleanupRes.cleanupDurationMs}ms < 5000ms)`
       );
 
-      // Scoped database snapshot matches prepared baseline
-      const afterDelay = await captureScopedSnapshot(fixture.owner, {
-        holdId: fDelay.holdId,
-        commandId: delayCommand,
-        attemptId: fDelay.attemptId,
-      });
-      assert.deepEqual(
-        afterDelay,
-        beforeDelay,
-        'Scoped database snapshot must match baseline exactly after fallback cleanup'
-      );
-      assert.equal(afterDelay.reservations.length, 0, 'Zero reservations survive');
-      assert.equal(afterDelay.bridges.length, 0, 'Zero bridges survive');
-      assert.equal(afterDelay.reconciliations.length, 0, 'Zero reconciliations survive');
-      assert.equal(afterDelay.attempt.length, 1, 'Payment attempt evidence remains');
-      assert.equal(afterDelay.attempt[0].payment_state, 'MATCHED_CAPTURE', 'Payment attempt state remains MATCHED_CAPTURE');
-
-      const scenarioDurationMs = Date.now() - scenarioStart;
+      // Verify the combined error is an AggregateError combining original and cleanup stage timeout:
       assert.ok(
-        scenarioDurationMs <= SCENARIO_DEADLINE_MS,
-        `Case C3 scenario duration exceeded bound: ${scenarioDurationMs}ms > ${SCENARIO_DEADLINE_MS}ms`
+        cleanupRes.combinedError instanceof AggregateError,
+        'Case C3 must produce AggregateError combining original and cleanup errors'
       );
+      assert.equal(cleanupRes.combinedError.errors.length, 2);
+      assert.equal(
+        cleanupRes.combinedError.errors[0].message,
+        'INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST'
+      );
+      assert.equal(
+        cleanupRes.combinedError.errors[1].message,
+        'CLEANUP_CONTROL_STAGE_TIMEOUT'
+      );
+
+      // Verify baseline restored using explicitly tracked verifyConn
+      const verifyConn = await coordinator.tracker.acquire(
+        fixture.owner,
+        'verifyConn',
+        coordinator.normalDeadlineAt
+      );
+      try {
+        const afterDelay = await captureScopedSnapshot(createTrackedQueryAdapter(verifyConn), {
+          holdId: fDelay.holdId,
+          commandId: delayCommand,
+          attemptId: fDelay.attemptId,
+        });
+        assert.deepEqual(afterDelay, beforeDelay, 'Baseline must match beforeDelay snapshot exactly');
+        assert.equal(afterDelay.reservations.length, 0);
+        assert.equal(afterDelay.bridges.length, 0);
+        assert.equal(afterDelay.reconciliations.length, 0);
+        assert.equal(afterDelay.attempt.length, 1);
+        assert.equal(afterDelay.attempt[0].payment_state, 'MATCHED_CAPTURE');
+      } finally {
+        coordinator.tracker.releaseClean(verifyConn);
+      }
     }
 
     // =========================================================================
@@ -1535,6 +1980,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           has_function_privilege('encho_reservation_worker', 'canonical_finalize_direct_hold(uuid,uuid,uuid)', 'EXECUTE') AS can_finalize
       `);
       assert.equal(resRoleRows[0].can_finalize, true, 'encho_reservation_worker must have EXECUTE on canonical_finalize_direct_hold');
+      assert.equal(unexpectedPoolErrors.length, 0, 'No unexpected pool errors allowed');
     }
 
   } finally {
