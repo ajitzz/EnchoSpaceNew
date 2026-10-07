@@ -1,0 +1,671 @@
+{
+  "schemaVersion": 1,
+  "kind": "SANITIZED_FRESH_REVIEWER_BASELINE_EVIDENCE",
+  "generatedAt": "2026-10-07T23:20:59.767Z",
+  "identity": {
+    "gitSha": "764b9eadd5947dccf8e3ceb1333fd36c32a59f0f",
+    "sourcePath": "scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs",
+    "sourceSha256": "54ec2fc9686a150b2882b698542eaad0166f6729e47cbff2122b02d408ca015e",
+    "committedSourceSha256": "54ec2fc9686a150b2882b698542eaad0166f6729e47cbff2122b02d408ca015e",
+    "dirty": false,
+    "changedPaths": [],
+    "qualification": "CLEAN_COMMITTED_SUBJECT",
+    "migrationSha256": "0823b6d434ebad6a6bce11196671a6ad8ff0a567049ca001fc7f4c3e9708548c",
+    "helperSha256": "87ca30711882b7f5b539a112c4f3d0898fe752f504ea23dd7a4b4f9e4994ae78",
+    "extraction": {
+      "startLine": 559,
+      "endLine": 1480,
+      "sha256": "266ca04cf49eee832ee41d346a05d1475a17e209168aef152b870e6b21616c98"
+    },
+    "nodeVersion": "v24.12.0",
+    "pgVersion": "8.23.0",
+    "pgPoolVersion": "3.14.0"
+  },
+  "refs": {
+    "canonical": "068181958879aea0eedc8727b4e6a7579e073194",
+    "worker": "764b9eadd5947dccf8e3ceb1333fd36c32a59f0f",
+    "workerParent": "a062799b6b7d74512e6a1bae8aec0243bbe64e5b",
+    "remoteMain": "b63a7ae11c872732f567e892370b1103d7cd31bf"
+  },
+  "reviewerCode": {
+    "authorship": "GPT-6 reviewer-authored/adapted safety probes. Production source implementation: NO. No worker repair.",
+    "digests": {
+      "reviewer-controls.mjs": "b90a58e37118d7e470dce2d1e1413cb937506d17e4e4a60078086df654715055",
+      "subject-loader.mjs": "85b24d853ddfc23ae7bcdf3dd800de129227947ef7ac93c3cea5cf11ec809a04"
+    }
+  },
+  "execution": {
+    "command": "node <pack>/reviewer-controls.mjs --subject-root <explicit-root> --subject-sha 764b9eadd5947dccf8e3ceb1333fd36c32a59f0f --source-sha256 54ec2fc9686a150b2882b698542eaad0166f6729e47cbff2122b02d408ca015e --expect baseline --output <absolute-outside-git-roots.json>",
+    "node": "v24.12.0",
+    "environment": "Parent launched with PATH/HOME only; each child receives explicit allowlist plus generated fixture socket root. No dotenv or database/provider variables.",
+    "database": "Five independently created disposable PostgreSQL fixtures; P1-P4 schema empty, P5 actual full migration-backed test including frozen 060. No application database target.",
+    "workingDirectory": "Outside both Git roots (portable command uses explicit pack/subject roots).",
+    "actualRunnerExit": 1,
+    "childExitMeaning": "Child exit 0 means controls finished reporting assertions; semantic acceptance is the top-level exit/status. It does not turn FAIL assertions into PASS.",
+    "supervisorIntervention": false,
+    "ownedFixturesLeftRunning": false
+  },
+  "rows": [
+    {
+      "id": "P1",
+      "status": "FAIL",
+      "assertions": [
+        {
+          "id": "P1_ACCOUNTING_REJECTS_UNRESOLVED_CONNECT",
+          "passed": false,
+          "observation": {
+            "caller": {
+              "name": "HarnessDeadlineError",
+              "code": "HARNESS_DEADLINE_EXCEEDED",
+              "message": "CLIENT_ACQUISITION_TIMEOUT: P1_late"
+            },
+            "tracker": {
+              "rejected": false,
+              "error": null
+            },
+            "final": {
+              "rejected": false,
+              "error": null
+            },
+            "resultDelivered": false
+          }
+        },
+        {
+          "id": "P1_REAL_LATE_DISPOSITION",
+          "passed": true,
+          "observation": {
+            "terminal": {
+              "method": "discard_late",
+              "attempted": true,
+              "success": true,
+              "failed": false,
+              "error": null
+            },
+            "poolRemoved": true,
+            "backendAbsent": true,
+            "tracker": {
+              "rejected": false,
+              "error": null
+            },
+            "final": {
+              "rejected": false,
+              "error": null
+            }
+          }
+        }
+      ],
+      "observations": {},
+      "fixture": "NEW_UNIX_SOCKET_DISPOSABLE_POSTGRES",
+      "reviewerRescue": [],
+      "processExit": {
+        "code": 0,
+        "signal": null
+      },
+      "supervisorIntervention": false,
+      "existingCriterion": [
+        "F: C4-E02-PARTIAL-ACQUISITION",
+        "G: C4-E02-FINAL-ACCOUNTING"
+      ],
+      "actualMethodInvoked": [
+        "ClientTracker.acquire",
+        "ClientTracker.assertAllAccountedFor",
+        "CaseLocalCoordinator.assertFinalAccounting"
+      ],
+      "fixtureInjection": "Defer resolution of an actual pool.connect() checkout behind a deterministic reviewer gate passed to the existing acquire() method. Hold the physically checked-out client result until after the caller deadline and both accounting checks; do not manufacture an attempt or terminal record.",
+      "requiredAssertions": [
+        "The existing acquire() method times out while the started raw acquisition remains unresolved.",
+        "Before opening the gate, tracker.assertAllAccountedFor() rejects unresolved acquisition ownership.",
+        "Before opening the gate, coordinator.assertFinalAccounting() rejects unresolved acquisition ownership.",
+        "After opening the gate, the existing late-return handler runs for the actual client, retains ownership, truthfully disposes it and reaches settled terminal accounting.",
+        "Previously acquired-client cleanup under this same F/G criterion is exercised explicitly by P2 and P4."
+      ],
+      "baselineExpected": {
+        "status": "FAIL",
+        "knownCause": "Caller timeout changes attempt.status to timed_out, while both accounting checks reject only pending. They can pass before the still-started raw connection promise settles.",
+        "afterGateRequirement": "Observe the actual late-return handler and cleanup; a successful late disposal cannot erase the prior accounting defect."
+      },
+      "installedSourceIdentityRef": "identity",
+      "commandRef": "execution.command",
+      "controlLimitations": [
+        "The current F manually inserts a simulated late entry and cannot prove this path",
+        "An already-expired deadline alone does not prove an in-progress acquisition timeout"
+      ]
+    },
+    {
+      "id": "P2",
+      "status": "FAIL",
+      "assertions": [
+        {
+          "id": "P2_NO_ACTIVE_PID_CLEAN_RELEASE",
+          "passed": false,
+          "observation": {
+            "callerError": {
+              "name": "HarnessDeadlineError",
+              "code": "HARNESS_DEADLINE_EXCEEDED",
+              "message": "PID_INITIALIZATION_TIMEOUT: P2_partial"
+            },
+            "pidSettled": false,
+            "backend": {
+              "state": "active",
+              "open_transaction": true
+            },
+            "releaseAttempts": [
+              {
+                "errorRelease": false,
+                "activeQuery": true,
+                "queuedQueries": 0
+              }
+            ],
+            "priorReleaseEvents": 1,
+            "final": {
+              "rejected": false,
+              "error": null
+            },
+            "subjectCleanupErrors": []
+          }
+        },
+        {
+          "id": "P2_UNSETTLED_PID_BLOCKS_ACCOUNTING",
+          "passed": false,
+          "observation": {
+            "rejected": false,
+            "error": null
+          }
+        },
+        {
+          "id": "P2_PRIOR_CLIENT_CLEANED",
+          "passed": true,
+          "observation": {
+            "poolReleaseEvents": 1
+          }
+        },
+        {
+          "id": "P2_SUBJECT_SETTLES_AND_VERIFIES_BEFORE_RESCUE",
+          "passed": false,
+          "observation": {
+            "callerError": {
+              "name": "HarnessDeadlineError",
+              "code": "HARNESS_DEADLINE_EXCEEDED",
+              "message": "PID_INITIALIZATION_TIMEOUT: P2_partial"
+            },
+            "pidSettled": false,
+            "backend": {
+              "state": "active",
+              "open_transaction": true
+            },
+            "releaseAttempts": [
+              {
+                "errorRelease": false,
+                "activeQuery": true,
+                "queuedQueries": 0
+              }
+            ],
+            "priorReleaseEvents": 1,
+            "final": {
+              "rejected": false,
+              "error": null
+            },
+            "subjectCleanupErrors": []
+          }
+        },
+        {
+          "id": "P2_PID_OUTCOME_OBSERVED",
+          "passed": true,
+          "observation": {
+            "pidSettled": true,
+            "reviewerGateReleased": true,
+            "gateReleaseIsNotSubjectCleanup": true
+          }
+        }
+      ],
+      "observations": {},
+      "fixture": "NEW_UNIX_SOCKET_DISPOSABLE_POSTGRES",
+      "reviewerRescue": [],
+      "processExit": {
+        "code": 0,
+        "signal": null
+      },
+      "supervisorIntervention": false,
+      "existingCriterion": [
+        "F: ownership from first acquisition",
+        "G: no unaccounted or busy clean-released client",
+        "D/F/G: failure-safe partial setup"
+      ],
+      "actualMethodInvoked": [
+        "ClientTracker.acquire",
+        "CaseLocalCoordinator.performFiniteCleanup",
+        "ClientTracker.releaseClean",
+        "ClientTracker.assertAllAccountedFor",
+        "CaseLocalCoordinator.assertFinalAccounting"
+      ],
+      "fixtureInjection": "After the existing acquire() method receives an actual checked-out client, gate its real PID-initialization SQL with a PostgreSQL advisory transaction lock until the acquisition deadline expires or the client is disposed. Exercise timeout/failure after checkout, with at least one previously acquired client, without editing registry state.",
+      "requiredAssertions": [
+        "The actual PID query is observed active or blocked on its test-owned backend while the caller deadline expires.",
+        "Ownership starts at checkout and includes the PID-initialization query until settlement or verified disposal.",
+        "No ordinary release returns the client to the pool while the actual PID query remains active.",
+        "A failed or timed-out initialization remains visible to accounting until its query/client is settled or conclusively disposed.",
+        "Previously acquired clients reach truthful terminal cleanup; final accounting follows actual verification."
+      ],
+      "baselineExpected": {
+        "status": "FAIL",
+        "knownCause": "The raw PID-initialization query is absent from the operation registry and activeOps. Its deadline failure leaves initialization_failed, which cleanup can ordinary-release while the real query is still active."
+      },
+      "installedSourceIdentityRef": "identity",
+      "commandRef": "execution.command",
+      "controlLimitations": [
+        "Registration of the client alone does not establish registration of its query",
+        "Reviewer rescue must be recorded separately from subject cleanup"
+      ]
+    },
+    {
+      "id": "P3",
+      "status": "FAIL",
+      "assertions": [
+        {
+          "id": "P3_DEADLINE_LATCHES_BEFORE_CANCEL_COMPLETES",
+          "passed": false,
+          "observation": {
+            "callState": "pending",
+            "cancelSettled": false,
+            "sourceSettled": false,
+            "controlActiveQuery": true,
+            "controlRegisteredActiveOps": 0,
+            "elapsedMs": 343
+          }
+        },
+        {
+          "id": "P3_LATE_SOURCE_CANNOT_CHANGE_FAILURE",
+          "passed": false,
+          "observation": {
+            "callState": "success",
+            "callError": null,
+            "cancelSettled": false
+          }
+        },
+        {
+          "id": "P3_CONTROL_REGISTERED_WHILE_BLOCKED",
+          "passed": false,
+          "observation": {
+            "controlOwned": false,
+            "cancelSettled": false,
+            "controlActiveQuery": true
+          }
+        },
+        {
+          "id": "P3_CLEANUP_OWNS_CONTROL_BEFORE_REVIEWER_RESCUE",
+          "passed": false,
+          "observation": {
+            "cancelSettled": false,
+            "poolRemoved": false,
+            "backend": {
+              "state": "active",
+              "open_transaction": true
+            },
+            "final": {
+              "rejected": false,
+              "error": null
+            },
+            "cleanupErrors": [
+              {
+                "name": "AssertionError",
+                "code": "ERR_ASSERTION",
+                "message": "Backend 19623 (observer) must be idle, got 'active'\n\n'active' !== 'idle'\n"
+              }
+            ],
+            "reviewerGateStillHeld": true
+          }
+        },
+        {
+          "id": "P3_NO_ACTIVE_CONTROL_CLEAN_RELEASE",
+          "passed": false,
+          "observation": {
+            "attempts": [
+              {
+                "errorRelease": false,
+                "activeQuery": true,
+                "queuedQueries": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "P3_INDEPENDENT_OUTCOMES_OBSERVED",
+          "passed": true,
+          "observation": {
+            "cancelSettled": true,
+            "sourceSettled": true,
+            "reviewerGateReleaseIsNotSubjectCleanup": true
+          }
+        }
+      ],
+      "observations": {},
+      "fixture": "NEW_UNIX_SOCKET_DISPOSABLE_POSTGRES",
+      "reviewerRescue": [],
+      "processExit": {
+        "code": 0,
+        "signal": null
+      },
+      "supervisorIntervention": false,
+      "existingCriterion": [
+        "D: C4-E02-TIMED-OUT-OBSERVER",
+        "E: C4-E02-DELAYED-FALLBACK-CONTROL",
+        "G: complete final accounting"
+      ],
+      "actualMethodInvoked": [
+        "CaseLocalCoordinator.registerOperation/execute",
+        "CaseLocalCoordinator.runOperation",
+        "CaseLocalCoordinator.performFiniteCleanup",
+        "CaseLocalCoordinator.assertFinalAccounting"
+      ],
+      "fixtureInjection": "Run an actual test-owned SQL operation with an actual cancellation callback. Hold the cancellation SQL behind a PostgreSQL advisory gate. After observing the callback start and the operation deadline pass, release the source SQL while cancellation remains blocked, and observe whether the existing call returns success before releasing the cancellation gate.",
+      "requiredAssertions": [
+        "The operation deadline rejects independently of cancellation/control-query settlement.",
+        "The timeout outcome is immutable: a later successful source query cannot convert it to success.",
+        "The actual cancellation/control query retains its owning client and registry identity through settlement or verified disposal.",
+        "Cancellation, rollback and backend-verification deadline losers remain owned; no active owner is ordinary-released.",
+        "Fallback has a finite declared budget, preserves original and cleanup/deadline errors and settles or disposes test-owned work before final accounting."
+      ],
+      "baselineExpected": {
+        "status": "FAIL",
+        "knownCause": "The async timeout callback awaits op.cancel() before rejecting. A blocked actual cancellation query delays the deadline and lets the original operation's later success win Promise.race; raw control-query work is also outside complete ownership."
+      },
+      "installedSourceIdentityRef": "identity",
+      "commandRef": "execution.command",
+      "controlLimitations": [
+        "Current E delays the target before cleanup and uses ordinarily responsive fallback cancellation",
+        "A responsive cancel or a Promise.race wrapper alone does not prove a delayed cancellation/control-query loser is settled"
+      ]
+    },
+    {
+      "id": "P4",
+      "status": "FAIL",
+      "assertions": [
+        {
+          "id": "P4_TERMINAL_FAILURE_VISIBLE_AND_REJECTED",
+          "passed": false,
+          "observation": {
+            "terminalFailuresReached": [
+              "release"
+            ],
+            "errorVisible": false,
+            "final": {
+              "rejected": false,
+              "error": null
+            },
+            "terminal": {
+              "method": "discard_late",
+              "attempted": true,
+              "success": true,
+              "failed": false,
+              "error": null
+            },
+            "poolRemovalObserved": false,
+            "subjectErrors": [
+              "REVIEW_P4_ORIGINAL"
+            ]
+          }
+        },
+        {
+          "id": "P4_ORIGINAL_ERROR_PRESERVED",
+          "passed": true,
+          "observation": {
+            "cleanupError": {
+              "name": "Error",
+              "code": null,
+              "message": "REVIEW_P4_ORIGINAL"
+            }
+          }
+        },
+        {
+          "id": "P4_OTHER_CLIENT_CLEANED",
+          "passed": true,
+          "observation": {
+            "poolReleaseEvents": 1
+          }
+        }
+      ],
+      "observations": {
+        "reviewerRescueRequired": true
+      },
+      "fixture": "NEW_UNIX_SOCKET_DISPOSABLE_POSTGRES",
+      "reviewerRescue": [
+        {
+          "discarded": true
+        }
+      ],
+      "processExit": {
+        "code": 0,
+        "signal": null
+      },
+      "supervisorIntervention": false,
+      "existingCriterion": [
+        "F: actual late-client disposal",
+        "G: all terminal actions truthfully audited"
+      ],
+      "actualMethodInvoked": [
+        "ClientTracker.acquire actual late-return handler",
+        "Actual checked-out client's instrumented release(error)/end terminal APIs",
+        "ClientTracker.assertAllAccountedFor",
+        "CaseLocalCoordinator.assertFinalAccounting"
+      ],
+      "fixtureInjection": "Instrument the actual checked-out client's release/error and end terminal APIs. Defer an actual acquisition through the existing acquire() method, let it time out, then return the client late with a controlled failure in the selected actual terminal action. Record which action was invoked and failed. The existing late handler must encounter the actual API failure; do not manually author failure/success records. Independently rescue the fixture afterward and label rescue separately.",
+      "requiredAssertions": [
+        "The selected instrumented release/end terminal action is actually invoked, its injected failure is observed, and the failure remains visible in the subject's terminal accounting.",
+        "The subject does not record unconditional success after a failed terminal API.",
+        "Coordinator final accounting rejects the failed or incomplete terminal action; its stored terminal action/error is independently inspected.",
+        "Other previously acquired clients reach clean terminal states despite this failure.",
+        "Reviewer rescue closes the fixture safely but is explicitly recorded as reviewer rescue and cannot turn subject failure into subject success."
+      ],
+      "baselineExpected": {
+        "status": "FAIL",
+        "knownCause": "The actual late-return handler swallows socket-destroy/release(error) exceptions and unconditionally writes success:true, failed:false, error:null. Both accounting checks can accept a failed terminal action."
+      },
+      "installedSourceIdentityRef": "identity",
+      "commandRef": "execution.command",
+      "controlLimitations": [
+        "A manually populated terminalFailures map is not proof that the actual handler preserves errors",
+        "Socket absence does not prove a failing pool release API was truthfully accounted"
+      ]
+    },
+    {
+      "id": "P5",
+      "status": "FAIL",
+      "assertions": [
+        {
+          "id": "P5_UNMODIFIED_SUBJECT_REGRESSIONS",
+          "passed": true
+        },
+        {
+          "id": "P5_ACTUAL_CHILD_OWNERSHIP",
+          "passed": false
+        }
+      ],
+      "processExit": {
+        "code": 0,
+        "signal": null
+      },
+      "nodeTests": 1,
+      "failures": 0,
+      "ordinaryRegression": {
+        "status": "PASS"
+      },
+      "installedFunctions": [
+        {
+          "function": "canonical_compose_payment_reservation(uuid,uuid)",
+          "owner": "harvo_test",
+          "prosecdef": true,
+          "proconfig": [
+            "search_path=pg_catalog, public, pg_temp",
+            "row_security=on"
+          ],
+          "function_hash": "8d64225a05832de157fcb03243ac5c292dde56b92aef8e253739165763bc40a0"
+        }
+      ],
+      "limitations": "One observational class-registration hook and transparent pg dispatch/result witnesses; algorithms, callers, SQL and assertions unchanged. Covers actual runOperation/performFiniteCleanup scopes, including all three setup service-pool paths. Not universal field/database coverage. Complete G also requires P1-P4.",
+      "lifecycleObservation": {
+        "setupNames": [
+          "setup_fixture",
+          "setup_c2_fixture",
+          "setup_c3_fixture"
+        ],
+        "setupQueryCounts": {
+          "setup_fixture": 31,
+          "setup_c2_fixture": 31,
+          "setup_c3_fixture": 31
+        },
+        "queryCount": 277,
+        "connectCount": 12,
+        "pendingQueries": 0,
+        "pendingConnects": 0,
+        "violationCount": 252,
+        "violationsByKind": {
+          "CONNECT_NOT_OWNED_AT_DISPATCH": 12,
+          "QUERY_NOT_OWNED_AT_DISPATCH": 240
+        },
+        "scenarios": {
+          "CASE_C_NORMAL_EXPIRY": {
+            "queryCount": 148,
+            "connectCount": 4,
+            "violationCount": 134
+          },
+          "CASE_C2_FAILURE_CLEANUP": {
+            "queryCount": 60,
+            "connectCount": 4,
+            "violationCount": 55
+          },
+          "CASE_C3_DELAYED_CONTROL_FALLBACK": {
+            "queryCount": 63,
+            "connectCount": 4,
+            "violationCount": 58
+          },
+          "DEMO_D_TIMED_OUT_OBSERVER": {
+            "queryCount": 4,
+            "connectCount": 0,
+            "violationCount": 3
+          },
+          "DEMO_E_DELAYED_FALLBACK_CONTROL": {
+            "queryCount": 2,
+            "connectCount": 0,
+            "violationCount": 2
+          }
+        },
+        "representativeViolations": [
+          {
+            "kind": "CONNECT_NOT_OWNED_AT_DISPATCH",
+            "operation": "setup_fixture",
+            "scenario": "CASE_C_NORMAL_EXPIRY"
+          },
+          {
+            "kind": "QUERY_NOT_OWNED_AT_DISPATCH",
+            "operation": "setup_fixture",
+            "scenario": "CASE_C_NORMAL_EXPIRY"
+          }
+        ],
+        "qualification": "Counts are observations of this run, not fixed pass thresholds. Details are sampled; total violationCount and per-scenario counts are complete for the observed runOperation/performFiniteCleanup scopes. This is not every database field or operation outside those scopes."
+      },
+      "existingCriterion": [
+        "G: complete lifecycle accounting",
+        "Normal Case C expiry",
+        "Immediate deadline negative control",
+        "D: responsive observer",
+        "C2: injected failure cleanup",
+        "C3: real SQL delayed-control fallback and restoration"
+      ],
+      "actualMethodInvoked": [
+        "Existing complete Node test in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs",
+        "ClientTracker.acquire",
+        "CaseLocalCoordinator.runOperation",
+        "Actual setup_fixture/setup_c2_fixture/setup_c3_fixture service connects/queries",
+        "TrackedQueryAdapter.query/abortQueued",
+        "CaseLocalCoordinator.performFiniteCleanup",
+        "verifyBackendsCleanOrAbsent",
+        "CaseLocalCoordinator.assertFinalAccounting"
+      ],
+      "fixtureInjection": "Execute the existing full migration-backed focused subject under Node 24 in a fresh disposable Unix-socket PostgreSQL fixture with a transparent source-hashed observational hook. Observe actual runOperation and performFiniteCleanup scopes, actual setup_fixture/setup_c2_fixture/setup_c3_fixture child-service connects/queries, and registry ownership at dispatch and settlement. Do not change algorithms, SQL behavior or assertions. Preserve normal expiry, zero-invocation immediate-expiry control, real C3 SQL delay, AggregateError, restored-baseline and responsive-observer assertions. Report ordinaryRegression separately and reject overall P5 on observed lifecycle ownership violations.",
+      "requiredAssertions": [
+        "Normal Case C expires after real lock wait, commits HOLD_EXPIRED reconciliation and preserves matched capture without allocation.",
+        "Already-expired runWithDeadline invokes zero actions and returns the exact source assertion's deadline error.",
+        "C2 preserves its injected error and restores the exact scoped baseline after query cancellation/rollback.",
+        "C3 observes its actual delayed SQL, exercises finite fallback, preserves original and cleanup timeout in AggregateError, verifies backend cleanup and restores the exact scoped baseline before accounting.",
+        "The responsive timed-out observer is cancelled and settles before ordinary release.",
+        "Actual child-service checkout/query ownership is observed within setup_fixture, setup_c2_fixture and setup_c3_fixture; a registered parent operation alone does not establish ownership of its child client or SQL.",
+        "The observational hook records actual query dispatch and settlement ownership for the exercised PID/setup/cleanup paths and rejects observed unowned work.",
+        "Complete G includes actual acquisitions, PID initialization, source queries, cancellation/control, rollback, backend verification, restoration verification and adapter queues; every started item retains its actual owning client through settlement or verified disposal.",
+        "Final accounting rejects any unresolved acquisition, registered or real unsettled work, queued work, unaccounted client, active client ordinary-release or failed terminal API; it passes only after restoration/backend verification and all required P1-P4 controls pass."
+      ],
+      "baselineExpected": {
+        "status": "FAIL",
+        "ordinaryRegression": "PASS",
+        "coverage": "EXISTING_REGRESSION_PLUS_NARROW_LIFECYCLE_OWNERSHIP_OBSERVATION",
+        "completeGProven": false,
+        "knownCause": "Actual child-service queries inside setup_fixture/setup_c2_fixture/setup_c3_fixture, PID-initialization queries and cleanup queries can dispatch without actual client/query registry ownership. A registered parent or zero registered unsettled work cannot establish complete G.",
+        "qualification": "The ordinary focused script is expected to pass responsive existing regressions, separately reported as ordinaryRegression PASS. Overall P5 fails on observed unowned work; all five source controls passing never establishes READY without complete G."
+      },
+      "installedSourceIdentityRef": "identity",
+      "commandRef": "execution.command",
+      "controlLimitations": [
+        "A P5 focused-suite pass cannot override P1-P4 failure",
+        "Zero registered operations does not prove zero real unregistered operations",
+        "Current G directly checks an artificial unsettled entry and performs no independent restoration verification",
+        "Report the actual exercised lifecycle paths and their limits; this pack does not claim universal instrumentation or field coverage"
+      ]
+    }
+  ],
+  "conclusion": {
+    "baselineSelfConsistency": "PASS",
+    "acceptance": "CHANGES_REQUESTED",
+    "readyForReview": false,
+    "sqlRepair": "SUPPORTED / UNCHANGED",
+    "ordinaryFocusedRegression": "PASS 1/1 Node test; complete G ownership FAIL",
+    "reason": "Known false-PASS classes are detected by actual acquire/PID/cancel/terminal paths and actual child service dispatch, without manufacturing terminal records."
+  },
+  "artifactProvenance": {
+    "retainedArtifactsAvailable": true,
+    "rawArtifactsPublished": false,
+    "artifacts": [
+      {
+        "basename": "encho-764-actual-boundary-probes.mjs",
+        "sha256": "1e236029d413a6af6315e1b31307737294dcfe5bc6767d47098b83dab702e16a"
+      },
+      {
+        "basename": "encho-764-actual-boundary-probes.log",
+        "sha256": "bb0c49fb746aa671ac50cce6c4856738350f6d406b5c337fe4ed1e204479c3fc"
+      },
+      {
+        "basename": "encho-a062-observer-ownership-probe.mjs",
+        "sha256": "580d7e50d37d0a62f2d643207b28d73197359d43ecc65e77183b52f8f7f371ee"
+      },
+      {
+        "basename": "encho-a062-observer-ownership-probe.log",
+        "sha256": "07c3904c6e5ac680f48d3505fc69359ac311e14db59cdba29bf93b7b7505b876"
+      }
+    ],
+    "P1_P2_P3": "Portable adaptations of retained 764 actual-boundary reproductions; deterministic delivery/advisory gates replace earlier short timing assumptions. Actual subject algorithms are loaded from pinned bytes.",
+    "P4": "New reviewer-authored controlled real terminal-API failure reproduction, freshly executed.",
+    "P5": "Unchanged subject assertions/callers plus reconstructed narrow observational hook for actual dispatch/settlement. Earlier a062 observer artifact is historical provenance; the current focused observer regression passes, and is not reported as still failing.",
+    "unavailableArtifacts": []
+  },
+  "validationQualification": {
+    "subjectReceiptBeforeSha256": "6f1672108f886845eefa4a0a20cf31ae3cbe3fb0eaea7f50758bac806dfa59b6",
+    "subjectReceiptAfterSha256": "6f1672108f886845eefa4a0a20cf31ae3cbe3fb0eaea7f50758bac806dfa59b6",
+    "normalVerificationMutatedSubjectReceipt": false,
+    "migration060Sha256": "0823b6d434ebad6a6bce11196671a6ad8ff0a567049ca001fc7f4c3e9708548c",
+    "observations": "Observed errors retain actual domain/client codes when present; no synthetic SQLSTATE 00000. No forced kill was counted as successful cleanup. Reviewer rescue for P4 is separately visible and not subject terminal success."
+  },
+  "carriedForward": {
+    "notRerun": true,
+    "composition": 56,
+    "paymentEvidence": 38,
+    "reservation": 13,
+    "total": 107,
+    "separate": {
+      "diagnosticNodeTests": 1,
+      "W4B": 52,
+      "W4C2NodeTests": 1
+    }
+  },
+  "historicalCommandB": "UNKNOWN / OWNER FOLLOW-UP",
+  "production": "NOT EVALUATED",
+  "canonicalIntegration": "NOT PERFORMED",
+  "main": "UNCHANGED"
+}
