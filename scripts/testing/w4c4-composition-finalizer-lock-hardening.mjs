@@ -7,17 +7,19 @@
  *   Composition eliminates pre-finalization booking_holds FOR UPDATE lock,
  *   preserving the global lock hierarchy:
  *   canonical_payment_attempts -> canonical_reservation_commands -> booking_holds -> inventory_days.
- * - Race Case A: Direct finalizer wins same H/C race -> zero 40P01, clean reconciliation.
+ * - Race Case A: Direct finalizer wins same H/C race -> zero 40P01, clean reconciliation with
+ *   FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT.
+ * - Sequential consumed-hold regression on different command -> HOLD_EXPIRED.
  * - Race Case B: Composition wins same H/C race -> zero 40P01, exactly one reservation, exact finalizer replay.
  * - Race Case C: Hold expiry while waiting -> finalizer rejects on clock_timestamp(), composition reconciles HOLD_EXPIRED.
  * - Race Case D: Non-active / released hold -> finalizer rejects with RESERVATION_HOLD_NOT_ACTIVE, maps to HOLD_EXPIRED.
  * - Replay Cases:
- *   - Exact composition replay returns stored record with replayed = true.
+ *   - Exact composition replay returns stored record with replayed = true, zero additional movement.
  *   - Direct finalizer command replay unchanged.
  *   - Changed command/attempt conflicts rejected.
  *   - Outside-composition finalizer replay rejected with FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT.
  * - Outer Transaction Failure:
- *   - Failure on bridge insert rolls back entire outer transaction including finalizer effects.
+ *   - Failure on bridge insert (injected P7777) rolls back entire outer transaction including finalizer effects.
  * - Role Isolation:
  *   - encho_composition_worker can EXECUTE composition, CANNOT execute finalizer directly, no raw table DML.
  *   - encho_reservation_worker can EXECUTE finalizer directly.
@@ -46,6 +48,16 @@ import {
 } from '../../src/services/canonicalCompositionService.js';
 import { addDays, createW1AcceptedOfferFixture } from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.js';
 import { applyIsolatedMigration } from '../../src/test/harvo/helpers/isolatedMigration.js';
+import {
+  waitFor,
+  waitForLockWait,
+  setupCommandGate,
+  teardownCommandGate,
+  captureScopedSnapshot,
+  assertNoNewAllocation,
+  assertInventoryMovedOnce,
+  getFunctionIdentity,
+} from './helpers/w4c4-concurrency-evidence.mjs';
 
 test('W4-C4 payment composition lock-order hardening verification (Migration 060)', async () => {
   // =========================================================================
@@ -114,7 +126,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     await fixture.owner.query(`CREATE ROLE encho_cancellation_issuer LOGIN NOSUPERUSER NOBYPASSRLS
       NOCREATEDB NOCREATEROLE NOREPLICATION`);
     await fixture.owner.query(`CREATE ROLE encho_cancellation_executor LOGIN NOSUPERUSER NOBYPASSRLS
-      NOCREATEROLE NOREPLICATION`);
+      NOCREATEDB NOCREATEROLE NOREPLICATION`);
     await applyIsolatedMigration(fixture.owner, '056_canonical_cancellation_completion_authority.sql');
     await applyIsolatedMigration(fixture.owner, '057_canonical_reservation_revision_model.sql');
     await applyIsolatedMigration(fixture.owner, '058_version_aware_cancellation_release.sql');
@@ -125,6 +137,15 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
     // Apply MIGRATION 060: Lock order hardening
     await applyIsolatedMigration(fixture.owner, '060_canonical_payment_composition_lock_order_hardening.sql');
+
+    // Setup command gate trigger for synchronization
+    await setupCommandGate(fixture.owner);
+
+    // Verify installed function identity
+    const installed = await getFunctionIdentity(fixture.owner);
+    assert.equal(installed.function, 'canonical_compose_payment_reservation(uuid,uuid)');
+    assert.equal(installed.prosecdef, true);
+    assert.ok(installed.function_hash);
 
     stays = new pg.Pool({ ...fixture.owner.options, user: 'encho_stays_web' });
     reservationWorker = new pg.Pool({ ...fixture.owner.options, user: 'encho_reservation_worker' });
@@ -253,226 +274,412 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       };
     };
 
-    // =========================================================================
-    // 3. RACE CASE A: DIRECT FINALIZER WINS
-    // =========================================================================
-    // Direct finalizer runs first on hold H1 with command C1.
-    // Composition arrives after hold is finalized/consumed.
-    // Verify:
-    // - Zero 40P01 deadlock
-    // - If different command: RECONCILIATION_REQUIRED / HOLD_EXPIRED (due to non-ACTIVE status)
-    // - No duplicate canonical reservation
-    // - Held units decremented, booked units incremented exactly once.
-    // =========================================================================
-    {
-      const f = await setupPaymentAttemptFixture(15, 2);
-      const directCommand = randomUUID();
-
-      // Direct finalizer executes and commits first
-      const dirClient = await reservationWorker.connect();
-      let directRes;
-      try {
-        await dirClient.query('BEGIN');
-        await dirClient.query("SELECT set_config('app.stays_principal', $1, true)", ['user:10']);
-        const { rows } = await dirClient.query(
-          `SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)`,
-          [f.holdId, f.quote.id, directCommand]
-        );
-        directRes = rows[0];
-        await dirClient.query('COMMIT');
-      } finally {
-        dirClient.release();
-      }
-      assert.ok(directRes.reservation_id, 'Direct finalizer must create reservation');
-      assert.equal(directRes.replayed, false);
-
-      // Composition executes concurrently / subsequently on the same hold with its own command
-      const compCommand = randomUUID();
-      const compRes = await composePaymentReservation(compositionWorker, {
-        commandId: compCommand,
-        paymentAttemptId: f.attemptId,
+    // Helper: Run race between direct finalizer and composition on SAME H and SAME C
+    const runRace = async (label, offsetDays, first) => {
+      const f = await setupPaymentAttemptFixture(offsetDays, 2);
+      const command = randomUUID();
+      const gateKey = 88773301n;
+      const before = await captureScopedSnapshot(fixture.owner, {
+        holdId: f.holdId,
+        commandId: command,
+        attemptId: f.attemptId,
       });
 
-      assert.equal(compRes.compositionState, 'RECONCILIATION_REQUIRED');
-      assert.equal(compRes.reconciliationReason, 'HOLD_EXPIRED');
-      assert.equal(compRes.reservationId, null);
+      const gateConn = await fixture.owner.connect();
+      const dirConn = await reservationWorker.connect();
+      const compConn = await compositionWorker.connect();
 
-      // Verify no duplicate reservation exists for this hold
+      const getPid = async (c) => (await c.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      const pids = {
+        gate: await getPid(gateConn),
+        direct: await getPid(dirConn),
+        composition: await getPid(compConn),
+      };
+
+      let directPromise;
+      let compPromise;
+
+      try {
+        await gateConn.query('SELECT pg_advisory_lock($1)', [gateKey.toString()]);
+        await fixture.owner.query(
+          'INSERT INTO review_c4_gate (command_id, gate_key) VALUES ($1, $2)',
+          [command, gateKey.toString()]
+        );
+
+        for (const conn of [dirConn, compConn]) {
+          await conn.query('BEGIN');
+          await conn.query("SET LOCAL lock_timeout = '8s'; SET LOCAL statement_timeout = '12s'");
+        }
+        await dirConn.query("SELECT set_config('app.stays_principal', 'user:10', true)");
+
+        const invokeClient = (conn, sql, args) =>
+          conn
+            .query(sql, args)
+            .then(async (r) => {
+              await conn.query('COMMIT');
+              return { clientError: null, result: r.rows[0] };
+            })
+            .catch(async (e) => {
+              await conn.query('ROLLBACK');
+              return { clientError: { code: e.code, message: e.message }, result: null };
+            });
+
+        const startDirect = () =>
+          invokeClient(dirConn, 'SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)', [
+            f.holdId,
+            f.quote.id,
+            command,
+          ]);
+
+        const startComp = () =>
+          invokeClient(compConn, 'SELECT * FROM canonical_compose_payment_reservation($1, $2)', [
+            command,
+            f.attemptId,
+          ]);
+
+        if (first === 'direct') {
+          directPromise = startDirect();
+        } else {
+          compPromise = startComp();
+        }
+
+        const firstPid = first === 'direct' ? pids.direct : pids.composition;
+        const gateWait = await waitForLockWait(
+          fixture.owner,
+          firstPid,
+          pids.gate,
+          `${label}: first gated after command insert`
+        );
+        assert.ok(gateWait, `${label}: first contender must wait on command gate`);
+
+        if (first === 'direct') {
+          compPromise = startComp();
+        } else {
+          directPromise = startDirect();
+        }
+
+        const secondPid = first === 'direct' ? pids.composition : pids.direct;
+        const secondWait = await waitForLockWait(
+          fixture.owner,
+          secondPid,
+          firstPid,
+          `${label}: second command contention`
+        );
+        assert.ok(secondWait, `${label}: second contender must wait on command lock`);
+
+        await gateConn.query('SELECT pg_advisory_unlock($1)', [gateKey.toString()]);
+
+        const [directRes, compRes] = await Promise.all([directPromise, compPromise]);
+        const after = await captureScopedSnapshot(fixture.owner, {
+          holdId: f.holdId,
+          commandId: command,
+          attemptId: f.attemptId,
+        });
+
+        return {
+          d: directRes,
+          c: compRes,
+          before,
+          after,
+          f,
+          command,
+          gateWait,
+          secondWait,
+          pids,
+        };
+      } finally {
+        await gateConn.query('SELECT pg_advisory_unlock_all()').catch(() => {});
+        await Promise.allSettled([directPromise, compPromise].filter(Boolean));
+        await dirConn.query('ROLLBACK').catch(() => {});
+        await compConn.query('ROLLBACK').catch(() => {});
+        await fixture.owner.query('DELETE FROM review_c4_gate WHERE command_id = $1', [command]).catch(() => {});
+        gateConn.release();
+        dirConn.release();
+        compConn.release();
+      }
+    };
+
+    // =========================================================================
+    // 3. RACE CASE A: DIRECT FINALIZER WINS (SAME H / SAME C)
+    // =========================================================================
+    // Direct finalizer runs first on hold H and command C; paused on gate.
+    // Composition starts on SAME H and SAME C; observed waiting on command lock.
+    // Gate unlocks -> direct finalizer completes and creates reservation.
+    // Composition serializes behind it, sees hold consumed, refuses adoption:
+    // FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT.
+    // Verify:
+    // - Zero 40P01, zero 55P03
+    // - Exactly one reservation, zero bridges
+    // - Held decremented once, booked incremented once.
+    // =========================================================================
+    {
+      const directFirst = await runRace('POST_060_DIRECT_FIRST_SAME_H_SAME_C', 10, 'direct');
+      assert.equal(directFirst.d.clientError, null, 'Direct finalizer client error must be null');
+      assert.equal(directFirst.c.clientError, null, 'Composition client error must be null');
+      assert.equal(directFirst.d.result.replayed, false, 'Direct finalizer must create new reservation');
+      assert.ok(directFirst.d.result.reservation_id, 'Direct finalizer must return reservation_id');
+      assert.equal(
+        directFirst.c.result.composition_state,
+        'RECONCILIATION_REQUIRED',
+        'Composition must enter RECONCILIATION_REQUIRED'
+      );
+      assert.equal(
+        directFirst.c.result.reconciliation_reason,
+        'FINALIZER_FAILURE',
+        'Composition reconciliation_reason must be FINALIZER_FAILURE'
+      );
+      assert.equal(directFirst.c.result.replayed, false);
+      assert.equal(
+        directFirst.after.reconciliations[0].details?.reason,
+        'FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT',
+        'Reconciliation details reason must be FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT'
+      );
+      assertInventoryMovedOnce(directFirst.before, directFirst.after, 0);
+      assert.equal(directFirst.after.bridges.length, 0, 'Zero paid composition bridges for losing composition');
+    }
+
+    // =========================================================================
+    // 3b. SEQUENTIAL CONSUMED-HOLD DIFFERENT-COMMAND REGRESSION
+    // =========================================================================
+    // Direct finalizer commits first with command C1.
+    // Subsequent composition arrives on same hold with DIFFERENT command C2.
+    // Hold is non-ACTIVE (CONSUMED), so composition enters RECONCILIATION_REQUIRED / HOLD_EXPIRED.
+    // =========================================================================
+    {
+      const fSeq = await setupPaymentAttemptFixture(12, 2);
+      const directCmdSeq = randomUUID();
+      const dirClientSeq = await reservationWorker.connect();
+      let directResSeq;
+      try {
+        await dirClientSeq.query('BEGIN');
+        await dirClientSeq.query("SELECT set_config('app.stays_principal', $1, true)", ['user:10']);
+        const { rows } = await dirClientSeq.query(
+          `SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)`,
+          [fSeq.holdId, fSeq.quote.id, directCmdSeq]
+        );
+        directResSeq = rows[0];
+        await dirClientSeq.query('COMMIT');
+      } finally {
+        dirClientSeq.release();
+      }
+      assert.ok(directResSeq.reservation_id, 'Direct finalizer must create reservation');
+      assert.equal(directResSeq.replayed, false);
+
+      const compCmdSeq = randomUUID();
+      const compResSeq = await composePaymentReservation(compositionWorker, {
+        commandId: compCmdSeq,
+        paymentAttemptId: fSeq.attemptId,
+      });
+
+      assert.equal(compResSeq.compositionState, 'RECONCILIATION_REQUIRED');
+      assert.equal(compResSeq.reconciliationReason, 'HOLD_EXPIRED');
+      assert.equal(compResSeq.reservationId, null);
+
       const { rows: resCount } = await fixture.owner.query(
         'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-        [f.holdId]
+        [fSeq.holdId]
       );
       assert.equal(resCount[0].count, 1, 'Exactly one reservation must exist');
 
-      // Verify no bridge row created for losing composition
-      const bridge = await getPaymentReservation(compositionWorker, f.attemptId);
+      const bridge = await getPaymentReservation(compositionWorker, fSeq.attemptId);
       assert.equal(bridge, null, 'Losing composition must not record bridge');
     }
 
     // =========================================================================
-    // 4. RACE CASE B: COMPOSITION WINS (SAME H/C SERIALIZATION)
+    // 4. RACE CASE B: COMPOSITION WINS (SAME H / SAME C SERIALIZATION)
     // =========================================================================
-    // Composition begins first for H1, C1.
-    // Concurrent direct finalizer targets SAME H1, C1.
-    // Under Migration 060, composition locks Command then Hold (via finalizer),
-    // eliminating the pre-lock on Hold. Direct finalizer also locks Command then Hold.
-    // Both contenders share the exact same lock order:
-    // canonical_reservation_commands -> booking_holds -> inventory_days.
+    // Composition begins first for H, C; paused on gate after inserting command.
+    // Concurrent direct finalizer targets SAME H, C; observed waiting on command lock.
+    // Gate unlocks -> composition commits reservation and bridge.
+    // Direct finalizer unblocks, returns exact replay: replayed = true, matching reservation_id.
     // Verify:
-    // - ZERO 40P01 deadlock
-    // - Composition commits exactly one reservation and bridge row
-    // - Direct finalizer cleanly replays with replayed = true and matching reservation ID
-    // - Held units decremented, booked units incremented exactly once.
+    // - ZERO 40P01, ZERO 55P03
+    // - Exactly one reservation, exactly one bridge
+    // - Exact inventory movement (held -1, booked +1).
     // =========================================================================
     {
-      const f = await setupPaymentAttemptFixture(20, 2);
-      const sharedCommand = randomUUID();
+      const compFirst = await runRace('POST_060_COMPOSITION_FIRST_SAME_H_SAME_C', 15, 'composition');
+      assert.equal(compFirst.d.clientError, null, 'Direct finalizer client error must be null');
+      assert.equal(compFirst.c.clientError, null, 'Composition client error must be null');
+      assert.equal(compFirst.c.result.composition_state, 'COMMITTED');
+      assert.equal(compFirst.c.result.replayed, false);
+      assert.ok(compFirst.c.result.reservation_id);
+      assert.equal(compFirst.d.result.replayed, true, 'Direct finalizer must return replayed = true');
+      assert.equal(
+        compFirst.d.result.reservation_id,
+        compFirst.c.result.reservation_id,
+        'Direct finalizer must return identical reservation ID'
+      );
+      assertInventoryMovedOnce(compFirst.before, compFirst.after, 1);
+      assert.equal(compFirst.after.bridges.length, 1);
+      assert.equal(compFirst.after.bridges[0].status, 'COMMITTED');
 
-      const connComp = await compositionWorker.connect();
-      const connDir = await reservationWorker.connect();
+      // Exact replay of the composed result produces zero additional movement
+      const replayCommand = compFirst.after.bridges[0].command_id;
+      const replayAttemptId = compFirst.after.bridges[0].payment_attempt_id;
+      const replay = await composePaymentReservation(compositionWorker, {
+        commandId: replayCommand,
+        paymentAttemptId: replayAttemptId,
+      });
+      assert.equal(replay.compositionState, 'COMMITTED');
+      assert.equal(replay.reservationId, compFirst.c.result.reservation_id);
+      assert.equal(replay.replayed, true);
 
-      try {
-        await connComp.query('BEGIN');
-        await connComp.query("SET lock_timeout = '3000ms'");
-
-        await connDir.query('BEGIN');
-        await connDir.query("SET lock_timeout = '3000ms'");
-        await connDir.query("SELECT set_config('app.stays_principal', $1, true)", ['user:10']);
-
-        // Conn Comp calls composition inside transaction
-        // Under 060, composition calls finalizer which locks canonical_reservation_commands(sharedCommand) FOR UPDATE
-        const compPromise = connComp.query(
-          `SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)`,
-          [sharedCommand, f.attemptId]
-        );
-
-        // Conn Dir attempts canonical_finalize_direct_hold on the same command -> blocks on canonical_reservation_commands!
-        // Brief pause to ensure Conn Comp has acquired the command lock
-        await new Promise(r => setTimeout(r, 100));
-
-        let dirCompletedEarly = false;
-        const dirPromise = connDir.query(
-          `SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)`,
-          [f.holdId, f.quote.id, sharedCommand]
-        ).then(res => {
-          dirCompletedEarly = true;
-          return res;
-        });
-
-        // Verify Conn Dir is cleanly waiting without throwing 40P01
-        await new Promise(r => setTimeout(r, 100));
-        assert.equal(dirCompletedEarly, false, 'Direct finalizer must wait cleanly on command lock held by composition');
-
-        // Conn Comp commits
-        await connComp.query('COMMIT');
-        const compRes = (await compPromise).rows[0];
-
-        assert.equal(compRes.composition_state, 'COMMITTED');
-        assert.ok(compRes.reservation_id);
-        assert.equal(compRes.replayed, false);
-
-        // Conn Dir unblocks and returns exact replay
-        const dirRes = (await dirPromise).rows[0];
-        assert.equal(dirRes.reservation_id, compRes.reservation_id, 'Direct finalizer must return identical reservation ID');
-        assert.equal(dirRes.replayed, true, 'Direct finalizer must return replayed = true');
-        await connDir.query('COMMIT');
-
-        // Exactly one reservation row
-        const { rows: resRows } = await fixture.owner.query(
-          'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-          [f.holdId]
-        );
-        assert.equal(resRows[0].count, 1);
-
-        // Exactly one bridge row
-        const bridge = await getPaymentReservation(compositionWorker, f.attemptId);
-        assert.ok(bridge);
-        assert.equal(bridge.reservationId, compRes.reservation_id);
-        assert.equal(bridge.status, 'COMMITTED');
-      } finally {
-        connComp.release();
-        connDir.release();
-      }
+      const afterReplay = await captureScopedSnapshot(fixture.owner, {
+        holdId: compFirst.after.hold[0].id,
+        commandId: replayCommand,
+        attemptId: replayAttemptId,
+      });
+      assert.deepEqual(afterReplay, compFirst.after, 'Exact replay must produce zero additional effects');
     }
 
     // =========================================================================
-    // 5. RACE CASE C: HOLD EXPIRY WHILE WAITING
+    // 5. RACE CASE C: HOLD EXPIRY WHILE WAITING ON LOCK
     // =========================================================================
-    // Simulates a hold that expires while finalization is waiting behind a lock.
+    // Hold is fresh and unexpired when test starts (verified clock_timestamp() < expires_at).
+    // Independent connection holds booking_holds(id) FOR UPDATE.
+    // Composition starts; observed blocked on booking_holds lock.
+    // While blocked, query database time until clock_timestamp() > expires_at.
+    // Release lock -> finalizer post-lock clock_timestamp() check rejects with RESERVATION_HOLD_EXPIRED.
+    // Composition reconciles HOLD_EXPIRED.
     // Verify:
-    // - Finalizer post-lock clock_timestamp() re-check rejects with RESERVATION_HOLD_EXPIRED
-    // - Composition catches RESERVATION_HOLD_EXPIRED and transitions attempt to
-    //   RECONCILIATION_REQUIRED / HOLD_EXPIRED
-    // - Zero reservation created, zero inventory movement.
+    // - Zero reservation, zero inventory change, capture evidence preserved.
     // =========================================================================
     {
-      const f = await setupPaymentAttemptFixture(25, 2);
-      const commandId = randomUUID();
+      const fExpiry = await setupPaymentAttemptFixture(20, 2);
+      const expiryCommand = randomUUID();
 
-      // Artificially age the hold so it is past expires_at
       await fixture.owner.query(
-        `UPDATE booking_holds SET expires_at = clock_timestamp() - INTERVAL '5 seconds' WHERE id = $1`,
-        [f.holdId]
+        "UPDATE booking_holds SET expires_at = clock_timestamp() + interval '2 seconds' WHERE id = $1",
+        [fExpiry.holdId]
       );
 
-      const res = await composePaymentReservation(compositionWorker, {
-        commandId,
-        paymentAttemptId: f.attemptId,
+      const beforeExpiry = await captureScopedSnapshot(fixture.owner, {
+        holdId: fExpiry.holdId,
+        commandId: expiryCommand,
+        attemptId: fExpiry.attemptId,
       });
 
-      assert.equal(res.compositionState, 'RECONCILIATION_REQUIRED');
-      assert.equal(res.reconciliationReason, 'HOLD_EXPIRED');
-      assert.equal(res.reservationId, null);
+      const blockConn = await fixture.owner.connect();
+      const compExpiryConn = await compositionWorker.connect();
+      let compExpiryPromise;
 
-      const dbAttempt = await getPaymentAttempt(paymentWorker, f.attemptId);
-      assert.equal(dbAttempt?.paymentState, 'RECONCILIATION_REQUIRED');
-      assert.equal(dbAttempt?.reconciliationReason, 'HOLD_EXPIRED');
+      try {
+        await blockConn.query('BEGIN');
+        await blockConn.query('SELECT id FROM booking_holds WHERE id = $1 FOR UPDATE', [fExpiry.holdId]);
+        const blockPid = (await blockConn.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        const compPid = (await compExpiryConn.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
 
-      const reconciliations = await getPaymentReconciliations(paymentWorker, f.attemptId);
-      assert.ok(reconciliations.some(r => r.reason === 'HOLD_EXPIRED'));
+        const startFresh = (await fixture.owner.query(
+          'SELECT clock_timestamp() < expires_at AS fresh FROM booking_holds WHERE id = $1',
+          [fExpiry.holdId]
+        )).rows[0];
+        assert.equal(startFresh.fresh, true, 'Hold must be unexpired when test starts');
 
-      const { rows: resCount } = await fixture.owner.query(
-        'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-        [f.holdId]
-      );
-      assert.equal(resCount[0].count, 0, 'Zero reservation must be created on expired hold');
+        await compExpiryConn.query("SET LOCAL lock_timeout = '8s'; SET LOCAL statement_timeout = '12s'");
+        compExpiryPromise = compExpiryConn
+          .query('SELECT * FROM canonical_compose_payment_reservation($1, $2)', [
+            expiryCommand,
+            fExpiry.attemptId,
+          ])
+          .then((r) => ({ clientError: null, result: r.rows[0] }))
+          .catch((e) => ({ clientError: { code: e.code, message: e.message }, result: null }));
+
+        const expiryWait = await waitForLockWait(
+          fixture.owner,
+          compPid,
+          blockPid,
+          'Expiry waiting on hold'
+        );
+        assert.ok(expiryWait, 'Composition must be observed waiting on booking_holds lock');
+
+        const dbExpired = await waitFor(async () => {
+          const r = (await fixture.owner.query(
+            'SELECT clock_timestamp() AS observed_at, expires_at, clock_timestamp() > expires_at AS expired FROM booking_holds WHERE id = $1',
+            [fExpiry.holdId]
+          )).rows[0];
+          return r.expired ? r : false;
+        }, 'DB time after expiry', 5000);
+        assert.ok(dbExpired, 'DB clock must cross expires_at while composition is waiting');
+
+        await blockConn.query('COMMIT');
+        const compExpiryRes = await compExpiryPromise;
+
+        const afterExpiry = await captureScopedSnapshot(fixture.owner, {
+          holdId: fExpiry.holdId,
+          commandId: expiryCommand,
+          attemptId: fExpiry.attemptId,
+        });
+        assertNoNewAllocation(beforeExpiry, afterExpiry);
+
+        assert.equal(compExpiryRes.result.composition_state, 'RECONCILIATION_REQUIRED');
+        assert.equal(compExpiryRes.result.reconciliation_reason, 'HOLD_EXPIRED');
+        assert.equal(compExpiryRes.result.replayed, false);
+        assert.equal(afterExpiry.reconciliations[0].reason, 'HOLD_EXPIRED');
+        assert.equal(afterExpiry.reconciliations[0].details?.error_message, 'RESERVATION_HOLD_EXPIRED');
+        assert.equal(afterExpiry.reconciliations[0].details?.error_code, 'P0001');
+        assert.equal(afterExpiry.attempt[0].payment_state, 'RECONCILIATION_REQUIRED');
+        assert.equal(afterExpiry.attempt[0].reconciliation_reason, 'HOLD_EXPIRED');
+        assert.ok(afterExpiry.attempt[0].matched_at, 'matched_at must be preserved');
+      } finally {
+        await blockConn.query('ROLLBACK').catch(() => {});
+        if (compExpiryPromise) await compExpiryPromise;
+        blockConn.release();
+        compExpiryConn.release();
+      }
     }
 
     // =========================================================================
     // 6. RACE CASE D: RELEASED / NON-ACTIVE HOLD
     // =========================================================================
-    // Hold was released before composition.
+    // Hold was set to RELEASED by test fixture preparation.
     // Finalizer rejects with RESERVATION_HOLD_NOT_ACTIVE.
     // Composition maps RESERVATION_HOLD_NOT_ACTIVE to HOLD_EXPIRED (pre-060 contract).
     // Verify:
     // - RECONCILIATION_REQUIRED / HOLD_EXPIRED
-    // - No reservation, no bridge.
+    // - No reservation, no bridge, no inventory resurrection.
     // =========================================================================
     {
-      const f = await setupPaymentAttemptFixture(30, 2);
-      const commandId = randomUUID();
+      const fReleased = await setupPaymentAttemptFixture(25, 2);
+      const releasedCommand = randomUUID();
 
+      // Owner sets RELEASED before baseline snapshot; fixture preparation only
       await fixture.owner.query(
-        `UPDATE booking_holds SET status = 'RELEASED', released_at = clock_timestamp() WHERE id = $1`,
-        [f.holdId]
+        "UPDATE booking_holds SET status = 'RELEASED', released_at = clock_timestamp(), release_reason = 'TEST_FIXTURE_PREPARATION' WHERE id = $1",
+        [fReleased.holdId]
       );
 
-      const res = await composePaymentReservation(compositionWorker, {
-        commandId,
-        paymentAttemptId: f.attemptId,
+      const beforeReleased = await captureScopedSnapshot(fixture.owner, {
+        holdId: fReleased.holdId,
+        commandId: releasedCommand,
+        attemptId: fReleased.attemptId,
       });
 
-      assert.equal(res.compositionState, 'RECONCILIATION_REQUIRED');
-      assert.equal(res.reconciliationReason, 'HOLD_EXPIRED');
-      assert.equal(res.reservationId, null);
+      const resReleased = await composePaymentReservation(compositionWorker, {
+        commandId: releasedCommand,
+        paymentAttemptId: fReleased.attemptId,
+      });
 
-      const dbAttempt = await getPaymentAttempt(paymentWorker, f.attemptId);
-      assert.equal(dbAttempt?.paymentState, 'RECONCILIATION_REQUIRED');
-      assert.equal(dbAttempt?.reconciliationReason, 'HOLD_EXPIRED');
+      const afterReleased = await captureScopedSnapshot(fixture.owner, {
+        holdId: fReleased.holdId,
+        commandId: releasedCommand,
+        attemptId: fReleased.attemptId,
+      });
+      assertNoNewAllocation(beforeReleased, afterReleased);
+
+      assert.equal(resReleased.compositionState, 'RECONCILIATION_REQUIRED');
+      assert.equal(resReleased.reconciliationReason, 'HOLD_EXPIRED');
+      assert.equal(resReleased.reservationId, null);
+      assert.equal(afterReleased.reconciliations[0].reason, 'HOLD_EXPIRED');
+      assert.equal(
+        afterReleased.reconciliations[0].details?.error_message,
+        'RESERVATION_HOLD_NOT_ACTIVE'
+      );
+      assert.equal(afterReleased.reconciliations[0].details?.error_code, 'P0001');
 
       const { rows: resCount } = await fixture.owner.query(
         'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-        [f.holdId]
+        [fReleased.holdId]
       );
       assert.equal(resCount[0].count, 0);
     }
@@ -480,44 +687,34 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     // =========================================================================
     // 7. REPLAY CASES
     // =========================================================================
-    // 7a. Exact composition replay returns stored record with replayed = true
-    // 7b. Changed command for composed attempt throws PAYMENT_ALREADY_COMPOSED
-    // 7c. Changed attempt for composed command throws COMPOSITION_COMMAND_CONFLICT
-    // 7d. Outside-composition finalizer replay rejected:
-    //     If direct finalizer ran for command C1 outside composition, composition
+    // 7a. Changed command for composed attempt throws PAYMENT_ALREADY_COMPOSED
+    // 7b. Changed attempt for composed command throws COMPOSITION_COMMAND_CONFLICT
+    // 7c. Outside-composition finalizer replay rejected:
+    //     If direct finalizer ran for command C outside composition, composition
     //     cannot adopt it -> RECONCILIATION_REQUIRED / FINALIZER_FAILURE
     //     with reason FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT.
     // =========================================================================
     {
-      const f = await setupPaymentAttemptFixture(35, 2);
+      const fReplay = await setupPaymentAttemptFixture(35, 2);
       const commandId = randomUUID();
 
       const initial = await composePaymentReservation(compositionWorker, {
         commandId,
-        paymentAttemptId: f.attemptId,
+        paymentAttemptId: fReplay.attemptId,
       });
       assert.equal(initial.compositionState, 'COMMITTED');
       assert.equal(initial.replayed, false);
 
-      // 7a. Exact replay
-      const replay = await composePaymentReservation(compositionWorker, {
-        commandId,
-        paymentAttemptId: f.attemptId,
-      });
-      assert.equal(replay.compositionState, 'COMMITTED');
-      assert.equal(replay.reservationId, initial.reservationId);
-      assert.equal(replay.replayed, true);
-
-      // 7b. Different command, same payment attempt
+      // 7a. Different command, same payment attempt
       await assert.rejects(
         composePaymentReservation(compositionWorker, {
           commandId: randomUUID(),
-          paymentAttemptId: f.attemptId,
+          paymentAttemptId: fReplay.attemptId,
         }),
         /PAYMENT_ALREADY_COMPOSED/
       );
 
-      // 7c. Same command, different payment attempt
+      // 7b. Same command, different payment attempt
       const fOther = await setupPaymentAttemptFixture(40, 2);
       await assert.rejects(
         composePaymentReservation(compositionWorker, {
@@ -527,8 +724,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         /COMPOSITION_COMMAND_CONFLICT/
       );
 
-      // 7d. Outside-composition finalizer replay
-      // Create a fresh hold & attempt, then execute direct finalizer directly with command C_out
+      // 7c. Outside-composition finalizer replay
       const fOut = await setupPaymentAttemptFixture(45, 2);
       const commandOut = randomUUID();
 
@@ -546,8 +742,6 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         dirClient.release();
       }
 
-      // Now attempt composition with commandOut and fOut.attemptId
-      // Finalizer returns replayed = true, but no composition receipt exists for commandOut
       const unadoptedRes = await composePaymentReservation(compositionWorker, {
         commandId: commandOut,
         paymentAttemptId: fOut.attemptId,
@@ -557,7 +751,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       assert.equal(unadoptedRes.reconciliationReason, 'FINALIZER_FAILURE');
 
       const recs = await getPaymentReconciliations(paymentWorker, fOut.attemptId);
-      const replayRec = recs.find(r => r.reason === 'FINALIZER_FAILURE');
+      const replayRec = recs.find((r) => r.reason === 'FINALIZER_FAILURE');
       assert.ok(replayRec);
       assert.equal(
         replayRec.details?.reason,
@@ -569,69 +763,73 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     // =========================================================================
     // 8. OUTER TRANSACTION FAILURE (ROLLBACK PRESERVATION)
     // =========================================================================
-    // Test owner injects a failure on canonical_payment_reservations insert.
-    // Composition fails, rolling back the entire outer transaction including
-    // the finalizer's reservation creation and inventory mutation.
+    // Test owner injects failure on canonical_payment_reservations insert with P7777.
+    // Composition fails, rolling back entire outer transaction including finalizer effects.
+    // Verify:
+    // - Error cause is exact P7777 / REVIEW_BRIDGE_FAILURE_AFTER_FINALIZER
+    // - Scoped snapshot before vs after is completely identical.
     // =========================================================================
     {
-      const f = await setupPaymentAttemptFixture(50, 2);
-      const commandId = randomUUID();
+      const fBridgeFail = await setupPaymentAttemptFixture(50, 2);
+      const bridgeFailCommand = randomUUID();
+      const beforeBridgeFail = await captureScopedSnapshot(fixture.owner, {
+        holdId: fBridgeFail.holdId,
+        commandId: bridgeFailCommand,
+        attemptId: fBridgeFail.attemptId,
+      });
 
-      // Install temporary trigger on bridge table to simulate post-finalizer failure
       await fixture.owner.query(`
-        CREATE OR REPLACE FUNCTION fixture_fail_bridge() RETURNS trigger LANGUAGE plpgsql AS $$
+        CREATE OR REPLACE FUNCTION review_fail_bridge() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
-          RAISE EXCEPTION 'FIXTURE_BRIDGE_FAILURE';
+          IF NOT EXISTS (SELECT 1 FROM canonical_reservations WHERE id = NEW.reservation_id) THEN
+            RAISE EXCEPTION 'REVIEW_BRIDGE_REACHED_WITHOUT_RESERVATION';
+          END IF;
+          RAISE EXCEPTION 'REVIEW_BRIDGE_FAILURE_AFTER_FINALIZER' USING ERRCODE = 'P7777';
         END $$;
-        CREATE TRIGGER trg_fixture_fail_bridge BEFORE INSERT ON canonical_payment_reservations
-          FOR EACH ROW EXECUTE FUNCTION fixture_fail_bridge();
+
+        DROP TRIGGER IF EXISTS review_bridge_failure ON canonical_payment_reservations;
+        CREATE TRIGGER review_bridge_failure
+          BEFORE INSERT ON canonical_payment_reservations
+          FOR EACH ROW EXECUTE FUNCTION review_fail_bridge();
       `);
 
+      let caughtBridgeFail;
       try {
-        await assert.rejects(
-          composePaymentReservation(compositionWorker, {
-            commandId,
-            paymentAttemptId: f.attemptId,
-          }),
-          /FIXTURE_BRIDGE_FAILURE|COMPOSITION_AUTHORITY_UNAVAILABLE/
-        );
-
-        // Entire outer transaction must have rolled back:
-        // 1. Zero canonical reservations created
-        const { rows: resCount } = await fixture.owner.query(
-          'SELECT count(*)::int AS count FROM canonical_reservations WHERE hold_id = $1',
-          [f.holdId]
-        );
-        assert.equal(resCount[0].count, 0, 'Outer transaction rollback must roll back reservation');
-
-        // 2. Hold status remains ACTIVE
-        const { rows: holdRows } = await fixture.owner.query(
-          'SELECT status FROM booking_holds WHERE id = $1',
-          [f.holdId]
-        );
-        assert.equal(holdRows[0].status, 'ACTIVE', 'Hold status must remain ACTIVE after rollback');
-
-        // 3. Zero bridge records
-        const { rows: bridgeCount } = await fixture.owner.query(
-          'SELECT count(*)::int AS count FROM canonical_payment_reservations WHERE payment_attempt_id = $1',
-          [f.attemptId]
-        );
-        assert.equal(bridgeCount[0].count, 0);
+        await composePaymentReservation(compositionWorker, {
+          commandId: bridgeFailCommand,
+          paymentAttemptId: fBridgeFail.attemptId,
+        });
+      } catch (err) {
+        caughtBridgeFail = err;
       } finally {
-        await fixture.owner.query('DROP TRIGGER IF EXISTS trg_fixture_fail_bridge ON canonical_payment_reservations');
-        await fixture.owner.query('DROP FUNCTION IF EXISTS fixture_fail_bridge');
+        await fixture.owner.query(`
+          DROP TRIGGER IF EXISTS review_bridge_failure ON canonical_payment_reservations;
+          DROP FUNCTION IF EXISTS review_fail_bridge();
+        `);
       }
+
+      assert.ok(caughtBridgeFail, 'Bridge failure must be thrown');
+      assert.equal(caughtBridgeFail.cause?.code, 'P7777', 'Error code must match injected P7777');
+      assert.equal(
+        caughtBridgeFail.cause?.message,
+        'REVIEW_BRIDGE_FAILURE_AFTER_FINALIZER',
+        'Error message must match injected REVIEW_BRIDGE_FAILURE_AFTER_FINALIZER'
+      );
+
+      const afterBridgeFail = await captureScopedSnapshot(fixture.owner, {
+        holdId: fBridgeFail.holdId,
+        commandId: bridgeFailCommand,
+        attemptId: fBridgeFail.attemptId,
+      });
+      assert.deepEqual(
+        afterBridgeFail,
+        beforeBridgeFail,
+        'Entire outer transaction effects must be rolled back'
+      );
     }
 
     // =========================================================================
     // 9. ROLE ISOLATION POST-060
-    // =========================================================================
-    // encho_composition_worker:
-    // - EXECUTE canonical_compose_payment_reservation: YES
-    // - direct EXECUTE canonical_finalize_direct_hold: NO
-    // - raw DML on canonical_reservations, canonical_payment_attempts: NO
-    // encho_reservation_worker:
-    // - direct EXECUTE canonical_finalize_direct_hold: YES
     // =========================================================================
     {
       const { rows: compRoleRows } = await compositionWorker.query(`
@@ -657,6 +855,9 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     }
 
   } finally {
+    if (fixture?.owner) {
+      await teardownCommandGate(fixture.owner).catch(() => {});
+    }
     if (stays) await stays.end();
     if (reservationWorker) await reservationWorker.end();
     if (compositionWorker) await compositionWorker.end();

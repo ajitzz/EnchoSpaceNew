@@ -528,8 +528,8 @@
     {
       "probeId": "PROBE-8",
       "name": "Pre-Repair Direct Finalizer vs Payment Composition Lock Inversion (Same Hold + Same Command)",
-      "description": "Concurrent race between direct finalizer (Command -> Hold) and pre-repair composition (Hold -> Command) on the same hold H1 and same command C1 with real W1/W2/W3-B fixtures and MATCHED_CAPTURE payment attempt",
-      "observedBehavior": "Tx 1 locks canonical_reservation_commands(C1) FOR UPDATE; Tx 2 enters canonical_compose_payment_reservation, locks booking_holds(H1) FOR UPDATE and blocks in finalizer waiting for C1; Tx 1 attempts to lock booking_holds(H1) FOR UPDATE and blocks on Tx 2; PostgreSQL deadlock detector raises 40P01 at 100ms; composition catches 40P01 and records RECONCILIATION_REQUIRED / FINALIZER_FAILURE with details.error_code = '40P01' (or Tx 1 receives 40P01 directly)",
+      "description": "Concurrent race between actual restricted direct finalizer (canonical_finalize_direct_hold on encho_reservation_worker) and pre-repair composition (canonical_compose_payment_reservation on encho_composition_worker) on the same hold H1 and same command C1 with real W1/W2/W3-B fixtures and MATCHED_CAPTURE payment attempt; synchronization via command gate trigger and pg_stat_activity / pg_blocking_pids wait observation",
+      "observedBehavior": "Tx 1 (direct finalizer) inserts canonical_reservation_commands(C1) and pauses at command gate; Tx 2 (pre-repair composition) acquires booking_holds(H1) FOR UPDATE and blocks waiting on C1 held by Tx 1 (observed via pg_stat_activity Lock wait on Tx 1); gate unlocks, Tx 1 attempts to lock booking_holds(H1) FOR UPDATE and blocks on Tx 2; PostgreSQL deadlock detector raises 40P01 at 200ms; composition catches 40P01 and records RECONCILIATION_REQUIRED / FINALIZER_FAILURE with details.error_code = '40P01' (or Tx 1 receives 40P01 directly); 55P03 lock timeout strictly disproven",
       "classification": "PRE_REPAIR_40P01_DEADLOCK_CONFIRMED",
       "evidenceType": "TWO_CONNECTION_PROBE"
     }
@@ -570,12 +570,12 @@
     "productionDatabase": "NOT EVALUATED"
   },
   "regressionSummary": {
-    "w4c4Diagnostic": "PASS (1/1)",
-    "w2InventoryHolds": "PASS (21/21 in src/test/m4_inventory_holds.test.ts)",
-    "w1AcceptedOffers": "PASS (10/10 in src/test/harvo/w1_accepted_offers_pg.test.ts)",
+    "w4c4Diagnostic": "PASS (1/1 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs)",
     "w3CanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts)",
-    "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts)",
-    "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs)"
+    "w2InventoryHolds": "PASS (21/21 in src/test/m4_inventory_holds.test.ts) [carried-forward]",
+    "w1AcceptedOffers": "PASS (10/10 in src/test/harvo/w1_accepted_offers_pg.test.ts) [carried-forward]",
+    "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts) [carried-forward]",
+    "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs) [carried-forward]"
   },
   "staticChecks": {
     "eslint": "PASS (npx eslint scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs)",

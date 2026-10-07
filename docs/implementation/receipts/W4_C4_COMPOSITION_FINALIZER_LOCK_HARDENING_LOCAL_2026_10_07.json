@@ -3,7 +3,7 @@
   "canonicalBase": "e2479b1c7601e21a6198b7784fa93ac3a4e27dad",
   "originalWorkerCommit": "f768af6b8f3db63c77f8c66aedada82340f67543",
   "correctedDiagnosticCommit": "2ff6c39da4c4a1ae44bcd384df32cb208d5a36c2",
-  "hardeningCommit": "SELF (worker/antigravity/w4-c4-lock-order-diagnostic HEAD)",
+  "hardeningCommit": "08949428a67f6403d7e76e0710d3f8683f70a44d",
   "workerBranch": "worker/antigravity/w4-c4-lock-order-diagnostic",
   "status": "LOCAL_VERIFICATION_COMPLETE",
   "migration060": {
@@ -19,59 +19,131 @@
     "preFixCompositionOrder": "canonical_payment_attempts -> booking_holds -> canonical_reservation_commands -> inventory_days",
     "preFixPostgresError": "40P01",
     "preFixReconciliation": "RECONCILIATION_REQUIRED / FINALIZER_FAILURE with details.error_code = '40P01'",
-    "proofReference": "Probe 8 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs (Commit A: 2ff6c39)"
+    "proofReference": "Probe 8 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs"
   },
   "postFixVerification": {
     "raceCaseA_directWins": {
-      "scenario": "Direct finalizer completes first on hold H1 with command C1; concurrent/subsequent composition arrives on same hold",
-      "postgresSqlState": "00000 (NO 40P01)",
-      "compositionState": "RECONCILIATION_REQUIRED",
-      "reconciliationReason": "HOLD_EXPIRED",
+      "scenario": "Direct finalizer completes first on hold H1 with command C1; concurrent composition on SAME H1 and SAME C1 observes command contention, serializes behind direct finalizer, and observes consumed hold",
+      "synchronization": "Command-scoped AFTER INSERT gate trigger on canonical_reservation_commands; pg_stat_activity wait observation on pg_blocking_pids",
+      "directFinalizerClientError": null,
+      "directFinalizerResult": {
+        "replayed": false,
+        "reservationCreated": true
+      },
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "FINALIZER_FAILURE",
+        "reservationId": null,
+        "replayed": false
+      },
+      "storedReconciliation": {
+        "reason": "FINALIZER_FAILURE",
+        "details": {
+          "reason": "FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT"
+        }
+      },
       "reservationCount": 1,
       "bridgeCount": 0,
-      "inventoryMovement": "EXACTLY_ONCE",
+      "inventoryMovement": "EXACTLY_ONCE (held -1, booked +1, blocked/total unchanged)",
+      "deadlock40P01Observed": false,
+      "lockTimeout55P03Observed": false,
+      "status": "PASS"
+    },
+    "raceCaseA2_sequentialConsumedHold": {
+      "scenario": "Direct finalizer commits first with command C1; composition subsequently arrives on same hold with DIFFERENT command C2",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "HOLD_EXPIRED",
+        "reservationId": null
+      },
+      "reservationCount": 1,
+      "bridgeCount": 0,
       "status": "PASS"
     },
     "raceCaseB_compositionWins": {
-      "scenario": "Composition arrives first for hold H1 and command C1; concurrent direct finalizer targets same hold and command",
-      "postgresSqlState": "00000 (NO 40P01)",
-      "compositionState": "COMMITTED",
-      "finalizerResult": "REPLAYED (replayed = true, matching reservation_id)",
+      "scenario": "Composition arrives first for hold H1 and command C1; concurrent direct finalizer targets SAME H1 and SAME C1",
+      "synchronization": "Command-scoped AFTER INSERT gate trigger on canonical_reservation_commands; direct finalizer observed waiting on command lock held by composition via pg_stat_activity and pg_blocking_pids",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "COMMITTED",
+        "replayed": false,
+        "reservationCreated": true
+      },
+      "directFinalizerClientError": null,
+      "directFinalizerResult": {
+        "replayed": true,
+        "reservationMatching": true
+      },
+      "exactReplaySnapshot": "DEEP_EQUAL (zero additional effects on exact composition replay)",
       "reservationCount": 1,
       "bridgeCount": 1,
-      "inventoryMovement": "EXACTLY_ONCE",
+      "inventoryMovement": "EXACTLY_ONCE (held -1, booked +1, blocked/total unchanged)",
+      "deadlock40P01Observed": false,
+      "lockTimeout55P03Observed": false,
       "status": "PASS"
     },
     "raceCaseC_expiryWhileWaiting": {
-      "scenario": "Hold expires while finalizer is waiting behind hold lock",
-      "wallClockEvaluation": "clock_timestamp() post-lock re-check in finalizer",
-      "finalizerException": "RESERVATION_HOLD_EXPIRED",
-      "compositionState": "RECONCILIATION_REQUIRED",
-      "reconciliationReason": "HOLD_EXPIRED",
-      "reservationCount": 0,
-      "inventoryIncrement": 0,
+      "scenario": "Hold is verified unexpired at start (clock_timestamp() < expires_at); independent owner connection holds booking_holds(id) FOR UPDATE; composition starts and is observed waiting on booking_holds lock; database time advances past expires_at while waiting; owner lock is released",
+      "initialFreshness": "VERIFIED (clock_timestamp() < expires_at)",
+      "lockContentionObserved": "VERIFIED (composition blocked on owner backend via pg_blocking_pids)",
+      "clockCrossingObserved": "VERIFIED (clock_timestamp() > expires_at while blocked)",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "HOLD_EXPIRED",
+        "replayed": false
+      },
+      "storedReconciliation": {
+        "reason": "HOLD_EXPIRED",
+        "details": {
+          "error_code": "P0001",
+          "error_message": "RESERVATION_HOLD_EXPIRED"
+        }
+      },
+      "survivingAllocations": {
+        "reservations": 0,
+        "nights": 0,
+        "commandFences": 0,
+        "bridges": 0,
+        "inventoryCountersDelta": 0
+      },
+      "captureEvidencePreserved": true,
       "status": "PASS"
     },
     "raceCaseD_nonActiveHold": {
-      "scenario": "Hold is RELEASED prior to composition",
-      "finalizerException": "RESERVATION_HOLD_NOT_ACTIVE",
-      "mappedReconciliationReason": "HOLD_EXPIRED (preserves pre-060 reconciliation contract)",
-      "compositionState": "RECONCILIATION_REQUIRED",
+      "scenario": "Hold status is updated to RELEASED prior to composition (test fixture preparation by owner; no claim that release workflow ran)",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "HOLD_EXPIRED",
+        "reservationId": null
+      },
+      "storedReconciliation": {
+        "reason": "HOLD_EXPIRED",
+        "details": {
+          "error_code": "P0001",
+          "error_message": "RESERVATION_HOLD_NOT_ACTIVE"
+        }
+      },
       "reservationCount": 0,
       "bridgeCount": 0,
-      "inventoryResurrection": 0,
+      "inventoryMovement": 0,
       "status": "PASS"
     },
     "replayCases": {
-      "exactCompositionReplay": "PASS (returns stored canonical_payment_reservations record with replayed = true, no second finalizer mutation)",
+      "exactCompositionReplay": "PASS (returns stored canonical_payment_reservations record with replayed = true, zero additional effects verified by scoped snapshot deep-equality)",
       "directFinalizerCommandReplay": "PASS (unchanged, returns stored reservation_id with replayed = true)",
       "changedCommandForComposedAttempt": "PASS (throws PAYMENT_ALREADY_COMPOSED)",
       "changedAttemptForComposedCommand": "PASS (throws COMPOSITION_COMMAND_CONFLICT)",
       "outsideCompositionFinalizerReplay": "PASS (rejected into RECONCILIATION_REQUIRED / FINALIZER_FAILURE with reason FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT; zero adoption into COMMITTED bridge)"
     },
     "outerTransactionRollback": {
-      "injectedFailure": "Temporary trigger raises exception on canonical_payment_reservations insert",
-      "rollbackVerification": "Entire outer transaction rolls back: zero canonical_reservations, zero canonical_reservation_nights, hold status remains ACTIVE, zero inventory increments",
+      "injectionPoint": "Temporary BEFORE INSERT trigger on canonical_payment_reservations asserts prior reservation visibility and raises P7777",
+      "observedErrorCode": "P7777",
+      "observedErrorMessage": "REVIEW_BRIDGE_FAILURE_AFTER_FINALIZER",
+      "scopedSnapshotRestoration": "EXACT_EQUALITY (entire outer transaction rolled back: zero reservations, zero nights, hold remains ACTIVE, zero inventory increments)",
       "status": "PASS"
     },
     "roleIsolation": {
@@ -110,10 +182,12 @@
   },
   "regressionSummary": {
     "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs)",
+    "w4c4Diagnostic": "PASS (1/1 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs)",
+    "w3bPaymentComposition": "PASS (56/56 in src/test/harvo/w3b_canonical_composition_pg.test.ts: 28 BASELINE_054 + 28 POST_060)",
+    "w3bPaymentEvidence": "PASS (38/38 in src/test/harvo/w3b_canonical_payment_pg.test.ts)",
     "w3aCanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts)",
-    "w3bPaymentComposition": "PASS (28/28 in src/test/harvo/w3b_canonical_composition_pg.test.ts)",
-    "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts)",
-    "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs)"
+    "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts) [carried-forward]",
+    "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs) [carried-forward]"
   },
   "staticChecks": {
     "eslint": "PASS (npx eslint scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs)",

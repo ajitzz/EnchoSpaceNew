@@ -33,6 +33,11 @@ import { acquireHold } from '../../src/services/inventoryHoldService.js';
 import { createPaymentAttempt, ingestProviderEvent } from '../../src/services/canonicalPaymentService.js';
 import { addDays, createW1AcceptedOfferFixture } from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.js';
 import { applyIsolatedMigration } from '../../src/test/harvo/helpers/isolatedMigration.js';
+import {
+  setupCommandGate,
+  teardownCommandGate,
+  waitForLockWait,
+} from './helpers/w4c4-concurrency-evidence.mjs';
 
 test('W4-C4 cross-writer inventory lock-order diagnostic verification', async () => {
   // =========================================================================
@@ -846,55 +851,80 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
       });
 
       const targetCommand = randomUUID();
-      const conn1 = await fixture.owner.connect();
-      const conn2 = await fixture.owner.connect();
+      const gateKey = 88773301n;
+      await setupCommandGate(fixture.owner);
 
+      const gateConn = await fixture.owner.connect();
+      const dirConn = await reservationWorker.connect();
+      const compConn = await compositionWorker.connect();
+
+      const getPid = async (c) => (await c.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      const pids = {
+        gate: await getPid(gateConn),
+        direct: await getPid(dirConn),
+        composition: await getPid(compConn),
+      };
+
+      let directPromise;
+      let compPromise;
       try {
-        await conn1.query('BEGIN');
-        await conn1.query("SET deadlock_timeout = '100ms'");
-        await conn1.query("SET lock_timeout = '3000ms'");
-        await conn1.query("SELECT set_config('app.stays_principal', $1, true)", ['user:10']);
+        await gateConn.query('SELECT pg_advisory_lock($1)', [gateKey.toString()]);
+        await fixture.owner.query('INSERT INTO review_c4_gate (command_id, gate_key) VALUES ($1, $2)', [targetCommand, gateKey.toString()]);
 
-        await conn2.query("SET deadlock_timeout = '100ms'");
-        await conn2.query("SET lock_timeout = '3000ms'");
+        await dirConn.query('BEGIN');
+        await dirConn.query("SET LOCAL lock_timeout = '8s'; SET LOCAL statement_timeout = '12s'");
+        await dirConn.query("SELECT set_config('app.stays_principal', 'user:10', true)");
 
-        // Conn 1 (Direct finalizer) locks canonical_reservation_commands for targetCommand
-        const fingerprint = createHash('sha256').update(`user:10:${holdId}:${quote.id}`).digest('hex');
-        await conn1.query(
-          `INSERT INTO canonical_reservation_commands(command_id, holder_principal, hold_id, quote_id, request_fingerprint)
-           VALUES ($1, 'user:10', $2, $3, $4)`,
-          [targetCommand, holdId, quote.id, fingerprint]
+        await compConn.query('BEGIN');
+        await compConn.query("SET LOCAL lock_timeout = '8s'; SET LOCAL statement_timeout = '12s'");
+
+        const invokeClient = (c, sql, args) =>
+          c.query(sql, args)
+            .then(async (r) => {
+              await c.query('COMMIT');
+              return { clientError: null, result: r.rows[0] };
+            })
+            .catch(async (e) => {
+              await c.query('ROLLBACK');
+              return { clientError: { code: e.code, message: e.message }, result: null };
+            });
+
+        // 1. Direct finalizer starts with real restricted function
+        directPromise = invokeClient(
+          dirConn,
+          'SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)',
+          [holdId, quote.id, targetCommand]
         );
-        await conn1.query(`SELECT * FROM canonical_reservation_commands WHERE command_id = $1 FOR UPDATE`, [targetCommand]);
 
-        // Conn 2 invokes canonical_compose_payment_reservation
-        // Pre-repair composition locks booking_holds(holdId) FOR UPDATE, then calls
-        // canonical_finalize_direct_hold which blocks waiting on canonical_reservation_commands(targetCommand) held by Conn 1.
-        const p2 = conn2.query(
-          `SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)`,
+        // 2. Observe direct finalizer gated after its reservation-command insert
+        const gateWait = await waitForLockWait(
+          fixture.owner,
+          pids.direct,
+          pids.gate,
+          'Probe 8: direct finalizer gated after command insert'
+        );
+        assert.ok(gateWait, 'Direct finalizer must be observed waiting on command gate');
+
+        // 3. Composition starts with real restricted function on SAME H and SAME C
+        compPromise = invokeClient(
+          compConn,
+          'SELECT * FROM canonical_compose_payment_reservation($1, $2)',
           [targetCommand, attempt.attemptId]
-        ).catch(err => ({ error: err }));
+        );
 
-        // Wait 100ms for Conn 2 to lock booking_holds and block in finalizer
-        await new Promise(r => setTimeout(r, 100));
+        // 4. Observe composition blocked on direct finalizer (waiting for command fence)
+        const secondWait = await waitForLockWait(
+          fixture.owner,
+          pids.composition,
+          pids.direct,
+          'Probe 8: composition contention behind direct finalizer'
+        );
+        assert.ok(secondWait, 'Composition must be observed waiting on command lock held by direct finalizer');
 
-        // Conn 1 now attempts to lock booking_holds(holdId) FOR UPDATE -> blocks waiting on Conn 2!
-        const p1 = conn1.query(
-          `SELECT * FROM booking_holds WHERE id = $1 FOR UPDATE`,
-          [holdId]
-        ).catch(err => ({ error: err }));
+        // 5. Release advisory lock to trigger contention for booking_holds
+        await gateConn.query('SELECT pg_advisory_unlock($1)', [gateKey.toString()]);
 
-        const [r1, r2] = await Promise.all([p1, p2]);
-
-        // Inspect deadlock results
-        let observed40P01 = false;
-        let observed55P03 = false;
-
-        if (r1?.error?.code === '40P01') {
-          observed40P01 = true;
-        } else if (r1?.error?.code === '55P03') {
-          observed55P03 = true;
-        }
+        const [directRes, compRes] = await Promise.all([directPromise, compPromise]);
 
         const recs = await fixture.owner.query(
           `SELECT * FROM canonical_payment_reconciliations WHERE payment_attempt_id = $1`,
@@ -902,24 +932,34 @@ test('W4-C4 cross-writer inventory lock-order diagnostic verification', async ()
         );
 
         const rec40P01 = recs.rows.find(
-          r => r.reason === 'FINALIZER_FAILURE' && r.details?.error_code === '40P01'
+          (r) => r.reason === 'FINALIZER_FAILURE' && r.details?.error_code === '40P01'
         );
-        if (rec40P01) {
-          observed40P01 = true;
-        }
 
-        if (r2?.error?.code === '55P03') {
-          observed55P03 = true;
-        }
+        const observed40P01 =
+          directRes.clientError?.code === '40P01' ||
+          compRes.clientError?.code === '40P01' ||
+          Boolean(rec40P01);
+
+        const observed55P03 =
+          directRes.clientError?.code === '55P03' ||
+          compRes.clientError?.code === '55P03' ||
+          recs.rows.some((r) => r.details?.error_code === '55P03');
 
         assert.ok(!observed55P03, 'Probe 8: 55P03 lock timeout observed instead of proving 40P01 deadlock');
-        assert.ok(observed40P01, 'Probe 8: Must observe PostgreSQL 40P01 deadlock between direct finalizer and composition');
-
-        await conn1.query('ROLLBACK').catch(() => {});
-        await conn2.query('ROLLBACK').catch(() => {});
+        assert.ok(
+          observed40P01,
+          'Probe 8: Must observe PostgreSQL 40P01 deadlock between actual direct finalizer and composition'
+        );
       } finally {
-        conn1.release();
-        conn2.release();
+        await gateConn.query('SELECT pg_advisory_unlock_all()').catch(() => {});
+        await Promise.allSettled([directPromise, compPromise].filter(Boolean));
+        await dirConn.query('ROLLBACK').catch(() => {});
+        await compConn.query('ROLLBACK').catch(() => {});
+        await fixture.owner.query('DELETE FROM review_c4_gate WHERE command_id = $1', [targetCommand]).catch(() => {});
+        await teardownCommandGate(fixture.owner).catch(() => {});
+        gateConn.release();
+        dirConn.release();
+        compConn.release();
       }
     }
 
