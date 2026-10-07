@@ -9,6 +9,8 @@
 
 > **Evidence boundary.** This blueprint combines accepted founder decisions, verified source findings and recommended architecture. It does not clear Indian legal/tax gates, establish provider eligibility, accept a milestone, prove production behavior or authorize live ad spend. Where this document conflicts with law, a current provider contract, the Engineering Constitution, or an approved domain decision register, the higher authority controls.
 
+> **Later planning decision — 7 October 2026, DECISION-037-H2:** The founder approves Host-guided preparation and Host-requested managed setup within one Host-owned campaign system, with assigned/currently authorized staff authorship and exact Host acceptance distinct from review, finance and provider execution. The [managed-marketing boundary addendum](MANAGED_MARKETING_FOUNDER_BOUNDARY_2026_10_07.md) refines the earlier delegated-operations direction with six conservative limits, explicit unresolved details and W5/W6/W7 placement dependent on W8 evidence. It does not approve all historical proposals, start implementation, alter planned full W7 obligations or change engineering acceptance, current W4-C4 work or external release gates. The dated blueprint and proposals below remain preserved.
+
 ---
 
 ## Understanding of the project
