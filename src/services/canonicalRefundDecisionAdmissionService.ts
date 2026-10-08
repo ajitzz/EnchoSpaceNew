@@ -124,6 +124,42 @@ export class CanonicalRefundDecisionAdmissionService {
     return this.privileged.fingerprint(envelope);
   }
 
+  fingerprintPacket(packet: AdmissionCommandPacket, reason: string): string {
+    return this.privileged.fingerprint({
+      context: {
+        tenant: {
+          kind: 'INTERNAL_ORGANIZATION',
+          organizationId: packet.organizationId,
+        },
+        principal: {
+          accountId: 1,
+          actorKind: 'STAFF',
+          organizationId: packet.organizationId,
+          membershipId: '00000000-0000-4000-8000-000000000001',
+          sessionId: '00000000-0000-4000-8000-000000000001',
+          assuranceLevel: 'AAL2',
+          authenticatedAt: new Date(0).toISOString(),
+          correlationId: 'trace-1',
+          operationId: 'op-1',
+        },
+        permission: 'accommodation.refund_decision.admit',
+        resource: {
+          target: { type: 'FINANCIAL_CONTRACT', id: packet.reservationId },
+          ancestors: [],
+        },
+        conditions: {
+          environment: this.environment,
+          amountMinor: packet.approvedAmountMinor,
+          requestedAt: new Date(0).toISOString(),
+        },
+        evidence: {},
+      },
+      idempotencyKey: `ref-adm:${packet.reservationId}:${packet.decisionRef}:${packet.decisionVersion}`,
+      reason,
+      command: packet,
+    });
+  }
+
   async deriveCanonicalPreview(
     makerToken: string,
     params: {
@@ -372,6 +408,7 @@ export class CanonicalRefundDecisionAdmissionService {
             AND g.valid_from <= clock_timestamp()
             AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
             AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= $4::bigint)
+            AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'FINANCIAL_CONTRACT' AND g.scope_id = $5))
             AND rev.grant_id IS NULL
         ) AS valid`,
         [
@@ -379,6 +416,7 @@ export class CanonicalRefundDecisionAdmissionService {
           checkerPrincipal.membershipId,
           this.environment,
           readResult.receipt.amountMinor ? BigInt(readResult.receipt.amountMinor) : 0n,
+          readResult.receipt.resource.id,
         ]
       )).rows[0]?.valid;
 
@@ -390,8 +428,9 @@ export class CanonicalRefundDecisionAdmissionService {
       const prepRow = (await client.query<{
         packet_payload: unknown;
         command_fingerprint: string;
+        reason: string;
       }>(
-        `SELECT packet_payload, command_fingerprint
+        `SELECT packet_payload, command_fingerprint, reason
          FROM get_cancellation_refund_decision_preparation($1)`,
         [authorizationId]
       )).rows[0];
@@ -401,7 +440,13 @@ export class CanonicalRefundDecisionAdmissionService {
       }
 
       const packet = admissionPacketSchema.parse(prepRow.packet_payload);
-      if (prepRow.command_fingerprint !== readResult.receipt.commandHash) {
+      const recomputedFingerprint = this.fingerprintPacket(packet, prepRow.reason);
+
+      if (
+        prepRow.command_fingerprint !== readResult.receipt.commandHash ||
+        recomputedFingerprint !== readResult.receipt.commandHash ||
+        prepRow.command_fingerprint !== recomputedFingerprint
+      ) {
         throw new PrivilegedActionError('COMMAND_CONFLICT');
       }
 
@@ -460,7 +505,7 @@ export class CanonicalRefundDecisionAdmissionService {
             AND g.valid_from <= clock_timestamp()
             AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
             AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= $4)
-            AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'RESERVATION' AND g.scope_id = $5))
+            AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'FINANCIAL_CONTRACT' AND g.scope_id = $5))
             AND rev.grant_id IS NULL
         ) AS valid`,
         [checkerPrincipal.organizationId, checkerPrincipal.membershipId, this.environment, approvedMinor, authRow.resource_id]
@@ -517,6 +562,19 @@ export class CanonicalRefundDecisionAdmissionService {
 
       if (replayRes.rows.length === 1) {
         const row = replayRes.rows[0];
+
+        // Reject changed-semantic replay: verify params.packet matches existing admitted record
+        if (
+          params.packet.admissionCommandId !== row.command_id ||
+          params.packet.reservationId !== row.reservation_id ||
+          params.packet.decisionRef !== row.decision_ref ||
+          params.packet.decisionVersion !== row.decision_version ||
+          BigInt(params.packet.approvedAmountMinor) !== BigInt(row.approved_amount_paise) ||
+          params.packet.currency !== row.currency
+        ) {
+          throw new PrivilegedActionError('COMMAND_CONFLICT');
+        }
+
         return {
           isReplay: true as const,
           makerPrincipal,
@@ -548,7 +606,7 @@ export class CanonicalRefundDecisionAdmissionService {
         command_hash: string;
       }>(
         `SELECT p.command_fingerprint, p.action_authorization_id, p.maker_membership_id, p.packet_payload,
-                a.reason, a.command_hash
+                p.reason, a.command_hash
          FROM get_cancellation_refund_decision_preparation($1) p
          JOIN internal_action_authorizations a ON a.id = p.action_authorization_id`,
         [params.actionAuthorizationId]
@@ -577,17 +635,19 @@ export class CanonicalRefundDecisionAdmissionService {
     const { makerPrincipal, prep } = prepData;
 
     // Verify packet has not been altered since preparation
-    const envelope = this.buildRequestEnvelope(
-      makerPrincipal,
-      params.packet,
-      params.makerStepUpReceiptId,
-      prep.reason
-    );
-    const commandHash = this.fingerprint(envelope);
+    const recomputedFromParams = this.fingerprintPacket(params.packet, prep.reason);
+    const recomputedFromPrep = this.fingerprintPacket(prep.packet_payload, prep.reason);
 
-    if (commandHash !== prep.command_fingerprint || commandHash !== prep.command_hash) {
+    if (
+      recomputedFromParams !== prep.command_fingerprint ||
+      recomputedFromParams !== prep.command_hash ||
+      recomputedFromPrep !== prep.command_fingerprint ||
+      recomputedFromParams !== recomputedFromPrep
+    ) {
       throw new PrivilegedActionError('COMMAND_CONFLICT');
     }
+
+    const commandHash = recomputedFromParams;
 
     // 2. NEW Admission Path: execute via PostgresWorkforceAuthorization.runAuthorized
     try {
@@ -706,6 +766,16 @@ export class CanonicalRefundDecisionAdmissionService {
 
             if (recoveryRes.rows.length === 1) {
               const row = recoveryRes.rows[0];
+              if (
+                params.packet.admissionCommandId !== row.command_id ||
+                params.packet.reservationId !== row.reservation_id ||
+                params.packet.decisionRef !== row.decision_ref ||
+                params.packet.decisionVersion !== row.decision_version ||
+                BigInt(params.packet.approvedAmountMinor) !== BigInt(row.approved_amount_paise) ||
+                params.packet.currency !== row.currency
+              ) {
+                return null;
+              }
               return {
                 evidenceId: row.evidence_id,
                 admissionId: row.admission_id,

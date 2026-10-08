@@ -558,7 +558,8 @@ RETURNS TABLE (
   command_fingerprint TEXT,
   maker_membership_id UUID,
   packet_payload JSONB,
-  created_at TIMESTAMPTZ
+  created_at TIMESTAMPTZ,
+  reason TEXT
 )
 LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, public, pg_temp
@@ -571,6 +572,8 @@ DECLARE
   current_membership UUID;
   current_env TEXT;
   prep_row RECORD;
+  approved_minor BIGINT;
+  is_authorized BOOLEAN := FALSE;
 BEGIN
   current_user_str := nullif(current_setting('app.current_user_id', true), '');
   current_org := nullif(current_setting('app.organization_id', true), '')::uuid;
@@ -581,31 +584,67 @@ BEGIN
     RAISE EXCEPTION 'SESSION_CONTEXT_REQUIRED';
   END IF;
 
-  -- Verify caller has active membership and capability in current_org
-  IF NOT EXISTS (
-    SELECT 1
-    FROM internal_organization_memberships m
-    JOIN internal_membership_grants g ON g.membership_id = m.id AND g.organization_id = m.organization_id
-    JOIN internal_role_permissions rp ON rp.role_version_id = g.role_version_id
-    LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
-    WHERE m.id = current_membership
-      AND m.organization_id = current_org
-      AND m.status = 'ACTIVE'
-      AND rp.permission_code = 'accommodation.refund_decision.admit'
-      AND g.environment = current_env
-      AND g.valid_from <= clock_timestamp()
-      AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
-      AND rev.grant_id IS NULL
-  ) THEN
-    RAISE EXCEPTION 'PERMISSION_DENIED';
-  END IF;
-
-  SELECT * INTO prep_row
+  SELECT p.*, a.reason INTO prep_row
   FROM canonical_cancellation_refund_decision_preparations p
+  JOIN internal_action_authorizations a ON a.id = p.action_authorization_id
   WHERE p.action_authorization_id = target_action_authorization_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'ACTION_NOT_FOUND';
+  END IF;
+
+  approved_minor := (prep_row.packet_payload->>'approvedAmountMinor')::bigint;
+
+  -- Verify current exact resource authority before disclosure:
+  -- Caller must be either:
+  -- 1) Maker with active, unrevoked capability in current_org and current_env
+  --    covering this exact reservation and amount.
+  -- 2) Checker with active, unrevoked appointment accommodation_finance_approver
+  --    in current_org and current_env covering this exact reservation and amount.
+  IF current_membership = prep_row.maker_membership_id THEN
+    -- Check maker capability
+    SELECT EXISTS (
+      SELECT 1
+      FROM internal_organization_memberships m
+      JOIN internal_membership_grants g ON g.membership_id = m.id AND g.organization_id = m.organization_id
+      JOIN internal_role_permissions rp ON rp.role_version_id = g.role_version_id
+      LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
+      WHERE m.id = current_membership
+        AND m.organization_id = current_org
+        AND m.status = 'ACTIVE'
+        AND rp.permission_code = 'accommodation.refund_decision.admit'
+        AND g.environment = current_env
+        AND g.valid_from <= clock_timestamp()
+        AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+        AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= approved_minor)
+        AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'FINANCIAL_CONTRACT' AND g.scope_id = prep_row.reservation_id::text))
+        AND rev.grant_id IS NULL
+    ) INTO is_authorized;
+  ELSE
+    -- Check dedicated checker appointment
+    SELECT EXISTS (
+      SELECT 1
+      FROM internal_organization_memberships m
+      JOIN internal_membership_grants g ON g.membership_id = m.id AND g.organization_id = m.organization_id
+      JOIN internal_role_versions v ON v.id = g.role_version_id AND v.organization_id = g.organization_id
+      JOIN internal_role_definitions r ON r.id = v.role_id AND r.organization_id = g.organization_id
+      JOIN internal_role_current_versions rcv ON rcv.role_id = r.id AND rcv.version_id = v.id
+      LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
+      WHERE m.id = current_membership
+        AND m.organization_id = current_org
+        AND m.status = 'ACTIVE'
+        AND r.role_key = 'accommodation_finance_approver'
+        AND g.environment = current_env
+        AND g.valid_from <= clock_timestamp()
+        AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+        AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= approved_minor)
+        AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'FINANCIAL_CONTRACT' AND g.scope_id = prep_row.reservation_id::text))
+        AND rev.grant_id IS NULL
+    ) INTO is_authorized;
+  END IF;
+
+  IF NOT is_authorized THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
   END IF;
 
   RETURN QUERY SELECT
@@ -616,7 +655,8 @@ BEGIN
     prep_row.command_fingerprint,
     prep_row.maker_membership_id,
     prep_row.packet_payload,
-    prep_row.created_at;
+    prep_row.created_at,
+    prep_row.reason;
 END;
 $$;
 
@@ -743,7 +783,11 @@ BEGIN
 
   -- Check exact envelope bounds
   IF auth_row.resource_id IS DISTINCT FROM prep_row.reservation_id::text
-     OR auth_row.amount_minor::text IS DISTINCT FROM (prep_row.packet_payload->>'approvedAmountMinor') THEN
+     OR auth_row.amount_minor::text IS DISTINCT FROM (prep_row.packet_payload->>'approvedAmountMinor')
+     OR (prep_row.packet_payload->>'admissionCommandId') IS DISTINCT FROM prep_row.command_id::text
+     OR (prep_row.packet_payload->>'reservationId') IS DISTINCT FROM prep_row.reservation_id::text
+     OR (prep_row.packet_payload->>'organizationId') IS DISTINCT FROM current_org::text
+     OR (prep_row.packet_payload->>'currency') IS DISTINCT FROM 'INR' THEN
     RAISE EXCEPTION 'COMMAND_CONFLICT';
   END IF;
 
@@ -778,9 +822,9 @@ BEGIN
   SELECT * INTO checker_member
   FROM internal_organization_memberships m
   WHERE m.id = app_row.checker_membership_id
-    AND m.organization_id = current_org
-    AND m.status = 'ACTIVE'
-    AND (m.expires_at IS NULL OR m.expires_at > clock_timestamp());
+  AND m.organization_id = current_org
+  AND m.status = 'ACTIVE'
+  AND (m.expires_at IS NULL OR m.expires_at > clock_timestamp());
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'CHECKER_MEMBERSHIP_INACTIVE';
@@ -805,7 +849,7 @@ BEGIN
       AND g.valid_from <= app_row.created_at
       AND (g.valid_until IS NULL OR g.valid_until > app_row.created_at)
       AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= approved_minor)
-      AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'RESERVATION' AND g.scope_id = prep_row.reservation_id::text))
+      AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'FINANCIAL_CONTRACT' AND g.scope_id = prep_row.reservation_id::text))
       AND rev.grant_id IS NULL
   ) THEN
     RAISE EXCEPTION 'CHECKER_APPOINTMENT_INVALID';
@@ -819,6 +863,13 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'RESERVATION_NOT_FOUND';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM canonical_cancellation_refund_decision_evidence dev
+    WHERE dev.reservation_id = prep_row.reservation_id
+  ) THEN
+    RAISE EXCEPTION 'REFUND_DECISION_ALREADY_ADMITTED';
   END IF;
 
   -- 8. Canonical Bindings and Financial Validations
@@ -1118,7 +1169,21 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Scoped capability check: verify current session has active, unrevoked capability in target_org and current_env
+  -- Scoped access guard: only the original Maker who created this command can replay its execution
+  IF adm_row.maker_membership_id IS DISTINCT FROM current_membership THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
+  SELECT * INTO dev_row
+  FROM canonical_cancellation_refund_decision_evidence dev
+  WHERE dev.id = adm_row.decision_evidence_id;
+
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  -- Scoped capability check: verify current session has active, unrevoked capability in current_org and current_env
+  -- covering this exact reservation and amount
   IF NOT EXISTS (
     SELECT 1
     FROM internal_organization_memberships m
@@ -1132,22 +1197,11 @@ BEGIN
       AND g.environment = current_env
       AND g.valid_from <= clock_timestamp()
       AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+      AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= dev_row.approved_amount_paise)
+      AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'FINANCIAL_CONTRACT' AND g.scope_id = dev_row.reservation_id::text))
       AND rev.grant_id IS NULL
   ) THEN
     RAISE EXCEPTION 'PERMISSION_DENIED';
-  END IF;
-
-  -- Scoped access guard: only the original Maker who created this command can replay its execution
-  IF adm_row.maker_membership_id IS DISTINCT FROM current_membership THEN
-    RAISE EXCEPTION 'PERMISSION_DENIED';
-  END IF;
-
-  SELECT * INTO dev_row
-  FROM canonical_cancellation_refund_decision_evidence dev
-  WHERE dev.id = adm_row.decision_evidence_id;
-
-  IF NOT FOUND THEN
-    RETURN;
   END IF;
 
   RETURN QUERY SELECT

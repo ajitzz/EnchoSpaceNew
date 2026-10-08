@@ -674,21 +674,21 @@ test('W4-D canonical cancellation refund decision admission verification', async
         const counts = {};
         const tables = [
           'canonical_reservations',
-          'canonical_reservation_events',
           'canonical_reservation_nights',
+          'canonical_reservation_events',
           'canonical_reservation_cancellation_inventory_releases',
           'canonical_reservation_cancellation_release_nights',
-          'canonical_payment_reservations',
-          'canonical_payable_authorities',
           'canonical_payment_attempts',
+          'canonical_payment_reservations',
           'canonical_provider_events',
+          'canonical_payable_authorities',
           'canonical_payment_reconciliations',
-          'canonical_cancellation_refund_authorizations',
-          'canonical_cancellation_refund_decision_evidence',
-          'canonical_cancellation_refund_decision_preparations',
-          'canonical_cancellation_refund_decision_admissions',
+          'canonical_reservation_commands',
+          'inventory_days',
           'booking_holds',
+          'booking_hold_nights',
           'stays_quotes',
+          'bookings',
         ];
         for (const t of tables) {
           counts[t] = (await fixture.owner.query(`SELECT count(*)::int as c FROM ${t}`)).rows[0].c;
@@ -796,9 +796,9 @@ test('W4-D canonical cancellation refund decision admission verification', async
       assert.equal(zeroAuths, 0, 'Admission must create zero refund authorizations');
 
       // =======================================================================
-      // ADM-01: BORROWED APPROVAL REJECTION
-      // Packet B cannot borrow approval of Packet A
+      // ADM-01: BORROWED APPROVAL & COPIED-HASH REJECTION & CHANGED-SEMANTIC REPLAY
       // =======================================================================
+      // 1. Packet B cannot borrow approval of Packet A
       const cmdA01B = randomUUID();
       const packetA01B = {
         ...packetA01,
@@ -821,6 +821,59 @@ test('W4-D canonical cancellation refund decision admission verification', async
         borrowedApprovalError.message.includes('COMMAND_CONFLICT') ||
         borrowedApprovalError.message.includes('POLICY_CHANGED') ||
         borrowedApprovalError.message.includes('COMMAND_FINGERPRINT_MISMATCH')
+      );
+
+      // 2. Changed-semantic replay rejected: replaying admitted command with altered amount or fields
+      let changedReplayError;
+      try {
+        await admissionService.admitRefundDecision(makerBearer, {
+          packet: { ...packetA01, approvedAmountMinor: '40000' },
+          actionAuthorizationId: prepA01.actionReceipt.id,
+          makerStepUpReceiptId: randomUUID(),
+        });
+      } catch (err) {
+        changedReplayError = err;
+      }
+      assert.ok(changedReplayError, 'Changed-semantic replay must be rejected');
+      assert.ok(changedReplayError.message.includes('COMMAND_CONFLICT'));
+
+      // 3. Out-of-scope read access denied & current exact resource authority precedes disclosure
+      const outOfScopeStaffToken = `wfs_${Buffer.alloc(32, 0x66).toString('base64url')}`;
+      const outOfScopeStaffBearer = `Bearer ${outOfScopeStaffToken}`;
+      const outOfScopeMembershipId = randomUUID();
+      const outOfScopeSessionId = randomUUID();
+      const otherResScope = randomUUID();
+
+      await fixture.owner.query(`
+        INSERT INTO users (id, email, role, is_active, name)
+        VALUES (97, 'outofscope@example.test', 'admin', true, 'Out of Scope User')
+        ON CONFLICT (id) DO NOTHING;
+        INSERT INTO internal_organization_memberships(id, organization_id, user_id, status, accepted_at, changed_by, change_reason)
+        VALUES ('${outOfScopeMembershipId}', '${organizationId}', 97, 'ACTIVE', clock_timestamp(), 90, 'Out of scope membership');
+        INSERT INTO internal_staff_sessions(id, organization_id, membership_id, token_hash, status, assurance_level,
+          authenticated_at, idle_expires_at, absolute_expires_at, environment)
+        VALUES ('${outOfScopeSessionId}', '${organizationId}', '${outOfScopeMembershipId}',
+          '${createHash('sha256').update(outOfScopeStaffToken).digest('hex')}', 'ACTIVE', 'AAL2',
+          clock_timestamp(), clock_timestamp() + interval '20 minutes', clock_timestamp() + interval '4 hours', 'LOCAL');
+        INSERT INTO internal_membership_grants(
+          organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
+          grant_hash, granted_by, reason
+        ) VALUES (
+          '${organizationId}', '${outOfScopeMembershipId}', '${approverRoleVersionId}', 'FINANCIAL_CONTRACT', '${otherResScope}', 'LOCAL',
+          '${createHash('sha256').update(randomUUID()).digest('hex')}', 90, 'Scoped only to other reservation'
+        );
+      `);
+
+      let outOfScopePreviewError;
+      try {
+        await admissionService.getRefundDecisionPreview(outOfScopeStaffBearer, prepA01.actionReceipt.id);
+      } catch (err) {
+        outOfScopePreviewError = err;
+      }
+      assert.ok(
+        outOfScopePreviewError.message.includes('PERMISSION_DENIED') ||
+        outOfScopePreviewError.message.includes('ACTION_NOT_FOUND'),
+        'Out-of-scope staff preview must be rejected with PERMISSION_DENIED or ACTION_NOT_FOUND'
       );
 
       // =======================================================================
@@ -871,9 +924,9 @@ test('W4-D canonical cancellation refund decision admission verification', async
       );
 
       // =======================================================================
-      // ADM-03: DEDICATED APPOINTMENT BINDINGS & NEGATIVE CONTROLS
+      // SCENARIO A02: MAKER SELF-CHECKER & UNAUTHORIZED CHECKERS
       // =======================================================================
-      // 1. Broad preparer grant alone cannot approve (User 90 has only preparer grant)
+      // 1. Maker cannot approve own preparation (MAKER_CHECKER_CONFLICT)
       let broadPreparerError;
       try {
         await admissionService.approveRefundDecisionAdmission(makerBearer, {
@@ -885,11 +938,150 @@ test('W4-D canonical cancellation refund decision admission verification', async
       } catch (err) {
         broadPreparerError = err;
       }
-      assert.ok(broadPreparerError, 'Broad preparer grant alone cannot approve');
+      assert.ok(broadPreparerError, 'Maker cannot approve own preparation');
       assert.ok(
-        broadPreparerError.message.includes('PERMISSION_DENIED') ||
-        broadPreparerError.message.includes('MAKER_CHECKER_CONFLICT')
+        broadPreparerError.message.includes('MAKER_CHECKER_CONFLICT') ||
+        broadPreparerError.message.includes('PERMISSION_DENIED')
       );
+
+      // =======================================================================
+      // SCENARIO A03: SESSION & STEP-UP NEGATIVE CONTROLS
+      // =======================================================================
+      const badSessionBearer = `Bearer wfs_${Buffer.alloc(32, 0x00).toString('base64url')}`;
+      let sessErrPreview, sessErrPrep, sessErrApprove, sessErrAdmit;
+      try {
+        await admissionService.deriveCanonicalPreview(badSessionBearer, {
+          admissionCommandId: randomUUID(),
+          decisionRef: 'DEC-BAD-SESS',
+          reservationId: resA01.reservationId,
+          approvedAmountMinor: '50000',
+          reasonCode: 'BAD_SESSION',
+          organizationId,
+        });
+      } catch (err) { sessErrPreview = err; }
+      assert.ok(sessErrPreview?.message.includes('STAFF_SESSION_REQUIRED'), 'Preview requires staff session');
+
+      try {
+        await admissionService.prepareRefundDecisionAdmission(badSessionBearer, {
+          packet: packetA01,
+          makerStepUpReceiptId: makerStepUpA01,
+          reason: 'Bad session prepare',
+        });
+      } catch (err) { sessErrPrep = err; }
+      assert.ok(sessErrPrep?.message.includes('STAFF_SESSION_REQUIRED'), 'Prepare requires staff session');
+
+      try {
+        await admissionService.approveRefundDecisionAdmission(badSessionBearer, {
+          authorizationId: prepA01.actionReceipt.id,
+          expectedCommandHash: prepA01.actionReceipt.commandHash,
+          checkerStepUpReceiptId: randomUUID(),
+          reason: 'Bad session approve',
+        });
+      } catch (err) { sessErrApprove = err; }
+      assert.ok(sessErrApprove?.message.includes('STAFF_SESSION_REQUIRED'), 'Approve requires staff session');
+
+      try {
+        await admissionService.admitRefundDecision(badSessionBearer, {
+          packet: packetA01,
+          actionAuthorizationId: prepA01.actionReceipt.id,
+          makerStepUpReceiptId: makerStepUpA01,
+        });
+      } catch (err) { sessErrAdmit = err; }
+      assert.ok(sessErrAdmit?.message.includes('STAFF_SESSION_REQUIRED'), 'Admit requires staff session');
+
+      // Step-up negative control: bogus/unverified step-up receipt on prepare
+      const badStepUpPacket = { ...packetA01, admissionCommandId: randomUUID(), decisionRef: 'DEC-STEPUP-' + randomUUID() };
+      let badStepUpErr;
+      try {
+        await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+          packet: badStepUpPacket,
+          makerStepUpReceiptId: randomUUID(),
+          reason: 'Bad step-up prepare',
+        });
+      } catch (err) { badStepUpErr = err; }
+      assert.ok(badStepUpErr, 'Bogus step-up receipt must be rejected on prepare');
+
+      // =======================================================================
+      // SCENARIO A05: CANONICAL DOMAIN EXCLUSIONS
+      // =======================================================================
+      // 1. Uncancelled reservation
+      const resUncancelled = await createPaidReservation(50000);
+      let uncancelledErr;
+      try {
+        await admissionService.deriveCanonicalPreview(makerBearer, {
+          admissionCommandId: randomUUID(),
+          decisionRef: 'DEC-UNCANCELLED',
+          reservationId: resUncancelled.reservationId,
+          approvedAmountMinor: '50000',
+          reasonCode: 'TEST_UNCANCELLED',
+          organizationId,
+        });
+      } catch (err) { uncancelledErr = err; }
+      assert.ok(uncancelledErr?.message.includes('RESERVATION_NOT_CANCELLED'), 'Uncancelled reservation must be rejected');
+
+      // 2. Amount exceeding captured ceiling
+      const resCeiling = await createPaidReservation(50000);
+      await cancelReservationV1(resCeiling.reservationId);
+      let ceilingErr;
+      try {
+        await admissionService.deriveCanonicalPreview(makerBearer, {
+          admissionCommandId: randomUUID(),
+          decisionRef: 'DEC-CEILING',
+          reservationId: resCeiling.reservationId,
+          approvedAmountMinor: '60000',
+          reasonCode: 'TEST_CEILING',
+          organizationId,
+        });
+      } catch (err) { ceilingErr = err; }
+      assert.ok(ceilingErr?.message.includes('APPROVED_AMOUNT_INVALID'), 'Amount exceeding ceiling must be rejected');
+
+      // 3. Sealed V2 revision excluded
+      const resSealed = await createPaidReservation(50000);
+      await cancelReservationV1(resSealed.reservationId);
+      const sealedRevisionId = randomUUID();
+      await fixture.owner.query(`
+        INSERT INTO canonical_reservation_revisions (
+          id, reservation_id, version, room_type_id, offer_id, offer_revision,
+          check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+        )
+        SELECT
+          $1, id, 2, room_type_id, offer_id, offer_revision,
+          check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+        FROM canonical_reservations
+        WHERE id = $2
+      `, [sealedRevisionId, resSealed.reservationId]);
+      await fixture.owner.query(`
+        INSERT INTO canonical_reservation_revision_nights (
+          revision_id, reservation_id, inventory_day_id, stay_date, room_type_id, units
+        ) SELECT $1, $2, d.id, d.calendar_date, r.room_type_id, 1
+          FROM canonical_reservations r
+          JOIN inventory_days d ON d.room_type_id = r.room_type_id AND d.calendar_date >= r.check_in_date AND d.calendar_date < r.check_out_date
+          WHERE r.id = $2
+      `, [sealedRevisionId, resSealed.reservationId]);
+      await fixture.owner.query(`
+        INSERT INTO canonical_reservation_revision_seals (
+          revision_id, reservation_id
+        ) VALUES (
+          $1, $2
+        )
+      `, [sealedRevisionId, resSealed.reservationId]);
+
+      let sealedErr;
+      try {
+        await admissionService.deriveCanonicalPreview(makerBearer, {
+          admissionCommandId: randomUUID(),
+          decisionRef: 'DEC-SEALED',
+          reservationId: resSealed.reservationId,
+          approvedAmountMinor: '50000',
+          reasonCode: 'TEST_SEALED',
+          organizationId,
+        });
+      } catch (err) { sealedErr = err; }
+      assert.ok(sealedErr?.message.includes('SEALED_V2_REVISION_EXCLUDED'), 'Sealed V2 revision must be excluded');
+
+      // =======================================================================
+      // ADM-03: DEDICATED APPOINTMENT BINDINGS & NEGATIVE CONTROLS
+      // =======================================================================
 
       // 2. Grant with amount cap lower than requested amount cannot approve
       const narrowCheckerToken = `wfs_${Buffer.alloc(32, 0x54).toString('base64url')}`;
@@ -951,6 +1143,176 @@ test('W4-D canonical cancellation refund decision admission verification', async
       assert.ok(
         amountCapError.message.includes('PERMISSION_DENIED') ||
         amountCapError.message.includes('ACTION_NOT_FOUND')
+      );
+
+      // 3. Legitimate scoped appointment success (scope_type = FINANCIAL_CONTRACT, scope_id = reservationId)
+      const resScoped = await createPaidReservation(50000);
+      await cancelReservationV1(resScoped.reservationId);
+      const scopedCheckerToken = `wfs_${Buffer.alloc(32, 0x58).toString('base64url')}`;
+      const scopedCheckerBearer = `Bearer ${scopedCheckerToken}`;
+      const scopedCheckerMembershipId = randomUUID();
+      const scopedCheckerSessionId = randomUUID();
+
+      await fixture.owner.query(`
+        INSERT INTO users (id, email, role, is_active, name)
+        VALUES (95, 'scoped_checker@example.test', 'admin', true, 'Scoped Checker')
+        ON CONFLICT (id) DO NOTHING;
+        INSERT INTO internal_organization_memberships(id, organization_id, user_id, status, accepted_at, changed_by, change_reason)
+        VALUES ('${scopedCheckerMembershipId}', '${organizationId}', 95, 'ACTIVE', clock_timestamp(), 90, 'Scoped checker membership');
+        INSERT INTO internal_staff_sessions(id, organization_id, membership_id, token_hash, status, assurance_level,
+          authenticated_at, idle_expires_at, absolute_expires_at, environment)
+        VALUES ('${scopedCheckerSessionId}', '${organizationId}', '${scopedCheckerMembershipId}',
+          '${createHash('sha256').update(scopedCheckerToken).digest('hex')}', 'ACTIVE', 'AAL2',
+          clock_timestamp(), clock_timestamp() + interval '20 minutes', clock_timestamp() + interval '4 hours', 'LOCAL');
+        INSERT INTO internal_membership_grants(
+          organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
+          grant_hash, granted_by, reason
+        ) VALUES (
+          '${organizationId}', '${scopedCheckerMembershipId}', '${approverRoleVersionId}', 'FINANCIAL_CONTRACT', '${resScoped.reservationId}', 'LOCAL',
+          '${createHash('sha256').update(randomUUID()).digest('hex')}', 90, 'Legitimate scoped checker grant'
+        );
+      `);
+
+      const cmdScoped = randomUUID();
+      const packetScoped = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdScoped,
+        decisionRef: 'DEC-SCOPED-' + randomUUID(),
+        reservationId: resScoped.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_SCOPED_SUCCESS',
+        organizationId: organizationId,
+      });
+      const envScoped = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetScoped, randomUUID(), 'Prepare scoped success');
+      const fpScoped = admissionService.fingerprint(envScoped);
+      const stepUpScoped = await performStepUp(makerToken, makerPasskey, fpScoped);
+      const prepScoped = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetScoped,
+        makerStepUpReceiptId: stepUpScoped,
+        reason: 'Prepare scoped success',
+      });
+
+      // Legitimate scoped preview and approval succeeds!
+      const previewScoped = await admissionService.getRefundDecisionPreview(scopedCheckerBearer, prepScoped.actionReceipt.id);
+      assert.equal(previewScoped.actionReceipt.id, prepScoped.actionReceipt.id);
+
+      const scopedCheckerPasskey = await setupPasskeyForStaff(95, scopedCheckerMembershipId, scopedCheckerSessionId, scopedCheckerToken);
+      const stepUpScopedChecker = await performStepUp(scopedCheckerToken, scopedCheckerPasskey, prepScoped.actionReceipt.commandHash);
+      const approvedScoped = await admissionService.approveRefundDecisionAdmission(scopedCheckerBearer, {
+        authorizationId: prepScoped.actionReceipt.id,
+        expectedCommandHash: prepScoped.actionReceipt.commandHash,
+        checkerStepUpReceiptId: stepUpScopedChecker,
+        reason: 'Approved by Legitimate Scoped Approver',
+      });
+      assert.equal(approvedScoped.receipt.status, 'APPROVED');
+
+      // 4. Wrong subject rejection: scoped checker cannot approve other reservation
+      const resWrong = await createPaidReservation(50000);
+      await cancelReservationV1(resWrong.reservationId);
+      const cmdWrong = randomUUID();
+      const packetWrong = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdWrong,
+        decisionRef: 'DEC-WRONG-' + randomUUID(),
+        reservationId: resWrong.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_WRONG_SUBJECT',
+        organizationId: organizationId,
+      });
+      const envWrong = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetWrong, randomUUID(), 'Prepare wrong subject');
+      const fpWrong = admissionService.fingerprint(envWrong);
+      const stepUpWrong = await performStepUp(makerToken, makerPasskey, fpWrong);
+      const prepWrong = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetWrong,
+        makerStepUpReceiptId: stepUpWrong,
+        reason: 'Prepare wrong subject',
+      });
+
+      let wrongSubjectError;
+      try {
+        await admissionService.approveRefundDecisionAdmission(scopedCheckerBearer, {
+          authorizationId: prepWrong.actionReceipt.id,
+          expectedCommandHash: prepWrong.actionReceipt.commandHash,
+          checkerStepUpReceiptId: stepUpScopedChecker,
+          reason: 'Scoped checker attempting wrong reservation approval',
+        });
+      } catch (err) {
+        wrongSubjectError = err;
+      }
+      assert.ok(wrongSubjectError, 'Wrong subject approval must be rejected with PERMISSION_DENIED or ACTION_NOT_FOUND');
+      assert.ok(
+        wrongSubjectError.message.includes('PERMISSION_DENIED') ||
+        wrongSubjectError.message.includes('ACTION_NOT_FOUND')
+      );
+
+      // 5. Expired appointment rejection
+      const expiredCheckerToken = `wfs_${Buffer.alloc(32, 0x59).toString('base64url')}`;
+      const expiredCheckerBearer = `Bearer ${expiredCheckerToken}`;
+      const expiredCheckerMembershipId = randomUUID();
+      const expiredCheckerSessionId = randomUUID();
+
+      await fixture.owner.query(`
+        INSERT INTO users (id, email, role, is_active, name)
+        VALUES (96, 'expired_checker@example.test', 'admin', true, 'Expired Checker')
+        ON CONFLICT (id) DO NOTHING;
+        INSERT INTO internal_organization_memberships(id, organization_id, user_id, status, accepted_at, changed_by, change_reason)
+        VALUES ('${expiredCheckerMembershipId}', '${organizationId}', 96, 'ACTIVE', clock_timestamp(), 90, 'Expired checker membership');
+        INSERT INTO internal_staff_sessions(id, organization_id, membership_id, token_hash, status, assurance_level,
+          authenticated_at, idle_expires_at, absolute_expires_at, environment)
+        VALUES ('${expiredCheckerSessionId}', '${organizationId}', '${expiredCheckerMembershipId}',
+          '${createHash('sha256').update(expiredCheckerToken).digest('hex')}', 'ACTIVE', 'AAL2',
+          clock_timestamp(), clock_timestamp() + interval '20 minutes', clock_timestamp() + interval '4 hours', 'LOCAL');
+        INSERT INTO internal_membership_grants(
+          organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
+          grant_hash, granted_by, reason, valid_from, valid_until
+        ) VALUES (
+          '${organizationId}', '${expiredCheckerMembershipId}', '${approverRoleVersionId}', 'ORGANIZATION', '${organizationId}', 'LOCAL',
+          '${createHash('sha256').update(randomUUID()).digest('hex')}', 90, 'Expired checker grant',
+          clock_timestamp() - interval '2 days', clock_timestamp() - interval '1 hour'
+        );
+      `);
+
+      let expiredCheckerError;
+      try {
+        await admissionService.approveRefundDecisionAdmission(expiredCheckerBearer, {
+          authorizationId: prepScoped.actionReceipt.id,
+          expectedCommandHash: prepScoped.actionReceipt.commandHash,
+          checkerStepUpReceiptId: stepUpScopedChecker,
+          reason: 'Expired checker attempting approval',
+        });
+      } catch (err) {
+        expiredCheckerError = err;
+      }
+      assert.ok(expiredCheckerError, 'Expired appointment must be rejected with PERMISSION_DENIED or ACTION_NOT_FOUND');
+      assert.ok(
+        expiredCheckerError.message.includes('PERMISSION_DENIED') ||
+        expiredCheckerError.message.includes('ACTION_NOT_FOUND')
+      );
+
+      // 6. Revoked appointment rejection
+      const revokedGrantId = (await fixture.owner.query(
+        `SELECT id FROM internal_membership_grants WHERE membership_id = $1`,
+        [scopedCheckerMembershipId]
+      )).rows[0].id;
+      await fixture.owner.query(
+        `INSERT INTO internal_membership_grant_revocations (grant_id, revoked_by, reason)
+         VALUES ($1, 90, 'Revoked scoped checker grant for test')`,
+        [revokedGrantId]
+      );
+
+      let revokedCheckerError;
+      try {
+        await admissionService.approveRefundDecisionAdmission(scopedCheckerBearer, {
+          authorizationId: prepScoped.actionReceipt.id,
+          expectedCommandHash: prepScoped.actionReceipt.commandHash,
+          checkerStepUpReceiptId: stepUpScopedChecker,
+          reason: 'Revoked checker attempting approval',
+        });
+      } catch (err) {
+        revokedCheckerError = err;
+      }
+      assert.ok(revokedCheckerError, 'Revoked appointment must be rejected with PERMISSION_DENIED or ACTION_NOT_FOUND');
+      assert.ok(
+        revokedCheckerError.message.includes('PERMISSION_DENIED') ||
+        revokedCheckerError.message.includes('ACTION_NOT_FOUND')
       );
 
       // =======================================================================
@@ -1082,83 +1444,107 @@ test('W4-D canonical cancellation refund decision admission verification', async
       const chkStepUpA07 = await performStepUp(checkerToken, checkerPasskey, prepA07.actionReceipt.commandHash);
       await admissionService.approveRefundDecisionAdmission(checkerBearer, {authorizationId: prepA07.actionReceipt.id, expectedCommandHash: prepA07.actionReceipt.commandHash, checkerStepUpReceiptId: chkStepUpA07, reason: 'Approved A07 by checker'});
 
-      // Connection 1 locks reservation in open transaction
-      const conn1 = await fixture.owner.connect();
-      await conn1.query('BEGIN');
-      await conn1.query('SELECT * FROM canonical_reservations WHERE id = $1 FOR UPDATE', [resA07.reservationId]);
+      // Caller 2 prepares competing distinct command A07_2 on the SAME reservation
+      const cmdA07_2 = randomUUID();
+      const packetA07_2 = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdA07_2,
+        decisionRef: 'DEC-A07-2-' + randomUUID(),
+        reservationId: resA07.reservationId,
+        approvedAmountMinor: '40000',
+        reasonCode: 'TEST_A07_CALLER2',
+        organizationId: organizationId,
+      });
+      const envA07_2 = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetA07_2, randomUUID(), 'Prepare distinct A07_2');
+      const fpA07_2 = admissionService.fingerprint(envA07_2);
+      const stepUpA07_2 = await performStepUp(makerToken, makerPasskey, fpA07_2);
+      const prepA07_2 = await admissionService.prepareRefundDecisionAdmission(makerBearer, {packet: packetA07_2, makerStepUpReceiptId: stepUpA07_2, reason: 'Prepare distinct A07_2'});
+      const chkStepUpA07_2 = await performStepUp(checkerToken, checkerPasskey, prepA07_2.actionReceipt.commandHash);
+      await admissionService.approveRefundDecisionAdmission(checkerBearer, {authorizationId: prepA07_2.actionReceipt.id, expectedCommandHash: prepA07_2.actionReceipt.commandHash, checkerStepUpReceiptId: chkStepUpA07_2, reason: 'Approved distinct A07_2 by checker'});
 
-      // Connection 2 attempts admission concurrently in background
-      const racePromise2 = admissionService.admitRefundDecision(makerBearer, {
+      // Caller 1 begins admission and pauses inside postAdmissionHook holding open its transaction and reservation lock
+      let releaseCaller1;
+      const caller1HoldPromise = new Promise(resolve => { releaseCaller1 = resolve; });
+      let caller1AtHook;
+      const caller1EnteredPromise = new Promise(resolve => { caller1AtHook = resolve; });
+
+      const caller1Promise = admissionService.admitRefundDecision(makerBearer, {
         packet: packetA07,
         actionAuthorizationId: prepA07.actionReceipt.id,
         makerStepUpReceiptId: stepUpA07,
+        postAdmissionHook: async (client, result) => {
+          caller1AtHook();
+          await caller1HoldPromise;
+        },
       });
 
-      // Observe Connection 2 blocked by Connection 1 in pg_blocking_pids
+      // Wait for Caller 1 to execute admit_cancellation_refund_decision and reach hook
+      await caller1EnteredPromise;
+
+      // Caller 2 concurrently attempts admission on the same reservation
+      const caller2Promise = admissionService.admitRefundDecision(makerBearer, {
+        packet: packetA07_2,
+        actionAuthorizationId: prepA07_2.actionReceipt.id,
+        makerStepUpReceiptId: stepUpA07_2,
+      });
+
+      // Observe in pg_blocking_pids that Caller 2 is blocked on the reservation row lock by Caller 1
       let observedA07Blocker = false;
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 50));
         const blockingRows = (await fixture.owner.query(`
           SELECT pid, pg_blocking_pids(pid) as blockers
           FROM pg_stat_activity
-          WHERE query LIKE '%canonical_reservations%' OR query LIKE '%admit_cancellation_refund_decision%'
+          WHERE cardinality(pg_blocking_pids(pid)) > 0
         `)).rows;
-        if (blockingRows.some(r => r.blockers && r.blockers.length > 0)) {
+        if (blockingRows.length > 0) {
           observedA07Blocker = true;
           break;
         }
       }
-      assert.ok(observedA07Blocker, 'Connection 2 must be blocked on reservation lock by Connection 1');
+      assert.ok(observedA07Blocker, 'Caller 2 must be observed blocked on reservation lock by Caller 1 in pg_blocking_pids');
 
-      // Commit Connection 1 (winner)
-      await conn1.query('COMMIT');
-      conn1.release();
+      // Release Caller 1 to commit
+      releaseCaller1();
+      const raceResult1 = await caller1Promise;
+      assert.ok(raceResult1.evidenceId);
+      assert.ok(raceResult1.admissionId);
+      assert.equal(raceResult1.replayed, false);
 
-      const raceResult = await racePromise2;
-      assert.ok(raceResult.evidenceId);
-      assert.ok(raceResult.admissionId);
-
-      // Exactly 1 admission row and 1 evidence row
-      const a07AdmissionsCount = (await fixture.owner.query(
-        `SELECT count(*)::int as c FROM canonical_cancellation_refund_decision_admissions WHERE command_id = $1`,
-        [cmdA07]
-      )).rows[0].c;
-      assert.equal(a07AdmissionsCount, 1, 'Exactly one admission row must exist after race');
-
-      // Competing distinct command on same reservation fails
-      const cmdA07Distinct = randomUUID();
-      const packetA07Distinct = await admissionService.deriveCanonicalPreview(makerBearer, {
-        admissionCommandId: cmdA07Distinct,
-        decisionRef: 'DEC-DISTINCT-' + randomUUID(),
-        reservationId: resA07.reservationId,
-        approvedAmountMinor: '40000',
-        reasonCode: 'TEST_DISTINCT',
-        organizationId: organizationId,
-      });
-      const envDist = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetA07Distinct, randomUUID(), 'Prepare distinct');
-      const fpDist = admissionService.fingerprint(envDist);
-      const stepUpDist = await performStepUp(makerToken, makerPasskey, fpDist);
-      const prepDist = await admissionService.prepareRefundDecisionAdmission(makerBearer, {packet: packetA07Distinct, makerStepUpReceiptId: stepUpDist, reason: 'Prepare distinct'});
-      const chkStepUpDist = await performStepUp(checkerToken, checkerPasskey, prepDist.actionReceipt.commandHash);
-      await admissionService.approveRefundDecisionAdmission(checkerBearer, {authorizationId: prepDist.actionReceipt.id, expectedCommandHash: prepDist.actionReceipt.commandHash, checkerStepUpReceiptId: chkStepUpDist, reason: 'Approved distinct'});
-
-      let distinctConflictError;
+      // Caller 2 unblocks and is rejected with REFUND_DECISION_ALREADY_ADMITTED
+      let caller2Error;
       try {
-        await admissionService.admitRefundDecision(makerBearer, {
-          packet: packetA07Distinct,
-          actionAuthorizationId: prepDist.actionReceipt.id,
-          makerStepUpReceiptId: stepUpDist,
-        });
+        await caller2Promise;
       } catch (err) {
-        distinctConflictError = err;
+        caller2Error = err;
       }
-      assert.ok(distinctConflictError, 'Competing distinct command must fail');
-      // Assert losing action state: action was not consumed
-      const distAuthStatus = (await fixture.owner.query(
+      assert.ok(caller2Error, 'Caller 2 must be rejected with REFUND_DECISION_ALREADY_ADMITTED');
+      assert.ok(
+        caller2Error.message.includes('REFUND_DECISION_ALREADY_ADMITTED'),
+        'Caller 2 must fail with REFUND_DECISION_ALREADY_ADMITTED'
+      );
+
+      // Assert losing action state: action was not consumed (remains APPROVED after rollback)
+      const caller2AuthStatus = (await fixture.owner.query(
         `SELECT status FROM internal_action_authorizations WHERE id = $1`,
-        [prepDist.actionReceipt.id]
+        [prepA07_2.actionReceipt.id]
       )).rows[0].status;
-      assert.equal(distAuthStatus, 'APPROVED', 'Losing action must remain APPROVED (not consumed)');
+      assert.equal(caller2AuthStatus, 'APPROVED', 'Losing action must remain APPROVED (not consumed) after rollback');
+
+      // Exactly 1 admission row and 1 evidence row exist for reservation
+      const a07AdmissionsCount = (await fixture.owner.query(
+        `SELECT count(*)::int as c
+         FROM canonical_cancellation_refund_decision_admissions a
+         JOIN canonical_cancellation_refund_decision_evidence dev ON dev.id = a.decision_evidence_id
+         WHERE dev.reservation_id = $1`,
+        [resA07.reservationId]
+      )).rows[0].c;
+      assert.equal(a07AdmissionsCount, 1, 'Exactly one admission row must exist for reservation after race');
+
+      const a07EvidenceCount = (await fixture.owner.query(
+        `SELECT count(*)::int as c FROM canonical_cancellation_refund_decision_evidence WHERE reservation_id = $1`,
+        [resA07.reservationId]
+      )).rows[0].c;
+      assert.equal(a07EvidenceCount, 1, 'Exactly one evidence row must exist for reservation after race');
 
       // =======================================================================
       // SCENARIO A08: INJECTED FAILURE ROLLBACK AT AUDIT STAGE
@@ -1436,6 +1822,48 @@ test('W4-D canonical cancellation refund decision admission verification', async
       }
       assert.ok(deletePrepError, 'DELETE on preparations table must be rejected');
       assert.ok(deletePrepError.message.includes('CANONICAL_REFUND_DECISION_PREPARATION_IMMUTABLE'));
+
+      // 16-table snapshot comparison before and after an admission
+      const resA11 = await createPaidReservation(50000);
+      await cancelReservationV1(resA11.reservationId);
+      const cmdA11 = randomUUID();
+      const packetA11 = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdA11,
+        decisionRef: 'DEC-A11-' + randomUUID(),
+        reservationId: resA11.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_A11_IMMUTABILITY',
+        organizationId: organizationId,
+      });
+      const envA11 = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetA11, randomUUID(), 'Prepare admission A11');
+      const fpA11 = admissionService.fingerprint(envA11);
+      const stepUpA11 = await performStepUp(makerToken, makerPasskey, fpA11);
+      const prepA11 = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetA11,
+        makerStepUpReceiptId: stepUpA11,
+        reason: 'Prepare admission A11',
+      });
+      const chkStepUpA11 = await performStepUp(checkerToken, checkerPasskey, prepA11.actionReceipt.commandHash);
+      await admissionService.approveRefundDecisionAdmission(checkerBearer, {
+        authorizationId: prepA11.actionReceipt.id,
+        expectedCommandHash: prepA11.actionReceipt.commandHash,
+        checkerStepUpReceiptId: chkStepUpA11,
+        reason: 'Approved admission A11 by checker',
+      });
+
+      // Snapshot all 16 canonical commerce tables immediately before admitRefundDecision
+      const snapBeforeA11 = await snapshotCanonicalCommerce();
+
+      // Admit
+      await admissionService.admitRefundDecision(makerBearer, {
+        packet: packetA11,
+        actionAuthorizationId: prepA11.actionReceipt.id,
+        makerStepUpReceiptId: stepUpA11,
+      });
+
+      // Snapshot all 16 canonical commerce tables immediately after admitRefundDecision
+      const snapAfterA11 = await snapshotCanonicalCommerce();
+      assert.deepStrictEqual(snapBeforeA11, snapAfterA11, 'Admission must produce zero side-effects on 16 canonical commerce tables');
 
       // Verify zero mutation on bookings table
       const postBookingCounts = (await fixture.owner.query('SELECT count(*)::int as c FROM bookings')).rows[0].c;
