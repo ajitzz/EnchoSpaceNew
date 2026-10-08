@@ -1496,10 +1496,11 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         approvedAmountPaise: paidResT9.capturedAmountPaise,
       });
 
-      // 9a. Two real connections with IDENTICAL command converge with active lock contention observation
+      // 9a. Two real connections with IDENTICAL command converge with active blocker observation
       const conn1 = await refundIssuer.connect();
       const conn2 = await refundIssuer.connect();
       const identicalCmd = randomUUID();
+      let conn2Promise = null;
 
       try {
         const pid1 = (await conn1.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
@@ -1516,29 +1517,38 @@ test('W4-D canonical cancellation refund authorization verification', async () =
 
         // Conn2 attempts identical command concurrently in transaction
         await conn2.query('BEGIN');
-        const conn2Promise = conn2.query(
+        conn2Promise = conn2.query(
           `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
           [identicalCmd, paidResT9.reservationId, evidenceT9.id]
         );
+        conn2Promise.catch(() => {});
 
-        // Actively observe lock contention on Connection B (pid2)
-        let observedLockWait = false;
+        // Actively observe lock contention on Connection B (pid2) specifically blocked by Connection A (pid1)
+        let observedBlocker9a = false;
         for (let attempt = 0; attempt < 50; attempt++) {
-          const contention = (await fixture.owner.query(
-            `SELECT l.locktype, l.mode, l.granted, a.wait_event_type, a.wait_event
-             FROM pg_locks l
-             JOIN pg_stat_activity a ON l.pid = a.pid
-             WHERE l.pid = $1 AND l.granted = false`,
+          const act = (await fixture.owner.query(
+            `SELECT wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+             FROM pg_stat_activity
+             WHERE pid = $1`,
             [pid2]
-          )).rows;
+          )).rows[0];
 
-          if (contention.length > 0) {
-            observedLockWait = true;
+          if (
+            act &&
+            act.wait_event_type === 'Lock' &&
+            Array.isArray(act.blockers) &&
+            act.blockers.map(Number).includes(Number(pid1))
+          ) {
+            observedBlocker9a = true;
             break;
           }
           await new Promise((r) => setTimeout(r, 50));
         }
-        assert.equal(observedLockWait, true, 'Connection B must be observed actively waiting on lock held by Connection A');
+        assert.equal(
+          observedBlocker9a,
+          true,
+          'Connection B must be observed waiting on Lock with Connection A in pg_blocking_pids before A commits'
+        );
 
         // Conn1 commits, releasing lock
         await conn1.query('COMMIT');
@@ -1559,16 +1569,136 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         ).rows[0].count;
         assert.equal(Number(countAuthT9), 1, 'Exactly one authorization must exist');
       } finally {
+        await Promise.allSettled([
+          conn1.query('ROLLBACK').catch(() => {}),
+          conn2.query('ROLLBACK').catch(() => {}),
+        ]);
         conn1.release();
         conn2.release();
       }
 
-      // 9b. Competing distinct command for same reservation
-      const competingCmd = randomUUID();
+      // 9b. Competing distinct command contention on two real connections
+      const paidResT9b = await createPaidReservation({nights: 2});
+      const cancelInfoT9b = await cancelReservationV1(paidResT9b.reservationId);
+
+      const evidenceT9b = await insertSyntheticDecisionEvidence({
+        reservationId: paidResT9b.reservationId,
+        cancellationEventId: cancelInfoT9b.cancellationEventId,
+        cancellationReleaseId: cancelInfoT9b.cancellationReleaseId,
+        paidBridgeId: paidResT9b.paidBridgeId,
+        paymentAttemptId: paidResT9b.paymentAttemptId,
+        quoteId: paidResT9b.quoteId,
+        payableAuthorityId: paidResT9b.payableAuthorityId,
+        providerOriginKind: 'RAZORPAY',
+        providerPaymentRef: paidResT9b.providerPaymentRef,
+        supportingProviderEventId: paidResT9b.supportingProviderEventId,
+        supportingEvidenceHash: paidResT9b.supportingEvidenceHash,
+        approvedAmountPaise: paidResT9b.capturedAmountPaise,
+      });
+
+      const connA = await refundIssuer.connect();
+      const connB = await refundIssuer.connect();
+      const cmdA = randomUUID();
+      const cmdB = randomUUID();
+      let connBPromise = null;
+
+      try {
+        const pidA = (await connA.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        const pidB = (await connB.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+
+        // 1. Connection A begins a transaction and issues command A
+        await connA.query('BEGIN');
+        const resA = (
+          await connA.query(
+            `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+            [cmdA, paidResT9b.reservationId, evidenceT9b.id]
+          )
+        ).rows[0];
+
+        // 2. Keep A uncommitted.
+        // 3. Connection B starts different command B on the same subject.
+        await connB.query('BEGIN');
+        connBPromise = connB.query(
+          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+          [cmdB, paidResT9b.reservationId, evidenceT9b.id]
+        );
+        connBPromise.catch(() => {});
+
+        // 4. Observe B's actual database blocker before committing A:
+        //    observe B waiting on a Lock AND pg_blocking_pids(B) contains A
+        let observedBlocker9b = false;
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const act = (await fixture.owner.query(
+            `SELECT wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+             FROM pg_stat_activity
+             WHERE pid = $1`,
+            [pidB]
+          )).rows[0];
+
+          if (
+            act &&
+            act.wait_event_type === 'Lock' &&
+            Array.isArray(act.blockers) &&
+            act.blockers.map(Number).includes(Number(pidA))
+          ) {
+            observedBlocker9b = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.equal(
+          observedBlocker9b,
+          true,
+          'Connection B must be observed waiting on Lock with Connection A in pg_blocking_pids before A commits'
+        );
+
+        // 5. Commit A
+        await connA.query('COMMIT');
+
+        // 6. Observe B's final rejection
+        let connBErr = null;
+        try {
+          await connBPromise;
+        } catch (err) {
+          connBErr = err;
+        }
+        assert.ok(connBErr, 'Competing distinct command B must be rejected after A commits');
+        assert.match(connBErr.message, /REFUND_ALREADY_AUTHORIZED/);
+        await connB.query('ROLLBACK');
+
+        // 7. Assert one durable authorization and no row for B
+        const authRows = (
+          await fixture.owner.query(
+            `SELECT * FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+            [paidResT9b.reservationId]
+          )
+        ).rows;
+        assert.equal(authRows.length, 1, 'Exactly one durable authorization must exist');
+        assert.equal(authRows[0].command_id, cmdA, 'Persisted authorization must belong to command A');
+        assert.equal(authRows[0].id, resA.authorization_id);
+
+        const countCmdB = (
+          await fixture.owner.query(
+            `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+            [cmdB]
+          )
+        ).rows[0].count;
+        assert.equal(Number(countCmdB), 0, 'No authorization row may exist for competing command B');
+      } finally {
+        await Promise.allSettled([
+          connA.query('ROLLBACK').catch(() => {}),
+          connB.query('ROLLBACK').catch(() => {}),
+        ]);
+        connA.release();
+        connB.release();
+      }
+
+      // 9c. Sequential distinct command attempt against already-authorized reservation
+      const sequentialCmd = randomUUID();
       await assert.rejects(
         () => refundIssuer.query(
           `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [competingCmd, paidResT9.reservationId, evidenceT9.id]
+          [sequentialCmd, paidResT9.reservationId, evidenceT9.id]
         ),
         (err) => {
           assert.match(err.message, /REFUND_ALREADY_AUTHORIZED/);
@@ -1603,30 +1733,121 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       const snapshotInitial = await takeScopedDomainSnapshot(paidResT10);
 
       // -----------------------------------------------------------------------
-      // T10A: Outer transaction failure: verify rollback, SQLSTATE, and 16 tables unchanged
+      // T10A: Outer transaction failure: verify issuance witness, replay witness,
+      // invalid cast 22P02 abort, complete rollback, 16 tables unchanged,
+      // and negative control rejecting pre-issuance 22P02 substitution.
       // -----------------------------------------------------------------------
+      const runOuterRollbackDemonstration = async ({
+        client,
+        cmd,
+        resId,
+        evId,
+        expectedEv,
+        expectedPaid,
+        preIssuanceQuery = null,
+      }) => {
+        let executionError = null;
+        let rollbackError = null;
+        await client.query('BEGIN');
+        try {
+          if (preIssuanceQuery) {
+            await client.query(preIssuanceQuery);
+          }
+          const res1 = (
+            await client.query(
+              `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+              [cmd, resId, evId]
+            )
+          ).rows[0];
+
+          // 3. Retain and assert returned row before proceeding
+          assert.ok(res1 && res1.authorization_id, 'authorization_id must be present');
+          assert.equal(res1.replayed, false, 'replayed must be false on first call');
+          assert.equal(res1.command_id, cmd, 'command_id must match');
+          assert.equal(res1.decision_evidence_id, evId, 'decision_evidence_id must match');
+          assert.equal(res1.reservation_id, resId, 'reservation_id must match');
+          assert.equal(res1.cancellation_release_id, expectedEv.cancellation_release_id, 'cancellation_release_id must match');
+          assert.equal(res1.paid_bridge_id, expectedPaid.paidBridgeId, 'paid_bridge_id must match');
+          assert.equal(res1.payment_attempt_id, expectedPaid.paymentAttemptId, 'payment_attempt_id must match');
+          assert.equal(res1.provider_origin_kind, 'RAZORPAY', 'provider_origin_kind must match');
+          assert.equal(res1.provider_payment_ref, expectedPaid.providerPaymentRef, 'provider_payment_ref must match');
+          assert.equal(BigInt(res1.approved_amount_paise), BigInt(expectedPaid.capturedAmountPaise), 'approved_amount_paise must match');
+          assert.equal(res1.currency, 'INR', 'currency must match');
+          assert.equal(res1.decision_version, expectedEv.version, 'decision_version must match');
+          assert.equal(res1.decision_digest, expectedEv.decision_digest, 'decision_digest must match');
+          assert.equal(res1.issuing_role, 'encho_refund_issuer', 'issuing_role must match');
+          assert.equal(res1.issuing_principal, 'encho_refund_issuer', 'issuing_principal must match');
+
+          // 4-5. On SAME client and transaction, repeat call to witness restricted replay
+          const res2 = (
+            await client.query(
+              `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+              [cmd, resId, evId]
+            )
+          ).rows[0];
+
+          assert.ok(res2, 'Replay row must exist');
+          assert.equal(res2.replayed, true, 'Replay replayed must be true');
+          assert.equal(res2.authorization_id, res1.authorization_id, 'Replay authorization_id must match');
+          assert.equal(res2.command_id, res1.command_id);
+          assert.equal(res2.decision_evidence_id, res1.decision_evidence_id);
+          assert.equal(res2.reservation_id, res1.reservation_id);
+          assert.equal(res2.cancellation_release_id, res1.cancellation_release_id);
+          assert.equal(res2.paid_bridge_id, res1.paid_bridge_id);
+          assert.equal(res2.payment_attempt_id, res1.payment_attempt_id);
+          assert.equal(res2.provider_origin_kind, res1.provider_origin_kind);
+          assert.equal(res2.provider_payment_ref, res1.provider_payment_ref);
+          assert.equal(BigInt(res2.approved_amount_paise), BigInt(res1.approved_amount_paise));
+          assert.equal(res2.currency, res1.currency);
+          assert.equal(res2.decision_version, res1.decision_version);
+          assert.equal(res2.decision_digest, res1.decision_digest);
+          assert.equal(res2.issuing_role, res1.issuing_role);
+          assert.equal(res2.issuing_principal, res1.issuing_principal);
+
+          // 6. Execute intended PostgreSQL invalid cast
+          await client.query(`SELECT 'intentional_abort'::int`);
+          await client.query('COMMIT');
+          throw new Error('UNEXPECTED_COMMIT: Intentional abort did not fail transaction');
+        } catch (err) {
+          executionError = err;
+          // 8. Roll back transaction, preserving original execution error if rollback also fails
+          try {
+            await client.query('ROLLBACK');
+          } catch (rbErr) {
+            rollbackError = rbErr;
+          }
+          if (rollbackError) {
+            throw new Error(`ROLLBACK_FAILED: ${rollbackError.message} (original execution error: ${executionError.message})`);
+          }
+
+          // 7. Assert SQLSTATE 22P02 and intentional_abort marker
+          assert.equal(executionError.code, '22P02', 'SQLSTATE must be 22P02');
+          assert.match(executionError.message, /intentional_abort/, 'Error message must contain intentional_abort');
+          return {
+            witnessed: true,
+            error: executionError,
+          };
+        }
+      };
+
+      // Positive execution of T10A
       const failCmdA = randomUUID();
       const clientA = await refundIssuer.connect();
-      let outerErr = null;
       try {
-        await clientA.query('BEGIN');
-        await clientA.query(
-          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [failCmdA, paidResT10.reservationId, evidenceT10.id]
-        );
-        // Inject failure via invalid cast
-        await clientA.query(`SELECT 'intentional_abort'::int`);
-        await clientA.query('COMMIT');
-      } catch (err) {
-        outerErr = err;
-        await clientA.query('ROLLBACK');
+        await runOuterRollbackDemonstration({
+          client: clientA,
+          cmd: failCmdA,
+          resId: paidResT10.reservationId,
+          evId: evidenceT10.id,
+          expectedEv: evidenceT10,
+          expectedPaid: paidResT10,
+          preIssuanceQuery: null,
+        });
       } finally {
         clientA.release();
       }
 
-      assert.ok(outerErr, 'Outer transaction intentional abort must throw');
-      assert.equal(outerErr.code, '22P02', 'SQLSTATE must be 22P02 (invalid_text_representation)');
-
+      // 9. Observer assertions
       const failedAuthCountA = (
         await fixture.owner.query(
           `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
@@ -1636,7 +1857,42 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       assert.equal(Number(failedAuthCountA), 0, 'Rolled back transaction must leave 0 authorization rows');
 
       const snapshotAfterA = await takeScopedDomainSnapshot(paidResT10);
-      assert.deepEqual(snapshotInitial, snapshotAfterA, 'T10A rollback must leave all 16 domain tables unchanged');
+      assert.deepEqual(snapshotInitial, snapshotAfterA, 'T10A rollback must leave all 16 scoped domain tables unchanged');
+
+      // Committed negative control: pre-issuance 22P02 must be rejected by demonstration path
+      const failCmdNeg = randomUUID();
+      const clientNeg = await refundIssuer.connect();
+      try {
+        await assert.rejects(
+          () => runOuterRollbackDemonstration({
+            client: clientNeg,
+            cmd: failCmdNeg,
+            resId: paidResT10.reservationId,
+            evId: evidenceT10.id,
+            expectedEv: evidenceT10,
+            expectedPaid: paidResT10,
+            preIssuanceQuery: "SELECT 'review_pre_issuance'::int",
+          }),
+          (err) => {
+            assert.ok(err, 'Demonstration must reject substituted pre-issuance error');
+            assert.match(err.message, /intentional_abort/, 'Rejection must specifically detect lack of intentional_abort');
+            return true;
+          }
+        );
+      } finally {
+        clientNeg.release();
+      }
+
+      const failedAuthCountNeg = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [failCmdNeg]
+        )
+      ).rows[0].count;
+      assert.equal(Number(failedAuthCountNeg), 0, 'Negative control must leave 0 authorization rows');
+
+      const snapshotAfterNeg = await takeScopedDomainSnapshot(paidResT10);
+      assert.deepEqual(snapshotInitial, snapshotAfterNeg, 'Negative control must leave all 16 scoped domain tables unchanged');
 
       // -----------------------------------------------------------------------
       // T10B: Fixture-only trigger failure injected on authorizations table

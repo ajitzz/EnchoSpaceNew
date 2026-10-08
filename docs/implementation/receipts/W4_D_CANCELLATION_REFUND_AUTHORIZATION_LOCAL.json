@@ -132,7 +132,7 @@
   },
   "rolePrivileges": {
     "roleName": "encho_refund_issuer",
-    "provisioningSemantics": "The role encho_refund_issuer is an unprivileged login role pre-provisioned in the database environment (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION). Migration 061 validates these least-privilege properties via DO $grant_refund_issuer$ block before granting USAGE on schema public and EXECUTE on function issue_cancellation_refund_authorization.",
+    "provisioningSemantics": "The role encho_refund_issuer is not created by migration 061. Migration 061 validates and grants USAGE on schema public and EXECUTE on issue_cancellation_refund_authorization only if encho_refund_issuer already exists with least-privilege properties (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION). Disposable test fixture provisions the role locally; production role provisioning is not evaluated. Runtime privilege probes independently verify 42501 denial on all direct table DML and ungranted schema access.",
     "grants": [
       "GRANT USAGE ON SCHEMA public TO encho_refund_issuer",
       "GRANT EXECUTE ON FUNCTION issue_cancellation_refund_authorization(UUID, UUID, UUID) TO encho_refund_issuer"
@@ -145,7 +145,7 @@
   },
   "focusedTestResults": {
     "script": "scripts/testing/w4d-cancellation-refund-authorization.mjs",
-    "sha256": "846ca559731739769ebe725541e5c46516e6955c2802e5c88ea1bdd77c1fb1fa",
+    "sha256": "a5d025567270f7fe6a5f531dbfae4123e0e6333325b7d2c59a2a114defdaedcd",
     "testRunner": "node --import tsx --test scripts/testing/w4d-cancellation-refund-authorization.mjs",
     "status": "PASS",
     "passedTests": 1,
@@ -194,12 +194,12 @@
       "T09": {
         "title": "Two real connections: identical converge under active lock contention, competing blocked",
         "result": "PASS",
-        "evidence": "Connection A holds open transaction with row lock; Connection B attempts identical command concurrently; Connection B's lock wait is actively observed in pg_locks and pg_stat_activity (granted = false); Connection A commits, Connection B converges cleanly (one insertion, one recovery replay, 1 row total); distinct competing command on same reservation rejected with REFUND_ALREADY_AUTHORIZED"
+        "evidence": "Connection A holds open transaction with row lock; Connection B attempts identical command concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; Connection A commits, Connection B converges cleanly (one insertion, one recovery replay, 1 row total). Competing distinct-command contention: Connection A holds open transaction with distinct command; Connection B attempts distinct command concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; Connection A commits (persisting 1 authorization), Connection B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; sequential distinct command attempt on already-authorized reservation also rejected with REFUND_ALREADY_AUTHORIZED"
       },
       "T10": {
         "title": "Immutability, structured injected rollbacks, and zero domain row mutation across 16 tables",
         "result": "PASS",
-        "evidence": "UPDATE and DELETE rejected on evidence and authorizations by immutability triggers; T10A outer transaction abort rolls back with SQLSTATE 22P02 leaving 0 authorizations and 16 domain tables unchanged; T10B injected fixture trigger rolls back with SQLSTATE P7777 / REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE leaving 0 authorizations and 16 domain tables unchanged; T10C clean issuance leaves 0 mutations across all 16 scoped domain tables"
+        "evidence": "UPDATE and DELETE rejected on evidence and authorizations by immutability triggers. T10A outer transaction abort witnesses complete issuance row and restricted same-transaction replay (replayed=true) before injecting invalid cast SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back leaving 0 authorizations and all 16 scoped domain tables unchanged; negative control proves substituted pre-issuance 22P02 is rejected by demonstration path leaving 0 authorizations and 16 scoped domain tables unchanged. T10B injected fixture trigger rolls back with SQLSTATE P7777 / REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE leaving 0 authorizations and 16 scoped domain tables unchanged. T10C clean issuance leaves 0 mutations across all 16 scoped domain tables."
       }
     }
   },
@@ -277,22 +277,22 @@
     {
       "invariant": "Concurrent identical issuance requests serialize via reservation root lock and converge safely",
       "attribution": "TEST",
-      "evidence": "Two real connections execute identical command concurrently; Connection B observed actively waiting on lock in pg_locks/pg_stat_activity; both converge with one inserted, one replayed, 1 row total; verified in focused test T09a"
+      "evidence": "Two real connections execute identical command concurrently; Connection B observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; both converge with one inserted, one replayed, 1 row total; verified in focused test T09a"
     },
     {
       "invariant": "Competing distinct issuance requests for the same reservation are rejected",
       "attribution": "TEST",
-      "evidence": "Second distinct command for same reservation raises REFUND_ALREADY_AUTHORIZED; verified in focused test T09b"
+      "evidence": "Two real connections execute distinct commands concurrently; Connection B observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; Connection A commits (1 authorization persisted), Connection B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; verified in focused test T09b"
     },
     {
-      "invariant": "Transaction rollback on outer failure leaves zero persisted authorizations and leaves 16 domain tables unchanged",
+      "invariant": "Transaction rollback on outer failure leaves zero persisted authorizations and leaves all 16 scoped domain tables unchanged",
       "attribution": "TEST",
-      "evidence": "Outer transaction abort raises SQLSTATE 22P02, rolls back; verified 0 authorizations and exact 16-table snapshot equality in focused test T10A"
+      "evidence": "Outer transaction witnesses complete issuance row and restricted same-transaction replay before injecting SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back leaving 0 persisted authorizations and restoring all 16 scoped canonical domain tables; committed negative control rejects substituted pre-issuance error leaving 0 authorizations and all 16 scoped domain tables unchanged; verified in focused test T10A"
     },
     {
-      "invariant": "Transaction rollback on injected trigger failure leaves zero persisted authorizations and leaves 16 domain tables unchanged",
+      "invariant": "Transaction rollback on injected trigger failure leaves zero persisted authorizations and leaves all 16 scoped domain tables unchanged",
       "attribution": "TEST",
-      "evidence": "Injected trigger on authorizations raises SQLSTATE P7777, rolls back; verified 0 authorizations and exact 16-table snapshot equality in focused test T10B"
+      "evidence": "Injected BEFORE INSERT trigger on authorizations raises SQLSTATE P7777 / REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE, rolls back; verified 0 persisted authorizations and exact 16 scoped domain table snapshot equality in focused test T10B"
     },
     {
       "invariant": "Successful refund authorization issuance causes zero mutation across all 16 canonical domain tables",
@@ -321,7 +321,7 @@
     }
   ],
   "trustBoundariesAndLimitations": {
-    "syntheticEvidenceBoundary": "Decision evidence admitted in local testing is explicitly classified LOCAL_SYNTHETIC_TEST_FIXTURE with verifying component DISPOSABLE_TEST_FIXTURE_RUNNER. It does NOT represent a real founder or human approval.",
+    "syntheticEvidenceBoundary": "Decision evidence admitted in local testing is explicitly classified LOCAL_SYNTHETIC_TEST_FIXTURE with verifying component REFUND_DECISION_AUTHORITY_PRIMITIVE. It does NOT represent a real founder or human approval.",
     "missingApprovalRegistrar": "Production approval registrar is NOT implemented in this slice. A future dedicated registrar service must verify real human financial approval and write ACCOMMODATION_FINANCE_APPROVAL_RECORD evidence.",
     "zeroMoneyMovement": "This slice authorizes refund intent within the canonical database only. Zero money movement, zero Razorpay/Stripe API dispatch, zero payout execution, zero wallet crediting, and zero ledger settlement occur.",
     "noRemainingRefundableBalanceAccounting": "This slice does not maintain a cumulative refund ledger or remaining refundable balance. Future slices must enforce partial-refund accounting before settlement.",
