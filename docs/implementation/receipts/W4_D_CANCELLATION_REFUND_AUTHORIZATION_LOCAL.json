@@ -132,20 +132,20 @@
   },
   "rolePrivileges": {
     "roleName": "encho_refund_issuer",
-    "provisioningSemantics": "The role encho_refund_issuer is not created by migration 061. Migration 061 validates and grants USAGE on schema public and EXECUTE on issue_cancellation_refund_authorization only if encho_refund_issuer already exists with least-privilege properties (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION). Disposable test fixture provisions the role locally; production role provisioning is not evaluated. Runtime privilege probes independently verify 42501 denial on all direct table DML and ungranted schema access.",
+    "provisioningSemantics": "Migration 061 does not CREATE the role encho_refund_issuer; its DO block validates least-privilege properties (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION) and grants USAGE on schema public and EXECUTE on issue_cancellation_refund_authorization only if encho_refund_issuer already exists in the database. When the role is absent, the grant block is safely skipped. The disposable test fixture provisions the role locally for test execution. Production role provisioning is not evaluated.",
     "grants": [
       "GRANT USAGE ON SCHEMA public TO encho_refund_issuer",
       "GRANT EXECUTE ON FUNCTION issue_cancellation_refund_authorization(UUID, UUID, UUID) TO encho_refund_issuer"
     ],
     "absenceOfExtraPrivileges": {
-      "tableDml": "ZERO direct INSERT, UPDATE, DELETE, or SELECT on canonical_cancellation_refund_decision_evidence, canonical_cancellation_refund_authorizations, canonical_reservations, canonical_reservation_nights, canonical_payment_attempts, canonical_payment_reservations, canonical_provider_events, booking_holds, inventory_days, or stays_quotes",
+      "tableDml": "Migration 061 grants zero table permissions to encho_refund_issuer. In migration validation DO block: SELECT, INSERT, UPDATE, DELETE privileges are checked absent on the two new tables and canonical_reservation_nights; INSERT, UPDATE, DELETE privileges are checked absent on canonical_reservations, canonical_payment_attempts, canonical_payment_reservations, canonical_provider_events, booking_holds, inventory_days, and stays_quotes (global absence of SELECT across existing relations is not claimed). Runtime probes in focused test T03c directly verify 42501 denial on SELECT, INSERT, UPDATE, and DELETE across both new tables.",
       "schemaCreate": "ZERO CREATE on schema public or current_database()",
       "superuser": "NOT rolsuper, NOT rolbypassrls, NOT rolcreatedb, NOT rolcreaterole, NOT rolreplication"
     }
   },
   "focusedTestResults": {
     "script": "scripts/testing/w4d-cancellation-refund-authorization.mjs",
-    "sha256": "a5d025567270f7fe6a5f531dbfae4123e0e6333325b7d2c59a2a114defdaedcd",
+    "sha256": "32d9b87c43ad1dc136c4513d559ef7f9a3f00828c47afcaad07b9dddf6c569a5",
     "testRunner": "node --import tsx --test scripts/testing/w4d-cancellation-refund-authorization.mjs",
     "status": "PASS",
     "passedTests": 1,
@@ -162,14 +162,14 @@
         "evidence": "2-night reservation with 1,100,000 paise room subtotal and 1,300,000 paise payable authority; approved amount 1,200,000 paise exceeds room subtotal but remains within captured ceiling; successfully authorized"
       },
       "T03": {
-        "title": "Missing/forged approval, permission denials, inner role guard, and decision_ref check constraint",
+        "title": "Missing/forged approval, authenticated DB role permission denials, and decision_ref check constraint",
         "result": "PASS",
-        "evidence": "Non-existent evidence rejected; unauthenticated caller rejected with 42501; role without issuer permission rejected with REFUND_ISSUER_UNAUTHORIZED; issuer direct INSERT/UPDATE/DELETE/SELECT on evidence and authorization tables denied with 42501; empty string and whitespace-only decision_ref rejected with SQLSTATE 23514"
+        "evidence": "Non-existent evidence rejected with DECISION_EVIDENCE_NOT_FOUND; unapproved submitting component rejected by check constraint; unprivileged authenticated database roles (composition worker, payment worker, stays web, reservation worker) denied with 42501 under normal ACLs; issuer direct SELECT/INSERT/UPDATE/DELETE on both new tables denied with 42501; empty string and whitespace-only decision_ref rejected with SQLSTATE 23514"
       },
       "T04": {
-        "title": "Cross-resource evidence/authorization insert rejection",
+        "title": "Cross-resource evidence and authorization insert rejection",
         "result": "PASS",
-        "evidence": "Independent database triggers reject mismatched reservation, mismatched cancellation release, mismatched paid bridge, mismatched payment attempt, and mismatched capture ref on both tables"
+        "evidence": "Independent database triggers reject executable cross-binding substitutions: wrong reservation cancellation release in evidence (RELEASE_RESERVATION_MISMATCH), wrong reservation paid bridge in evidence (BRIDGE_RESERVATION_MISMATCH), and mismatched reservation in owner authorization insert (AUTH_RESERVATION_MISMATCH)"
       },
       "T05": {
         "title": "Natural scope exclusions: ACTIVE/request-only, external, direct-only, and V2 exclusions without disabling triggers",
@@ -177,7 +177,7 @@
         "evidence": "ACTIVE uncancelled reservation rejected at trigger with CANCELLATION_RELEASE_NOT_FOUND; REQUEST-ONLY reservation rejected with CANCELLATION_RELEASE_NOT_FOUND; direct-finalizer-only rejected with PAID_BRIDGE_NOT_FOUND; external channel reservation rejected with LIFECYCLE_ORIGIN_NOT_SUPPORTED; naturally assembled and sealed V2 reservation cancellation rejected at issuance with V2_CANCELLATION_RELEASE_EXCLUDED; zero triggers or foreign keys disabled"
       },
       "T06": {
-        "title": "Invalid amount/currency, conflicting capture, unresolved reconciliation",
+        "title": "Excess approved amount, conflicting capture, unresolved reconciliation, visible cross-attempt alias",
         "result": "PASS",
         "evidence": "Approved amount > capture ceiling rejected with REFUND_AMOUNT_EXCEEDS_CAPTURE; natural conflicting capture transitions attempt to RECONCILIATION_REQUIRED and is rejected with PAYMENT_STATE_NOT_MATCHED_CAPTURE; unresolved reconciliation in table rejected with PAYMENT_RECONCILIATION_UNRESOLVED; visible cross-attempt alias rejected with CAPTURE_CROSS_ATTEMPT_ALIAS_AMBIGUOUS without trigger tampering"
       },
@@ -192,14 +192,14 @@
         "evidence": "Later conflicting capture ingested on the exact same payment attempt transitions it to RECONCILIATION_REQUIRED; replaying the original command succeeds with replayed = true returning identical authorization; verified count(*) remains exactly 1 with 0 new rows added; replay with changed semantics rejected with REFUND_COMMAND_CONFLICT; unauthorized caller replay attempt rejected with 42501"
       },
       "T09": {
-        "title": "Two real connections: identical converge under active lock contention, competing blocked",
+        "title": "Concurrency on two real connections: identical race convergence, fresh distinct contention, and cleanup",
         "result": "PASS",
-        "evidence": "Connection A holds open transaction with row lock; Connection B attempts identical command concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; Connection A commits, Connection B converges cleanly (one insertion, one recovery replay, 1 row total). Competing distinct-command contention: Connection A holds open transaction with distinct command; Connection B attempts distinct command concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; Connection A commits (persisting 1 authorization), Connection B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; sequential distinct command attempt on already-authorized reservation also rejected with REFUND_ALREADY_AUTHORIZED"
+        "evidence": "T09a (identical commands): Connection A holds open transaction with row lock; Connection B executes identical command concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before A commits; A commits, B unblocks and completes (one insertion, one recovery replay, exactly 1 row total; unique_violation recovery not inferred as reservation-root serialization may resolve race before insert). T09b (distinct commands): fresh paid V1 cancellation; Connection A holds open transaction with command A; Connection B executes distinct command B concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before A commits; A commits, B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; exact replay of command A returns same authorization with replayed = true; declared scoped existing-domain snapshot is unchanged. T09c (failure cleanup): controlled deliberate observer-failure demonstration verifies that deliberate assertion failure triggers ordered rollback, settles queries, leaves zero surviving authorizations, leaves no retained open transactions or active backends, and restores scoped snapshot. T09d: sequential distinct command attempt against already-authorized reservation rejected with REFUND_ALREADY_AUTHORIZED."
       },
       "T10": {
         "title": "Immutability, structured injected rollbacks, and zero domain row mutation across 16 tables",
         "result": "PASS",
-        "evidence": "UPDATE and DELETE rejected on evidence and authorizations by immutability triggers. T10A outer transaction abort witnesses complete issuance row and restricted same-transaction replay (replayed=true) before injecting invalid cast SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back leaving 0 authorizations and all 16 scoped domain tables unchanged; negative control proves substituted pre-issuance 22P02 is rejected by demonstration path leaving 0 authorizations and 16 scoped domain tables unchanged. T10B injected fixture trigger rolls back with SQLSTATE P7777 / REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE leaving 0 authorizations and 16 scoped domain tables unchanged. T10C clean issuance leaves 0 mutations across all 16 scoped domain tables."
+        "evidence": "UPDATE and DELETE rejected on evidence and authorizations tables by immutability triggers (T10C). T10A outer transaction rollback: asserts complete initial issuance row and witnesses restricted same-transaction replay (replayed = true) before injecting invalid cast SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back transaction, leaving zero authorizations for command, zero authorizations for scoped subject, and all 16 scoped canonical domain tables restored; committed negative control exercises identical demonstration path with substituted pre-issuance error, detecting lack of issuance witness and intentional_abort marker, leaving 0 authorizations and 16 scoped domain tables unchanged. T10B insertion-stage failure: fixture-only BEFORE INSERT trigger raises exact SQLSTATE P7777 / REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE; rolls back leaving 0 authorizations and 16 scoped domain tables restored. T10C clean issuance: leaves 0 mutations across all 16 scoped canonical domain tables."
       }
     }
   },
@@ -220,24 +220,44 @@
       "evidence": "Trigger trg_canonical_refund_authorizations_immutable raises CANONICAL_REFUND_AUTHORIZATION_IMMUTABLE; verified in focused test T10C"
     },
     {
-      "invariant": "Cross-resource consistency between decision evidence and canonical records is enforced by database trigger",
-      "attribution": "SCHEMA_CONSTRAINT",
-      "evidence": "Trigger trg_canonical_refund_decision_evidence_before_insert validates cancellation release, paid bridge, quote, payable authority, and supporting provider event; verified in focused test T04"
-    },
-    {
-      "invariant": "Cross-resource consistency between authorization and decision evidence is enforced by database trigger",
-      "attribution": "SCHEMA_CONSTRAINT",
-      "evidence": "Trigger trg_canonical_refund_authorizations_before_insert validates evidence bindings; verified in focused test T04"
-    },
-    {
-      "invariant": "Issuance routine enforces strict caller role gate (session_user must have encho_refund_issuer)",
+      "invariant": "Cross-resource consistency between decision evidence and canonical records (executable substitution subset)",
       "attribution": "TEST",
-      "evidence": "issue_cancellation_refund_authorization validates session_user = 'encho_refund_issuer' OR pg_has_role; verified in focused test T03b (42501) and T03e (REFUND_ISSUER_UNAUTHORIZED)"
+      "evidence": "Database trigger trg_canonical_refund_decision_evidence_before_insert rejects executable wrong-reservation cancellation release (RELEASE_RESERVATION_MISMATCH) and wrong-reservation paid bridge (BRIDGE_RESERVATION_MISMATCH); verified in focused test T04"
     },
     {
-      "invariant": "Only completed V1 ENCHO_DIRECT cancellations are eligible for cancellation refund authorization",
+      "invariant": "Cross-resource consistency between decision evidence and canonical records (complete binding guards)",
+      "attribution": "SQL_REVIEW",
+      "evidence": "Trigger trg_canonical_refund_decision_evidence_before_insert exhaustively verifies quote_id, payable_authority_id, payment_attempt_id, and supporting provider event against canonical records; verified via SQL_REVIEW"
+    },
+    {
+      "invariant": "Cross-resource consistency between authorization and decision evidence (executable substitution subset)",
       "attribution": "TEST",
-      "evidence": "issue_cancellation_refund_authorization rejects ACTIVE reservations, REQUEST-ONLY reservations, direct-finalizer-only reservations, external channel reservations, and sealed V2+ cancellations; verified in focused test T05a-e"
+      "evidence": "Database trigger trg_canonical_refund_authorizations_before_insert rejects mismatched reservation in direct owner authorization insert (AUTH_RESERVATION_MISMATCH); verified in focused test T04"
+    },
+    {
+      "invariant": "Cross-resource consistency between authorization and decision evidence (complete binding guards)",
+      "attribution": "SQL_REVIEW",
+      "evidence": "Trigger trg_canonical_refund_authorizations_before_insert exhaustively validates that cancellation_release_id, paid_bridge_id, and payment_attempt_id match the admitted decision evidence record; verified via SQL_REVIEW"
+    },
+    {
+      "invariant": "Issuance routine execution denied to unprivileged authenticated database roles with SQLSTATE 42501 under normal ACLs",
+      "attribution": "TEST",
+      "evidence": "Runtime execution of issue_cancellation_refund_authorization denied with SQLSTATE 42501 for unprivileged authenticated database roles (composition worker, payment worker, stays web, reservation worker) under normal grants; verified in focused test T03d"
+    },
+    {
+      "invariant": "Issuance routine enforces inner caller role gate (session_user must have role encho_refund_issuer)",
+      "attribution": "SQL_REVIEW",
+      "evidence": "issue_cancellation_refund_authorization PL/pgSQL header asserts session_user = 'encho_refund_issuer' OR pg_has_role(session_user, 'encho_refund_issuer', 'MEMBER') raising REFUND_ISSUER_UNAUTHORIZED; verified via SQL_REVIEW"
+    },
+    {
+      "invariant": "Natural scope exclusions enforced at their respective domain and admission boundaries",
+      "attribution": "TEST",
+      "evidence": "ACTIVE uncancelled reservation rejected at decision evidence admission trigger with CANCELLATION_RELEASE_NOT_FOUND; REQUEST-ONLY reservation rejected at decision evidence admission trigger with CANCELLATION_RELEASE_NOT_FOUND; direct-finalizer-only reservation rejected at decision evidence admission trigger with PAID_BRIDGE_NOT_FOUND; external channel reservation rejected at accepted upstream cancellation lifecycle with LIFECYCLE_ORIGIN_NOT_SUPPORTED; sealed V2 cancellation rejected at refund issuance routine with V2_CANCELLATION_RELEASE_EXCLUDED; zero triggers or foreign keys disabled; verified in focused test T05a-e"
+    },
+    {
+      "invariant": "Refund currency restricted strictly to INR (Indian Rupee)",
+      "attribution": "SCHEMA_CONSTRAINT",
+      "evidence": "canonical_cancellation_refund_authorizations table has CHECK (currency = 'INR') and issue_cancellation_refund_authorization asserts currency = 'INR'; verified via SCHEMA_CONSTRAINT and SQL_REVIEW"
     },
     {
       "invariant": "Approved refund amount cannot exceed authoritative captured amount ceiling",
@@ -250,14 +270,14 @@
       "evidence": "issue_cancellation_refund_authorization checks payment_state, reconciliation_reason, and canonical_payment_reconciliations table; verified in focused test T06b"
     },
     {
-      "invariant": "Duplicate captures on the same attempt do not sum to create inflated refund ceiling",
+      "invariant": "Duplicate captures on the same attempt require a single coherent distinct amount and do not sum to enlarge refund ceiling",
       "attribution": "TEST",
-      "evidence": "issue_cancellation_refund_authorization takes the maximum individual captured amount; verified in focused test T07"
+      "evidence": "issue_cancellation_refund_authorization checks count(DISTINCT provider_amount_paise) = 1 across PROCESSED capture events and rejects conflicting amounts; does not sum captures or select MAX(); verified in focused test T07"
     },
     {
       "invariant": "Ambiguous cross-attempt alias of capture reference is detected and rejected",
       "attribution": "TEST",
-      "evidence": "issue_cancellation_refund_authorization verifies distinct payment_attempt_id count is exactly 1; verified in focused test T06c"
+      "evidence": "issue_cancellation_refund_authorization uses EXISTS to detect another PROCESSED provider event with the same provider_origin_kind and provider_payment_ref on a different payment_attempt_id, raising CAPTURE_CROSS_ATTEMPT_ALIAS_AMBIGUOUS; verified in focused test T06c"
     },
     {
       "invariant": "Exact command replay returns existing committed authorization without re-issuing or mutating state",
@@ -277,17 +297,22 @@
     {
       "invariant": "Concurrent identical issuance requests serialize via reservation root lock and converge safely",
       "attribution": "TEST",
-      "evidence": "Two real connections execute identical command concurrently; Connection B observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; both converge with one inserted, one replayed, 1 row total; verified in focused test T09a"
+      "evidence": "Two real connections execute identical command concurrently; Connection B observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; both converge with one inserted, one replayed, 1 row total (unique_violation recovery not inferred as reservation-root serialization may resolve race before insert); verified in focused test T09a"
     },
     {
-      "invariant": "Competing distinct issuance requests for the same reservation are rejected",
+      "invariant": "Competing distinct issuance requests for the same reservation are rejected under active concurrency",
       "attribution": "TEST",
-      "evidence": "Two real connections execute distinct commands concurrently; Connection B observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; Connection A commits (1 authorization persisted), Connection B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; verified in focused test T09b"
+      "evidence": "Two real connections execute distinct commands concurrently against fresh paid V1 cancellation; Connection B observed waiting on Lock with Connection A in pg_blocking_pids before Connection A commits; Connection A commits (1 authorization persisted), Connection B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; exact replay of command A returns same authorization with replayed = true; declared scoped existing-domain snapshot is unchanged; verified in focused test T09b"
+    },
+    {
+      "invariant": "Controlled deliberate observer-failure triggers ordered transaction rollback, query settlement, and clean pool disposal",
+      "attribution": "TEST",
+      "evidence": "Injected observer assertion failure in runTwoConnectionRace triggers ordered rollback releasing locks, settles blocked in-flight query, rolls back second connection, verifies zero surviving authorizations for command and reservation, leaves no active or in-transaction backends, and restores declared 16-table scoped snapshot; verified in focused test T09c"
     },
     {
       "invariant": "Transaction rollback on outer failure leaves zero persisted authorizations and leaves all 16 scoped domain tables unchanged",
       "attribution": "TEST",
-      "evidence": "Outer transaction witnesses complete issuance row and restricted same-transaction replay before injecting SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back leaving 0 persisted authorizations and restoring all 16 scoped canonical domain tables; committed negative control rejects substituted pre-issuance error leaving 0 authorizations and all 16 scoped domain tables unchanged; verified in focused test T10A"
+      "evidence": "Outer transaction witnesses complete issuance row and restricted same-transaction replay (replayed = true) before injecting SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back leaving 0 persisted authorizations for command and scoped subject, and restoring all 16 scoped canonical domain tables; committed negative control detects absent issuance witness on pre-issuance 22P02, rejecting invalid demonstration while leaving 0 authorizations and all 16 scoped domain tables unchanged; verified in focused test T10A"
     },
     {
       "invariant": "Transaction rollback on injected trigger failure leaves zero persisted authorizations and leaves all 16 scoped domain tables unchanged",
@@ -302,7 +327,7 @@
     {
       "invariant": "Restricted issuer role encho_refund_issuer has least privilege and zero raw DML permissions",
       "attribution": "SQL_REVIEW",
-      "evidence": "Migration 061 DO block validates encho_refund_issuer is non-superuser, non-bypassrls, has no CREATE on public or database, and zero table DML; verified in SQL review and focused test T03c-e"
+      "evidence": "Migration 061 DO block validates encho_refund_issuer is non-superuser, non-bypassrls, has no CREATE on public or database, and zero table DML; runtime probes verify 42501 denial on SELECT, INSERT, UPDATE, and DELETE across both new tables; verified in SQL review and focused test T03c-d"
     },
     {
       "invariant": "Production human approval registrar and registration workflow",
@@ -321,8 +346,8 @@
     }
   ],
   "trustBoundariesAndLimitations": {
-    "syntheticEvidenceBoundary": "Decision evidence admitted in local testing is explicitly classified LOCAL_SYNTHETIC_TEST_FIXTURE with verifying component REFUND_DECISION_AUTHORITY_PRIMITIVE. It does NOT represent a real founder or human approval.",
-    "missingApprovalRegistrar": "Production approval registrar is NOT implemented in this slice. A future dedicated registrar service must verify real human financial approval and write ACCOMMODATION_FINANCE_APPROVAL_RECORD evidence.",
+    "syntheticEvidenceBoundary": "Decision evidence admitted in local testing is explicitly classified LOCAL_SYNTHETIC_TEST_FIXTURE with verifying component REFUND_DECISION_AUTHORITY_PRIMITIVE (not DISPOSABLE_TEST_FIXTURE_RUNNER). It remains synthetic evidence and does NOT represent a real founder or human approval.",
+    "missingApprovalRegistrar": "Production approval registrar is NOT implemented in this slice. Current schema and check constraint permit LOCAL_SYNTHETIC_TEST_FIXTURE only; a future real approval registrar needs a later approved contract and schema change before any real approval classification can be admitted. Zero real human approval is registered or admitted.",
     "zeroMoneyMovement": "This slice authorizes refund intent within the canonical database only. Zero money movement, zero Razorpay/Stripe API dispatch, zero payout execution, zero wallet crediting, and zero ledger settlement occur.",
     "noRemainingRefundableBalanceAccounting": "This slice does not maintain a cumulative refund ledger or remaining refundable balance. Future slices must enforce partial-refund accounting before settlement.",
     "publicSurface": "Zero public HTTP/REST/GraphQL routes or UI elements are exposed. All functionality is internal database routines under role encho_refund_issuer."

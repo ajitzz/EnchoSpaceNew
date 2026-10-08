@@ -702,56 +702,26 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         }
       );
 
-      // 3d. Non-issuer runtime roles calling issue_cancellation_refund_authorization
-      await assert.rejects(
-        () => compositionWorker.query(
-          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [randomUUID(), paidResT3.reservationId, randomUUID()]
-        ),
-        (err) => {
-          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) for composition worker');
-          return true;
-        }
-      );
-      await assert.rejects(
-        () => paymentWorker.query(
-          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [randomUUID(), paidResT3.reservationId, randomUUID()]
-        ),
-        (err) => {
-          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) for payment worker');
-          return true;
-        }
-      );
-      await assert.rejects(
-        () => stays.query(
-          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [randomUUID(), paidResT3.reservationId, randomUUID()]
-        ),
-        (err) => {
-          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) for stays web role');
-          return true;
-        }
-      );
-
-      // 3e. Inner domain role guard: role granted EXECUTE but session_user is not member of encho_refund_issuer
-      await fixture.owner.query(`GRANT EXECUTE ON FUNCTION issue_cancellation_refund_authorization TO encho_reservation_worker`);
-      try {
+      // 3d. Non-issuer runtime roles calling issue_cancellation_refund_authorization denied with 42501 under normal ACLs
+      for (const [roleName, pool] of [
+        ['composition worker', compositionWorker],
+        ['payment worker', paymentWorker],
+        ['stays web', stays],
+        ['reservation worker', reservationWorker],
+      ]) {
         await assert.rejects(
-          () => reservationWorker.query(
+          () => pool.query(
             `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
             [randomUUID(), paidResT3.reservationId, randomUUID()]
           ),
           (err) => {
-            assert.match(err.message, /REFUND_ISSUER_UNAUTHORIZED/);
+            assert.equal(err.code, '42501', `Must fail with permission denied (42501) for ${roleName}`);
             return true;
           }
         );
-      } finally {
-        await fixture.owner.query(`REVOKE EXECUTE ON FUNCTION issue_cancellation_refund_authorization FROM encho_reservation_worker`);
       }
 
-      // 3f. W4D-01 Negative admission test: empty string or whitespace-only decision_ref rejected by check constraint
+      // 3e. W4D-01 Negative admission test: empty string or whitespace-only decision_ref rejected by check constraint
       for (const invalidDecisionRef of ['', '   ']) {
         await assert.rejects(
           () => insertSyntheticDecisionEvidence({
@@ -1475,12 +1445,211 @@ test('W4-D canonical cancellation refund authorization verification', async () =
     }
 
     // =========================================================================
-    // T09: TWO REAL CONNECTIONS: IDENTICAL CONVERGE, COMPETING BLOCKED
+    // T09: CONCURRENCY ON TWO REAL CONNECTIONS: IDENTICAL, DISTINCT, AND CLEANUP
     // =========================================================================
     {
+      // Local race runner enforcing timeouts, bounded observation, and ordered cleanup
+      const runTwoConnectionRace = async ({
+        cmdA,
+        cmdB,
+        reservationId,
+        evidenceId,
+        triggerDeliberateObserverFailure = false,
+      }) => {
+        let connA = null;
+        let connB = null;
+        let connBPromise = null;
+        let settledB = false;
+        let resA = null;
+        let resB = null;
+        let errB = null;
+        let primaryError = null;
+        let releasedA = false;
+        let releasedB = false;
+
+        try {
+          // Protect partial acquisition: acquire connA, then connB
+          connA = await refundIssuer.connect();
+          connB = await refundIssuer.connect();
+
+          const pidA = (await connA.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+          const pidB = (await connB.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+
+          // Set effective SQL timeouts inside open transactions on actual relevant connections
+          await connA.query('BEGIN');
+          await connA.query("SET LOCAL statement_timeout = '10000ms'");
+          await connA.query("SET LOCAL lock_timeout = '10000ms'");
+          const stA = (await connA.query("SELECT current_setting('statement_timeout') AS st")).rows[0].st;
+          assert.ok(stA && stA !== '0', 'Effective statement_timeout must be non-zero on connA');
+
+          await connB.query('BEGIN');
+          await connB.query("SET LOCAL statement_timeout = '10000ms'");
+          await connB.query("SET LOCAL lock_timeout = '10000ms'");
+          const stB = (await connB.query("SELECT current_setting('statement_timeout') AS st")).rows[0].st;
+          assert.ok(stB && stB !== '0', 'Effective statement_timeout must be non-zero on connB');
+
+          // Connection A executes issuance but holds transaction open (holding row locks)
+          resA = (
+            await connA.query(
+              `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+              [cmdA, reservationId, evidenceId]
+            )
+          ).rows[0];
+
+          // Connection B starts command B in background transaction with immediate outcome handler attached
+          connBPromise = connB.query(
+            `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+            [cmdB, reservationId, evidenceId]
+          ).then(
+            (r) => {
+              settledB = true;
+              resB = r.rows[0];
+              return resB;
+            },
+            (e) => {
+              settledB = true;
+              errB = e;
+              throw e;
+            }
+          );
+          // Suppress unhandled rejection while B is blocked waiting on lock
+          connBPromise.catch(() => {});
+
+          // Actively observe B waiting on Lock specifically blocked by A before committing A
+          let observedBlocker = false;
+          const maxAttempts = 50;
+          const pollIntervalMs = 50;
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            // Bound the observer predicate query with statement_timeout
+            const act = (await fixture.owner.query({
+              text: `SELECT wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+                     FROM pg_stat_activity
+                     WHERE pid = $1`,
+              values: [pidB],
+              statement_timeout: 5000,
+            })).rows[0];
+
+            if (
+              act &&
+              act.wait_event_type === 'Lock' &&
+              Array.isArray(act.blockers) &&
+              act.blockers.map(Number).includes(Number(pidA))
+            ) {
+              observedBlocker = true;
+              break;
+            }
+            await new Promise((r) => setTimeout(r, pollIntervalMs));
+          }
+
+          assert.equal(
+            observedBlocker,
+            true,
+            'Connection B must be observed waiting on Lock with Connection A in pg_blocking_pids before A commits'
+          );
+
+          if (triggerDeliberateObserverFailure) {
+            throw new Error('DELIBERATE_OBSERVER_FAILURE: Simulated assertion failure during lock observation');
+          }
+
+          // Connection A commits, releasing its locks
+          await connA.query('COMMIT');
+
+          // Settle Connection B
+          try {
+            await connBPromise;
+          } catch (e) {
+            // errB is already captured
+          }
+
+          if (cmdA === cmdB) {
+            // Identical commands: B commits its replay recovery
+            await connB.query('COMMIT');
+          } else {
+            // Distinct commands: B rolls back its rejected transaction
+            await connB.query('ROLLBACK');
+          }
+
+          return {
+            resA,
+            resB,
+            errB,
+            pidA,
+            pidB,
+          };
+        } catch (err) {
+          primaryError = err;
+          throw err;
+        } finally {
+          const cleanupErrors = [];
+
+          // 1. Roll back A first to release its locks (allowing B to unblock if still waiting)
+          if (connA) {
+            try {
+              await connA.query('ROLLBACK');
+            } catch (rbErr) {
+              cleanupErrors.push(rbErr);
+            }
+          }
+
+          // 2. Observe and settle B's already-started query
+          if (connBPromise && !settledB) {
+            try {
+              await connBPromise;
+            } catch (e) {
+              // query settled
+            }
+          }
+
+          // 3. Roll back B after its query settles
+          if (connB) {
+            try {
+              await connB.query('ROLLBACK');
+            } catch (rbErr) {
+              cleanupErrors.push(rbErr);
+            }
+          }
+
+          // 4 & 5. Verify transaction cleanliness before ordinary release; discard unusable client through pool API
+          if (connA && !releasedA) {
+            releasedA = true;
+            try {
+              await connA.query({ text: 'SELECT 1', statement_timeout: 2000 });
+              connA.release();
+            } catch (cleanErr) {
+              cleanupErrors.push(cleanErr);
+              try {
+                connA.release(cleanErr);
+              } catch (e) {}
+            }
+          }
+
+          if (connB && !releasedB) {
+            releasedB = true;
+            try {
+              await connB.query({ text: 'SELECT 1', statement_timeout: 2000 });
+              connB.release();
+            } catch (cleanErr) {
+              cleanupErrors.push(cleanErr);
+              try {
+                connB.release(cleanErr);
+              } catch (e) {}
+            }
+          }
+
+          // 8. Preserve cleanup failures alongside primary failure
+          if (cleanupErrors.length > 0) {
+            if (!primaryError) {
+              throw new Error(`CLEANUP_FAILED: ${cleanupErrors.map((e) => e.message).join('; ')}`);
+            } else {
+              primaryError.cleanupErrors = cleanupErrors;
+            }
+          }
+        }
+      };
+
+      // 9a. Identical-command race on two real connections: converge cleanly
       const paidResT9 = await createPaidReservation({nights: 2});
       const cancelInfoT9 = await cancelReservationV1(paidResT9.reservationId);
-
       const evidenceT9 = await insertSyntheticDecisionEvidence({
         reservationId: paidResT9.reservationId,
         cancellationEventId: cancelInfoT9.cancellationEventId,
@@ -1496,91 +1665,29 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         approvedAmountPaise: paidResT9.capturedAmountPaise,
       });
 
-      // 9a. Two real connections with IDENTICAL command converge with active blocker observation
-      const conn1 = await refundIssuer.connect();
-      const conn2 = await refundIssuer.connect();
       const identicalCmd = randomUUID();
-      let conn2Promise = null;
+      const raceResult9a = await runTwoConnectionRace({
+        cmdA: identicalCmd,
+        cmdB: identicalCmd,
+        reservationId: paidResT9.reservationId,
+        evidenceId: evidenceT9.id,
+      });
 
-      try {
-        const pid1 = (await conn1.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-        const pid2 = (await conn2.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      assert.equal(raceResult9a.resA.authorization_id, raceResult9a.resB.authorization_id);
+      const replays = [raceResult9a.resA.replayed, raceResult9a.resB.replayed].sort();
+      assert.deepEqual(replays, [false, true], 'One insertion, one recovery replay');
 
-        // Conn1 begins and executes issuance but holds transaction open (holding row locks)
-        await conn1.query('BEGIN');
-        const res1 = (
-          await conn1.query(
-            `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-            [identicalCmd, paidResT9.reservationId, evidenceT9.id]
-          )
-        ).rows[0];
+      const countAuthT9 = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+          [paidResT9.reservationId]
+        )
+      ).rows[0].count;
+      assert.equal(Number(countAuthT9), 1, 'Exactly one authorization must exist');
 
-        // Conn2 attempts identical command concurrently in transaction
-        await conn2.query('BEGIN');
-        conn2Promise = conn2.query(
-          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [identicalCmd, paidResT9.reservationId, evidenceT9.id]
-        );
-        conn2Promise.catch(() => {});
-
-        // Actively observe lock contention on Connection B (pid2) specifically blocked by Connection A (pid1)
-        let observedBlocker9a = false;
-        for (let attempt = 0; attempt < 50; attempt++) {
-          const act = (await fixture.owner.query(
-            `SELECT wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
-             FROM pg_stat_activity
-             WHERE pid = $1`,
-            [pid2]
-          )).rows[0];
-
-          if (
-            act &&
-            act.wait_event_type === 'Lock' &&
-            Array.isArray(act.blockers) &&
-            act.blockers.map(Number).includes(Number(pid1))
-          ) {
-            observedBlocker9a = true;
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 50));
-        }
-        assert.equal(
-          observedBlocker9a,
-          true,
-          'Connection B must be observed waiting on Lock with Connection A in pg_blocking_pids before A commits'
-        );
-
-        // Conn1 commits, releasing lock
-        await conn1.query('COMMIT');
-
-        // Conn2 unblocks and completes
-        const res2 = (await conn2Promise).rows[0];
-        await conn2.query('COMMIT');
-
-        assert.equal(res1.authorization_id, res2.authorization_id);
-        const replays = [res1.replayed, res2.replayed].sort();
-        assert.deepEqual(replays, [false, true], 'One insertion, one recovery replay');
-
-        const countAuthT9 = (
-          await fixture.owner.query(
-            `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
-            [paidResT9.reservationId]
-          )
-        ).rows[0].count;
-        assert.equal(Number(countAuthT9), 1, 'Exactly one authorization must exist');
-      } finally {
-        await Promise.allSettled([
-          conn1.query('ROLLBACK').catch(() => {}),
-          conn2.query('ROLLBACK').catch(() => {}),
-        ]);
-        conn1.release();
-        conn2.release();
-      }
-
-      // 9b. Competing distinct command contention on two real connections
+      // 9b. Competing distinct-command contention on two real connections using FRESH subject
       const paidResT9b = await createPaidReservation({nights: 2});
       const cancelInfoT9b = await cancelReservationV1(paidResT9b.reservationId);
-
       const evidenceT9b = await insertSyntheticDecisionEvidence({
         reservationId: paidResT9b.reservationId,
         cancellationEventId: cancelInfoT9b.cancellationEventId,
@@ -1596,104 +1703,144 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         approvedAmountPaise: paidResT9b.capturedAmountPaise,
       });
 
-      const connA = await refundIssuer.connect();
-      const connB = await refundIssuer.connect();
+      const snapshotBeforeT9b = await takeScopedDomainSnapshot(paidResT9b);
+
       const cmdA = randomUUID();
       const cmdB = randomUUID();
-      let connBPromise = null;
+      assert.notEqual(cmdA, cmdB, 'Commands must be distinct');
 
-      try {
-        const pidA = (await connA.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-        const pidB = (await connB.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      const raceResult9b = await runTwoConnectionRace({
+        cmdA,
+        cmdB,
+        reservationId: paidResT9b.reservationId,
+        evidenceId: evidenceT9b.id,
+      });
 
-        // 1. Connection A begins a transaction and issues command A
-        await connA.query('BEGIN');
-        const resA = (
-          await connA.query(
-            `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-            [cmdA, paidResT9b.reservationId, evidenceT9b.id]
-          )
-        ).rows[0];
+      assert.ok(raceResult9b.resA && raceResult9b.resA.authorization_id);
+      assert.equal(raceResult9b.resA.replayed, false);
+      assert.ok(raceResult9b.errB, 'Competing distinct command B must be rejected');
+      assert.match(raceResult9b.errB.message, /REFUND_ALREADY_AUTHORIZED/);
 
-        // 2. Keep A uncommitted.
-        // 3. Connection B starts different command B on the same subject.
-        await connB.query('BEGIN');
-        connBPromise = connB.query(
+      // After both settle: exactly one authorization exists and belongs to commandA
+      const authRows9b = (
+        await fixture.owner.query(
+          `SELECT * FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+          [paidResT9b.reservationId]
+        )
+      ).rows;
+      assert.equal(authRows9b.length, 1, 'Exactly one durable authorization must exist');
+      assert.equal(authRows9b[0].command_id, cmdA, 'Persisted authorization must belong to command A');
+      assert.equal(authRows9b[0].id, raceResult9b.resA.authorization_id);
+
+      // No authorization exists for commandB
+      const countCmdB = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [cmdB]
+        )
+      ).rows[0].count;
+      assert.equal(Number(countCmdB), 0, 'No authorization row may exist for competing command B');
+
+      // Exact replay of commandA returns the same authorization, replayed=true
+      const replayA = (
+        await refundIssuer.query(
           `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [cmdB, paidResT9b.reservationId, evidenceT9b.id]
-        );
-        connBPromise.catch(() => {});
+          [cmdA, paidResT9b.reservationId, evidenceT9b.id]
+        )
+      ).rows[0];
+      assert.equal(replayA.authorization_id, raceResult9b.resA.authorization_id);
+      assert.equal(replayA.replayed, true, 'Replay of command A must return replayed=true');
+      assert.equal(replayA.command_id, cmdA);
 
-        // 4. Observe B's actual database blocker before committing A:
-        //    observe B waiting on a Lock AND pg_blocking_pids(B) contains A
-        let observedBlocker9b = false;
-        for (let attempt = 0; attempt < 50; attempt++) {
-          const act = (await fixture.owner.query(
-            `SELECT wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
-             FROM pg_stat_activity
-             WHERE pid = $1`,
-            [pidB]
-          )).rows[0];
+      // Declared scoped existing-domain snapshot is unchanged
+      const snapshotAfterT9b = await takeScopedDomainSnapshot(paidResT9b);
+      assert.deepEqual(
+        snapshotBeforeT9b,
+        snapshotAfterT9b,
+        'Declared scoped existing-domain snapshot must be unchanged after distinct race settlement'
+      );
 
-          if (
-            act &&
-            act.wait_event_type === 'Lock' &&
-            Array.isArray(act.blockers) &&
-            act.blockers.map(Number).includes(Number(pidA))
-          ) {
-            observedBlocker9b = true;
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 50));
+      // 9c. Controlled deliberate observer-failure demonstration through actual race/cleanup path
+      const paidResFail = await createPaidReservation({nights: 2});
+      const cancelInfoFail = await cancelReservationV1(paidResFail.reservationId);
+      const evidenceFail = await insertSyntheticDecisionEvidence({
+        reservationId: paidResFail.reservationId,
+        cancellationEventId: cancelInfoFail.cancellationEventId,
+        cancellationReleaseId: cancelInfoFail.cancellationReleaseId,
+        paidBridgeId: paidResFail.paidBridgeId,
+        paymentAttemptId: paidResFail.paymentAttemptId,
+        quoteId: paidResFail.quoteId,
+        payableAuthorityId: paidResFail.payableAuthorityId,
+        providerOriginKind: 'RAZORPAY',
+        providerPaymentRef: paidResFail.providerPaymentRef,
+        supportingProviderEventId: paidResFail.supportingProviderEventId,
+        supportingEvidenceHash: paidResFail.supportingEvidenceHash,
+        approvedAmountPaise: paidResFail.capturedAmountPaise,
+      });
+
+      const snapshotBeforeFail = await takeScopedDomainSnapshot(paidResFail);
+      const failCmdA = randomUUID();
+      const failCmdB = randomUUID();
+
+      await assert.rejects(
+        () => runTwoConnectionRace({
+          cmdA: failCmdA,
+          cmdB: failCmdB,
+          reservationId: paidResFail.reservationId,
+          evidenceId: evidenceFail.id,
+          triggerDeliberateObserverFailure: true,
+        }),
+        (err) => {
+          assert.match(err.message, /DELIBERATE_OBSERVER_FAILURE/);
+          return true;
         }
-        assert.equal(
-          observedBlocker9b,
-          true,
-          'Connection B must be observed waiting on Lock with Connection A in pg_blocking_pids before A commits'
-        );
+      );
 
-        // 5. Commit A
-        await connA.query('COMMIT');
+      // Require no surviving authorization from the rolled-back race
+      const authCountFailA = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [failCmdA]
+        )
+      ).rows[0].count;
+      assert.equal(Number(authCountFailA), 0, 'No surviving authorization for failed command A');
 
-        // 6. Observe B's final rejection
-        let connBErr = null;
-        try {
-          await connBPromise;
-        } catch (err) {
-          connBErr = err;
-        }
-        assert.ok(connBErr, 'Competing distinct command B must be rejected after A commits');
-        assert.match(connBErr.message, /REFUND_ALREADY_AUTHORIZED/);
-        await connB.query('ROLLBACK');
+      const authCountFailB = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [failCmdB]
+        )
+      ).rows[0].count;
+      assert.equal(Number(authCountFailB), 0, 'No surviving authorization for failed command B');
 
-        // 7. Assert one durable authorization and no row for B
-        const authRows = (
-          await fixture.owner.query(
-            `SELECT * FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
-            [paidResT9b.reservationId]
-          )
-        ).rows;
-        assert.equal(authRows.length, 1, 'Exactly one durable authorization must exist');
-        assert.equal(authRows[0].command_id, cmdA, 'Persisted authorization must belong to command A');
-        assert.equal(authRows[0].id, resA.authorization_id);
+      const authCountFailRes = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+          [paidResFail.reservationId]
+        )
+      ).rows[0].count;
+      assert.equal(Number(authCountFailRes), 0, 'No surviving authorization for scoped reservation');
 
-        const countCmdB = (
-          await fixture.owner.query(
-            `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
-            [cmdB]
-          )
-        ).rows[0].count;
-        assert.equal(Number(countCmdB), 0, 'No authorization row may exist for competing command B');
-      } finally {
-        await Promise.allSettled([
-          connA.query('ROLLBACK').catch(() => {}),
-          connB.query('ROLLBACK').catch(() => {}),
-        ]);
-        connA.release();
-        connB.release();
-      }
+      // Require scoped restoration
+      const snapshotAfterFail = await takeScopedDomainSnapshot(paidResFail);
+      assert.deepEqual(
+        snapshotBeforeFail,
+        snapshotAfterFail,
+        'Deliberate observer failure rollback must leave all 16 scoped domain tables unchanged'
+      );
 
-      // 9c. Sequential distinct command attempt against already-authorized reservation
+      // Require no retained open transaction or active blocked query on fixture backends
+      const activeBackends = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM pg_stat_activity
+           WHERE state IN ('idle in transaction', 'idle in transaction (aborted)', 'active')
+             AND pid != pg_backend_pid()
+             AND usename = 'encho_refund_issuer'`
+        )
+      ).rows[0].count;
+      assert.equal(Number(activeBackends), 0, 'No active or in-transaction issuer backends may be retained after cleanup');
+
+      // 9d. Sequential distinct command attempt against already-authorized reservation
       const sequentialCmd = randomUUID();
       await assert.rejects(
         () => refundIssuer.query(
@@ -1854,7 +2001,15 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           [failCmdA]
         )
       ).rows[0].count;
-      assert.equal(Number(failedAuthCountA), 0, 'Rolled back transaction must leave 0 authorization rows');
+      assert.equal(Number(failedAuthCountA), 0, 'Rolled back transaction must leave 0 authorization rows for command');
+
+      const failedAuthCountSubjectA = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+          [paidResT10.reservationId]
+        )
+      ).rows[0].count;
+      assert.equal(Number(failedAuthCountSubjectA), 0, 'Rolled back transaction must leave 0 authorization rows for scoped subject');
 
       const snapshotAfterA = await takeScopedDomainSnapshot(paidResT10);
       assert.deepEqual(snapshotInitial, snapshotAfterA, 'T10A rollback must leave all 16 scoped domain tables unchanged');
@@ -1889,7 +2044,15 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           [failCmdNeg]
         )
       ).rows[0].count;
-      assert.equal(Number(failedAuthCountNeg), 0, 'Negative control must leave 0 authorization rows');
+      assert.equal(Number(failedAuthCountNeg), 0, 'Negative control must leave 0 authorization rows for command');
+
+      const failedAuthCountSubjectNeg = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+          [paidResT10.reservationId]
+        )
+      ).rows[0].count;
+      assert.equal(Number(failedAuthCountSubjectNeg), 0, 'Negative control must leave 0 authorization rows for scoped subject');
 
       const snapshotAfterNeg = await takeScopedDomainSnapshot(paidResT10);
       assert.deepEqual(snapshotInitial, snapshotAfterNeg, 'Negative control must leave all 16 scoped domain tables unchanged');
