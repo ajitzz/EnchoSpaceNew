@@ -145,7 +145,7 @@
   },
   "focusedTestResults": {
     "script": "scripts/testing/w4d-cancellation-refund-authorization.mjs",
-    "sha256": "32d9b87c43ad1dc136c4513d559ef7f9a3f00828c47afcaad07b9dddf6c569a5",
+    "sha256": "d61d49d9970a8e4ede9895dc34142b0dc384a8180322a2330281d5867372fd6d",
     "testRunner": "node --import tsx --test scripts/testing/w4d-cancellation-refund-authorization.mjs",
     "status": "PASS",
     "passedTests": 1,
@@ -169,7 +169,7 @@
       "T04": {
         "title": "Cross-resource evidence and authorization insert rejection",
         "result": "PASS",
-        "evidence": "Independent database triggers reject executable cross-binding substitutions: wrong reservation cancellation release in evidence (RELEASE_RESERVATION_MISMATCH), wrong reservation paid bridge in evidence (BRIDGE_RESERVATION_MISMATCH), and mismatched reservation in owner authorization insert (AUTH_RESERVATION_MISMATCH)"
+        "evidence": "Independent database triggers reject executable cross-binding substitutions: wrong reservation cancellation release in evidence (RELEASE_RESERVATION_MISMATCH), wrong reservation paid bridge in evidence (BRIDGE_RESERVATION_MISMATCH), and mismatched reservation in owner authorization insert (REFUND_AUTHORIZATION_CROSS_BINDING_MISMATCH: EVIDENCE_SUBJECT_MISMATCH)"
       },
       "T05": {
         "title": "Natural scope exclusions: ACTIVE/request-only, external, direct-only, and V2 exclusions without disabling triggers",
@@ -194,12 +194,12 @@
       "T09": {
         "title": "Concurrency on two real connections: identical race convergence, fresh distinct contention, and cleanup",
         "result": "PASS",
-        "evidence": "T09a (identical commands): Connection A holds open transaction with row lock; Connection B executes identical command concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before A commits; A commits, B unblocks and completes (one insertion, one recovery replay, exactly 1 row total; unique_violation recovery not inferred as reservation-root serialization may resolve race before insert). T09b (distinct commands): fresh paid V1 cancellation; Connection A holds open transaction with command A; Connection B executes distinct command B concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before A commits; A commits, B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; exact replay of command A returns same authorization with replayed = true; declared scoped existing-domain snapshot is unchanged. T09c (failure cleanup): controlled deliberate observer-failure demonstration verifies that deliberate assertion failure triggers ordered rollback, settles queries, leaves zero surviving authorizations, leaves no retained open transactions or active backends, and restores scoped snapshot. T09d: sequential distinct command attempt against already-authorized reservation rejected with REFUND_ALREADY_AUTHORIZED."
+        "evidence": "T09-pre: configured observer SQL timeout (200ms) verified effective via bounded delayed query SELECT pg_sleep(1) interrupted with SQLSTATE 57014 (query_canceled). T09a (identical commands): Connection A holds open transaction with row lock; Connection B executes identical command concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before A commits; A commits, B unblocks and completes (one insertion, one recovery replay, exactly 1 row total; unique_violation recovery not inferred as reservation-root serialization may resolve race before insert). T09b (distinct commands): fresh paid V1 cancellation; Connection A holds open transaction with command A; Connection B executes distinct command B concurrently; Connection B is actively observed waiting on Lock with Connection A in pg_blocking_pids before A commits; A commits, B unblocks and is rejected with REFUND_ALREADY_AUTHORIZED leaving 0 rows for command B; exact replay of command A returns same authorization with replayed = true; declared scoped existing-domain snapshot is unchanged. T09c (failure cleanup): controlled deliberate observer-failure demonstration verifies that deliberate assertion failure triggers ordered rollback, settles queries, verifies idle status 'I' via getTransactionStatus() before release, leaves zero surviving authorizations, leaves no retained open transactions or active backends, and restores scoped snapshot; caller validator validateT09cNormalSuccess requires zero unexpected cleanup errors; cleanup negative control verifies injected cleanup verification failure is preserved in cleanupErrors and rejected by validator, with actual client disposal and restored scoped snapshot. T09d: sequential distinct command attempt against already-authorized reservation rejected with REFUND_ALREADY_AUTHORIZED."
       },
       "T10": {
         "title": "Immutability, structured injected rollbacks, and zero domain row mutation across 16 tables",
         "result": "PASS",
-        "evidence": "UPDATE and DELETE rejected on evidence and authorizations tables by immutability triggers (T10C). T10A outer transaction rollback: asserts complete initial issuance row and witnesses restricted same-transaction replay (replayed = true) before injecting invalid cast SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back transaction, leaving zero authorizations for command, zero authorizations for scoped subject, and all 16 scoped canonical domain tables restored; committed negative control exercises identical demonstration path with substituted pre-issuance error, detecting lack of issuance witness and intentional_abort marker, leaving 0 authorizations and 16 scoped domain tables unchanged. T10B insertion-stage failure: fixture-only BEFORE INSERT trigger raises exact SQLSTATE P7777 / REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE; rolls back leaving 0 authorizations and 16 scoped domain tables restored. T10C clean issuance: leaves 0 mutations across all 16 scoped canonical domain tables."
+        "evidence": "UPDATE and DELETE rejected on evidence and authorizations tables by immutability triggers (T10C). T10A outer transaction rollback: asserts distinct completed stages (initial complete issuance row, restricted same-transaction replay witness comparing full projection including created_at, and post-witness abort query) before injecting invalid cast SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back transaction, leaving zero authorizations for command, zero authorizations for scoped subject, and all 16 scoped canonical domain tables restored; committed negative control exercises identical marker pre-issuance SELECT 'intentional_abort'::int, specifically rejected due to absent stages (STAGE_VALIDATION_FAILED) while preserving underlying 22P02, leaving 0 authorizations and 16 scoped domain tables unchanged. T10B insertion-stage failure: fixture-only BEFORE INSERT trigger raises exact SQLSTATE P7777 / REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE; rolls back leaving 0 authorizations and 16 scoped domain tables restored. T10C clean issuance: leaves 0 mutations across all 16 scoped canonical domain tables."
       }
     }
   },
@@ -232,7 +232,7 @@
     {
       "invariant": "Cross-resource consistency between authorization and decision evidence (executable substitution subset)",
       "attribution": "TEST",
-      "evidence": "Database trigger trg_canonical_refund_authorizations_before_insert rejects mismatched reservation in direct owner authorization insert (AUTH_RESERVATION_MISMATCH); verified in focused test T04"
+      "evidence": "Database trigger trg_canonical_refund_authorizations_before_insert rejects mismatched reservation in direct owner authorization insert (REFUND_AUTHORIZATION_CROSS_BINDING_MISMATCH: EVIDENCE_SUBJECT_MISMATCH); verified in focused test T04"
     },
     {
       "invariant": "Cross-resource consistency between authorization and decision evidence (complete binding guards)",
@@ -257,7 +257,7 @@
     {
       "invariant": "Refund currency restricted strictly to INR (Indian Rupee)",
       "attribution": "SCHEMA_CONSTRAINT",
-      "evidence": "canonical_cancellation_refund_authorizations table has CHECK (currency = 'INR') and issue_cancellation_refund_authorization asserts currency = 'INR'; verified via SCHEMA_CONSTRAINT and SQL_REVIEW"
+      "evidence": "canonical_cancellation_refund_decision_evidence.currency has CHECK (currency = 'INR'); issue_cancellation_refund_authorization asserts currency coherence between admitted evidence ('INR') and canonical payable authority ('INR'); authorization table has no currency column; verified via SCHEMA_CONSTRAINT and SQL_REVIEW"
     },
     {
       "invariant": "Approved refund amount cannot exceed authoritative captured amount ceiling",
@@ -272,7 +272,7 @@
     {
       "invariant": "Duplicate captures on the same attempt require a single coherent distinct amount and do not sum to enlarge refund ceiling",
       "attribution": "TEST",
-      "evidence": "issue_cancellation_refund_authorization checks count(DISTINCT provider_amount_paise) = 1 across PROCESSED capture events and rejects conflicting amounts; does not sum captures or select MAX(); verified in focused test T07"
+      "evidence": "issue_cancellation_refund_authorization aggregates captures via array_agg(DISTINCT cpe.reported_amount_paise), validates nonempty and single distinct amount (array_length = 1), and selects that coherent amount (capture_amounts[1]), rejecting conflicting amounts with CAPTURE_AMOUNT_CONFLICT; does not sum captures or select MAX(); verified in focused test T07"
     },
     {
       "invariant": "Ambiguous cross-attempt alias of capture reference is detected and rejected",
@@ -307,12 +307,12 @@
     {
       "invariant": "Controlled deliberate observer-failure triggers ordered transaction rollback, query settlement, and clean pool disposal",
       "attribution": "TEST",
-      "evidence": "Injected observer assertion failure in runTwoConnectionRace triggers ordered rollback releasing locks, settles blocked in-flight query, rolls back second connection, verifies zero surviving authorizations for command and reservation, leaves no active or in-transaction backends, and restores declared 16-table scoped snapshot; verified in focused test T09c"
+      "evidence": "Injected observer assertion failure in runTwoConnectionRace triggers ordered rollback releasing locks, settles blocked in-flight query, rolls back second connection, verifies idle transaction status 'I' via getTransactionStatus() before release, verifies zero surviving authorizations, leaves no active or in-transaction backends, and restores declared 16-table scoped snapshot; caller validator validateT09cNormalSuccess requires zero unexpected cleanup errors; cleanup negative control verifies injected cleanup verification error is preserved in cleanupErrors and rejected by validator, with actual client disposal and restored scoped snapshot; verified in focused test T09c"
     },
     {
       "invariant": "Transaction rollback on outer failure leaves zero persisted authorizations and leaves all 16 scoped domain tables unchanged",
       "attribution": "TEST",
-      "evidence": "Outer transaction witnesses complete issuance row and restricted same-transaction replay (replayed = true) before injecting SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back leaving 0 persisted authorizations for command and scoped subject, and restoring all 16 scoped canonical domain tables; committed negative control detects absent issuance witness on pre-issuance 22P02, rejecting invalid demonstration while leaving 0 authorizations and all 16 scoped domain tables unchanged; verified in focused test T10A"
+      "evidence": "Outer transaction witnesses distinct completed stages (initial complete issuance row, restricted same-transaction replay comparing full projection including created_at, and post-witness abort query) before injecting SELECT 'intentional_abort'::int (SQLSTATE 22P02); rolls back leaving 0 persisted authorizations for command and scoped subject, and restoring all 16 scoped canonical domain tables; committed negative control exercises identical marker pre-issuance SELECT 'intentional_abort'::int, specifically rejected due to absent stages (STAGE_VALIDATION_FAILED) while preserving underlying 22P02, leaving 0 authorizations and all 16 scoped domain tables unchanged; verified in focused test T10A"
     },
     {
       "invariant": "Transaction rollback on injected trigger failure leaves zero persisted authorizations and leaves all 16 scoped domain tables unchanged",

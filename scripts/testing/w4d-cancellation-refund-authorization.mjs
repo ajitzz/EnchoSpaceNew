@@ -1448,40 +1448,85 @@ test('W4-D canonical cancellation refund authorization verification', async () =
     // T09: CONCURRENCY ON TWO REAL CONNECTIONS: IDENTICAL, DISTINCT, AND CLEANUP
     // =========================================================================
     {
-      // Local race runner enforcing timeouts, bounded observation, and ordered cleanup
+      // 9-pre. Demonstrate configured observer SQL timeout is effective via bounded delayed query
+      {
+        const timeoutTestClient = await fixture.owner.connect();
+        try {
+          await timeoutTestClient.query("SET statement_timeout = '200ms'");
+          const stCheck = (await timeoutTestClient.query("SELECT current_setting('statement_timeout') AS st")).rows[0].st;
+          assert.ok(stCheck === '200ms' || stCheck === '0.2s', `Configured setting must be nonzero and match limit, got ${stCheck}`);
+
+          let timeoutErr = null;
+          try {
+            await timeoutTestClient.query("SELECT pg_sleep(1)");
+          } catch (err) {
+            timeoutErr = err;
+          }
+          assert.ok(timeoutErr, 'Delayed SQL must be interrupted by statement_timeout');
+          assert.equal(timeoutErr.code, '57014', 'SQLSTATE must be 57014 (query_canceled)');
+          assert.match(timeoutErr.message, /canceling statement due to statement timeout/);
+
+          const txStatus = typeof timeoutTestClient.getTransactionStatus === 'function' ? timeoutTestClient.getTransactionStatus() : 'I';
+          assert.equal(txStatus, 'I', 'Transaction status must be idle after query cancellation');
+          timeoutTestClient.release();
+        } catch (err) {
+          try {
+            timeoutTestClient.release(err);
+          } catch (e) {}
+          throw err;
+        }
+      }
+
+      // Local race runner enforcing timeouts, dedicated observer client, and ordered cleanup
       const runTwoConnectionRace = async ({
         cmdA,
         cmdB,
         reservationId,
         evidenceId,
         triggerDeliberateObserverFailure = false,
+        injectCleanupVerificationFailure = null,
       }) => {
         let connA = null;
         let connB = null;
+        let observerClient = null;
         let connBPromise = null;
         let settledB = false;
         let resA = null;
         let resB = null;
         let errB = null;
         let primaryError = null;
-        let releasedA = false;
-        let releasedB = false;
+        let terminalActionA = null;
+        let terminalActionB = null;
+        let terminalActionObs = null;
 
         try {
-          // Protect partial acquisition: acquire connA, then connB
+          // Protect partial acquisition: acquire connA, connB, and dedicated observerClient
           connA = await refundIssuer.connect();
           connB = await refundIssuer.connect();
+          observerClient = await fixture.owner.connect();
 
           const pidA = (await connA.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
           const pidB = (await connB.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
 
-          // Set effective SQL timeouts inside open transactions on actual relevant connections
+          // Configure supported session-level timeouts on dedicated observer connection
+          await observerClient.query("SET statement_timeout = '5000ms'");
+          await observerClient.query("SET lock_timeout = '5000ms'");
+          const obsSt = (await observerClient.query("SELECT current_setting('statement_timeout') AS st")).rows[0].st;
+          assert.ok(obsSt === '5s' || obsSt === '5000ms', `Effective observer statement_timeout must be 5000ms, got ${obsSt}`);
+          const obsLt = (await observerClient.query("SELECT current_setting('lock_timeout') AS lt")).rows[0].lt;
+          assert.ok(obsLt === '5s' || obsLt === '5000ms', `Effective observer lock_timeout must be 5000ms, got ${obsLt}`);
+
+          // Session-level and transaction-local timeouts on relevant connections A and B
+          await connA.query("SET statement_timeout = '10000ms'");
+          await connA.query("SET lock_timeout = '10000ms'");
           await connA.query('BEGIN');
           await connA.query("SET LOCAL statement_timeout = '10000ms'");
           await connA.query("SET LOCAL lock_timeout = '10000ms'");
           const stA = (await connA.query("SELECT current_setting('statement_timeout') AS st")).rows[0].st;
           assert.ok(stA && stA !== '0', 'Effective statement_timeout must be non-zero on connA');
 
+          await connB.query("SET statement_timeout = '10000ms'");
+          await connB.query("SET lock_timeout = '10000ms'");
           await connB.query('BEGIN');
           await connB.query("SET LOCAL statement_timeout = '10000ms'");
           await connB.query("SET LOCAL lock_timeout = '10000ms'");
@@ -1515,19 +1560,17 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           // Suppress unhandled rejection while B is blocked waiting on lock
           connBPromise.catch(() => {});
 
-          // Actively observe B waiting on Lock specifically blocked by A before committing A
+          // Actively observe B waiting on Lock specifically blocked by A using dedicated observer client
           let observedBlocker = false;
           const maxAttempts = 50;
           const pollIntervalMs = 50;
           for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            // Bound the observer predicate query with statement_timeout
-            const act = (await fixture.owner.query({
-              text: `SELECT wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
-                     FROM pg_stat_activity
-                     WHERE pid = $1`,
-              values: [pidB],
-              statement_timeout: 5000,
-            })).rows[0];
+            const act = (await observerClient.query(
+              `SELECT wait_event_type, wait_event, pg_blocking_pids(pid) AS blockers
+               FROM pg_stat_activity
+               WHERE pid = $1`,
+              [pidB]
+            )).rows[0];
 
             if (
               act &&
@@ -1609,39 +1652,82 @@ test('W4-D canonical cancellation refund authorization verification', async () =
             }
           }
 
-          // 4 & 5. Verify transaction cleanliness before ordinary release; discard unusable client through pool API
-          if (connA && !releasedA) {
-            releasedA = true;
+          // 4 & 5. Verify transaction cleanliness via getTransactionStatus() === 'I'; release or discard each client exactly once
+          if (connA && !terminalActionA) {
             try {
-              await connA.query({ text: 'SELECT 1', statement_timeout: 2000 });
+              if (injectCleanupVerificationFailure === 'connA') {
+                throw new Error('INJECTED_CLEANUP_VERIFICATION_FAILURE: Simulated failure during connA transaction status verification');
+              }
+              const txStatusA = typeof connA.getTransactionStatus === 'function' ? connA.getTransactionStatus() : null;
+              if (txStatusA !== 'I') {
+                throw new Error(`TRANSACTION_STATUS_UNCLEAN: Expected idle transaction status 'I', observed '${txStatusA}'`);
+              }
+              await connA.query('SELECT 1');
+              terminalActionA = 'released';
               connA.release();
-            } catch (cleanErr) {
-              cleanupErrors.push(cleanErr);
+            } catch (cleanErrA) {
+              cleanupErrors.push(cleanErrA);
+              terminalActionA = 'discarded';
               try {
-                connA.release(cleanErr);
-              } catch (e) {}
+                connA.release(cleanErrA);
+              } catch (discardErrA) {
+                cleanupErrors.push(discardErrA);
+              }
             }
           }
 
-          if (connB && !releasedB) {
-            releasedB = true;
+          if (connB && !terminalActionB) {
             try {
-              await connB.query({ text: 'SELECT 1', statement_timeout: 2000 });
+              if (injectCleanupVerificationFailure === 'connB') {
+                throw new Error('INJECTED_CLEANUP_VERIFICATION_FAILURE: Simulated failure during connB transaction status verification');
+              }
+              const txStatusB = typeof connB.getTransactionStatus === 'function' ? connB.getTransactionStatus() : null;
+              if (txStatusB !== 'I') {
+                throw new Error(`TRANSACTION_STATUS_UNCLEAN: Expected idle transaction status 'I', observed '${txStatusB}'`);
+              }
+              await connB.query('SELECT 1');
+              terminalActionB = 'released';
               connB.release();
-            } catch (cleanErr) {
-              cleanupErrors.push(cleanErr);
+            } catch (cleanErrB) {
+              cleanupErrors.push(cleanErrB);
+              terminalActionB = 'discarded';
               try {
-                connB.release(cleanErr);
-              } catch (e) {}
+                connB.release(cleanErrB);
+              } catch (discardErrB) {
+                cleanupErrors.push(discardErrB);
+              }
+            }
+          }
+
+          if (observerClient && !terminalActionObs) {
+            try {
+              const txStatusObs = typeof observerClient.getTransactionStatus === 'function' ? observerClient.getTransactionStatus() : 'I';
+              if (txStatusObs !== 'I') {
+                throw new Error(`TRANSACTION_STATUS_UNCLEAN: Expected observer idle transaction status 'I', observed '${txStatusObs}'`);
+              }
+              terminalActionObs = 'released';
+              observerClient.release();
+            } catch (cleanErrObs) {
+              cleanupErrors.push(cleanErrObs);
+              terminalActionObs = 'discarded';
+              try {
+                observerClient.release(cleanErrObs);
+              } catch (discardErrObs) {
+                cleanupErrors.push(discardErrObs);
+              }
             }
           }
 
           // 8. Preserve cleanup failures alongside primary failure
           if (cleanupErrors.length > 0) {
             if (!primaryError) {
-              throw new Error(`CLEANUP_FAILED: ${cleanupErrors.map((e) => e.message).join('; ')}`);
+              const cleanErr = new Error(`CLEANUP_FAILED: ${cleanupErrors.map((e) => e.message).join('; ')}`);
+              cleanErr.cleanupErrors = cleanupErrors;
+              cleanErr.cause = cleanupErrors[0];
+              throw cleanErr;
             } else {
               primaryError.cleanupErrors = cleanupErrors;
+              primaryError.cause = cleanupErrors[0];
             }
           }
         }
@@ -1760,6 +1846,17 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         'Declared scoped existing-domain snapshot must be unchanged after distinct race settlement'
       );
 
+      // Helper: Normal T09c caller validator (inspects error message AND verifies zero unexpected cleanup errors)
+      const validateT09cNormalSuccess = (err) => {
+        assert.ok(err, 'Expected deliberate observer failure error');
+        assert.match(err.message, /DELIBERATE_OBSERVER_FAILURE/);
+        assert.ok(
+          !err.cleanupErrors || err.cleanupErrors.length === 0,
+          `Unexpected cleanup errors remained: ${err.cleanupErrors?.map((e) => e.message).join('; ')}`
+        );
+        return true;
+      };
+
       // 9c. Controlled deliberate observer-failure demonstration through actual race/cleanup path
       const paidResFail = await createPaidReservation({nights: 2});
       const cancelInfoFail = await cancelReservationV1(paidResFail.reservationId);
@@ -1790,10 +1887,7 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           evidenceId: evidenceFail.id,
           triggerDeliberateObserverFailure: true,
         }),
-        (err) => {
-          assert.match(err.message, /DELIBERATE_OBSERVER_FAILURE/);
-          return true;
-        }
+        (err) => validateT09cNormalSuccess(err)
       );
 
       // Require no surviving authorization from the rolled-back race
@@ -1839,6 +1933,72 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         )
       ).rows[0].count;
       assert.equal(Number(activeBackends), 0, 'No active or in-transaction issuer backends may be retained after cleanup');
+
+      // 9c-neg. Cleanup-error negative control: injected cleanup verification failure
+      const failNegCmdA = randomUUID();
+      const failNegCmdB = randomUUID();
+      let caughtNegError = null;
+      try {
+        await runTwoConnectionRace({
+          cmdA: failNegCmdA,
+          cmdB: failNegCmdB,
+          reservationId: paidResFail.reservationId,
+          evidenceId: evidenceFail.id,
+          triggerDeliberateObserverFailure: true,
+          injectCleanupVerificationFailure: 'connA',
+        });
+      } catch (err) {
+        caughtNegError = err;
+      }
+
+      assert.ok(caughtNegError, 'Must reject when deliberate observer failure is triggered with injected cleanup error');
+      assert.match(caughtNegError.message, /DELIBERATE_OBSERVER_FAILURE/, 'Original observer error must remain visible');
+      assert.ok(Array.isArray(caughtNegError.cleanupErrors) && caughtNegError.cleanupErrors.length > 0, 'Cleanup errors must be preserved');
+      assert.match(caughtNegError.cleanupErrors[0].message, /INJECTED_CLEANUP_VERIFICATION_FAILURE/, 'Cleanup error cause must remain visible');
+
+      // Ordinary T09c success validator must reject that outcome
+      assert.throws(
+        () => validateT09cNormalSuccess(caughtNegError),
+        (valErr) => {
+          assert.match(valErr.message, /Unexpected cleanup errors remained/);
+          return true;
+        },
+        'Ordinary T09c success validator must reject outcome when cleanup error is present'
+      );
+
+      // Verify actual client disposal and restored fixture state
+      const authCountNegA = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [failNegCmdA]
+        )
+      ).rows[0].count;
+      assert.equal(Number(authCountNegA), 0, 'No surviving authorization for failed command A');
+
+      const authCountNegB = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [failNegCmdB]
+        )
+      ).rows[0].count;
+      assert.equal(Number(authCountNegB), 0, 'No surviving authorization for failed command B');
+
+      const activeBackendsNeg = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM pg_stat_activity
+           WHERE state IN ('idle in transaction', 'idle in transaction (aborted)', 'active')
+             AND pid != pg_backend_pid()
+             AND usename = 'encho_refund_issuer'`
+        )
+      ).rows[0].count;
+      assert.equal(Number(activeBackendsNeg), 0, 'No active or in-transaction issuer backends retained after cleanup negative control');
+
+      const snapshotAfterNegCleanup = await takeScopedDomainSnapshot(paidResFail);
+      assert.deepEqual(
+        snapshotBeforeFail,
+        snapshotAfterNegCleanup,
+        'Cleanup-error negative control must leave all 16 scoped domain tables unchanged'
+      );
 
       // 9d. Sequential distinct command attempt against already-authorized reservation
       const sequentialCmd = randomUUID();
@@ -1895,6 +2055,14 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       }) => {
         let executionError = null;
         let rollbackError = null;
+
+        // Distinct stage evidence initialized as incomplete
+        const stageEvidence = {
+          initialIssuanceCompleted: false,
+          replayWitnessCompleted: false,
+          postWitnessAbortDispatched: false,
+        };
+
         await client.query('BEGIN');
         try {
           if (preIssuanceQuery) {
@@ -1924,6 +2092,9 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           assert.equal(res1.decision_digest, expectedEv.decision_digest, 'decision_digest must match');
           assert.equal(res1.issuing_role, 'encho_refund_issuer', 'issuing_role must match');
           assert.equal(res1.issuing_principal, 'encho_refund_issuer', 'issuing_principal must match');
+          assert.ok(res1.created_at, 'created_at must be present');
+
+          stageEvidence.initialIssuanceCompleted = true;
 
           // 4-5. On SAME client and transaction, repeat call to witness restricted replay
           const res2 = (
@@ -1933,25 +2104,18 @@ test('W4-D canonical cancellation refund authorization verification', async () =
             )
           ).rows[0];
 
-          assert.ok(res2, 'Replay row must exist');
+          assert.ok(res2 && res2.authorization_id, 'Replay row must exist with authorization_id');
           assert.equal(res2.replayed, true, 'Replay replayed must be true');
-          assert.equal(res2.authorization_id, res1.authorization_id, 'Replay authorization_id must match');
-          assert.equal(res2.command_id, res1.command_id);
-          assert.equal(res2.decision_evidence_id, res1.decision_evidence_id);
-          assert.equal(res2.reservation_id, res1.reservation_id);
-          assert.equal(res2.cancellation_release_id, res1.cancellation_release_id);
-          assert.equal(res2.paid_bridge_id, res1.paid_bridge_id);
-          assert.equal(res2.payment_attempt_id, res1.payment_attempt_id);
-          assert.equal(res2.provider_origin_kind, res1.provider_origin_kind);
-          assert.equal(res2.provider_payment_ref, res1.provider_payment_ref);
-          assert.equal(BigInt(res2.approved_amount_paise), BigInt(res1.approved_amount_paise));
-          assert.equal(res2.currency, res1.currency);
-          assert.equal(res2.decision_version, res1.decision_version);
-          assert.equal(res2.decision_digest, res1.decision_digest);
-          assert.equal(res2.issuing_role, res1.issuing_role);
-          assert.equal(res2.issuing_principal, res1.issuing_principal);
 
-          // 6. Execute intended PostgreSQL invalid cast
+          // Compare replay's returned immutable projection with original, excluding only replayed (including created_at)
+          const { replayed: _r1, ...proj1 } = res1;
+          const { replayed: _r2, ...proj2 } = res2;
+          assert.deepEqual(proj1, proj2, 'Immutable projection of replay must match original issuance exactly (including created_at)');
+
+          stageEvidence.replayWitnessCompleted = true;
+
+          // 6. Execute intended PostgreSQL invalid cast after both witnesses succeed
+          stageEvidence.postWitnessAbortDispatched = true;
           await client.query(`SELECT 'intentional_abort'::int`);
           await client.query('COMMIT');
           throw new Error('UNEXPECTED_COMMIT: Intentional abort did not fail transaction');
@@ -1964,14 +2128,34 @@ test('W4-D canonical cancellation refund authorization verification', async () =
             rollbackError = rbErr;
           }
           if (rollbackError) {
-            throw new Error(`ROLLBACK_FAILED: ${rollbackError.message} (original execution error: ${executionError.message})`);
+            const combinedErr = new Error(`ROLLBACK_FAILED: ${rollbackError.message} (original execution error: ${executionError.message})`);
+            combinedErr.cause = executionError;
+            combinedErr.rollbackError = rollbackError;
+            throw combinedErr;
           }
 
-          // 7. Assert SQLSTATE 22P02 and intentional_abort marker
+          // Stage validation: require initial issuance, replay witness, and post-witness abort stages
+          if (
+            !stageEvidence.initialIssuanceCompleted ||
+            !stageEvidence.replayWitnessCompleted ||
+            !stageEvidence.postWitnessAbortDispatched
+          ) {
+            const stageErr = new Error(
+              `STAGE_VALIDATION_FAILED: Incomplete demonstration stages (initialIssuanceCompleted=${stageEvidence.initialIssuanceCompleted}, replayWitnessCompleted=${stageEvidence.replayWitnessCompleted}, postWitnessAbortDispatched=${stageEvidence.postWitnessAbortDispatched}). Underlying error: ${executionError.message}`
+            );
+            stageErr.code = 'STAGE_VALIDATION_FAILED';
+            stageErr.stageEvidence = stageEvidence;
+            stageErr.underlyingError = executionError;
+            stageErr.cause = executionError;
+            throw stageErr;
+          }
+
+          // 7. Assert SQLSTATE 22P02 and intentional_abort marker in underlying error
           assert.equal(executionError.code, '22P02', 'SQLSTATE must be 22P02');
           assert.match(executionError.message, /intentional_abort/, 'Error message must contain intentional_abort');
           return {
             witnessed: true,
+            stageEvidence,
             error: executionError,
           };
         }
@@ -2014,7 +2198,7 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       const snapshotAfterA = await takeScopedDomainSnapshot(paidResT10);
       assert.deepEqual(snapshotInitial, snapshotAfterA, 'T10A rollback must leave all 16 scoped domain tables unchanged');
 
-      // Committed negative control: pre-issuance 22P02 must be rejected by demonstration path
+      // Committed negative control: identical marker pre-issuance SELECT 'intentional_abort'::int must fail stage validation
       const failCmdNeg = randomUUID();
       const clientNeg = await refundIssuer.connect();
       try {
@@ -2026,11 +2210,15 @@ test('W4-D canonical cancellation refund authorization verification', async () =
             evId: evidenceT10.id,
             expectedEv: evidenceT10,
             expectedPaid: paidResT10,
-            preIssuanceQuery: "SELECT 'review_pre_issuance'::int",
+            preIssuanceQuery: "SELECT 'intentional_abort'::int",
           }),
           (err) => {
-            assert.ok(err, 'Demonstration must reject substituted pre-issuance error');
-            assert.match(err.message, /intentional_abort/, 'Rejection must specifically detect lack of intentional_abort');
+            assert.equal(err.code, 'STAGE_VALIDATION_FAILED', 'Demonstration must reject pre-issuance error due to absent stages');
+            assert.equal(err.stageEvidence.initialIssuanceCompleted, false);
+            assert.equal(err.stageEvidence.replayWitnessCompleted, false);
+            assert.equal(err.stageEvidence.postWitnessAbortDispatched, false);
+            assert.equal(err.underlyingError.code, '22P02', 'Underlying error must be 22P02');
+            assert.match(err.underlyingError.message, /intentional_abort/);
             return true;
           }
         );
