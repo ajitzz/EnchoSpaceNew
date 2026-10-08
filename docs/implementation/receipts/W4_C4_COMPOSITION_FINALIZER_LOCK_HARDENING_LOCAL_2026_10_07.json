@@ -5,6 +5,8 @@
   "correctedDiagnosticCommit": "2ff6c39da4c4a1ae44bcd384df32cb208d5a36c2",
   "hardeningCommit": "08949428a67f6403d7e76e0710d3f8683f70a44d",
   "workerBranch": "worker/antigravity/w4-c4-lock-order-diagnostic",
+  "reviewerPackCommit": "1dd29ee536a9c7a3cfd30b07558e828ca6f9f274",
+  "sourceSha256": "823ad5fd2ab3e55fe8762e1cd6ec5975788866dacab573c8f8426ec595a2f1d5",
   "status": "LOCAL_VERIFICATION_COMPLETE",
   "migration060": {
     "path": "src/migrations/060_canonical_payment_composition_lock_order_hardening.sql",
@@ -340,6 +342,20 @@
     "unionClaim": "NARROW / INVENTORY-ROW ABBA ONLY",
     "unionWording": "A deterministic lock of the deduplicated OLD+NEW inventory-day union prevents the demonstrated inventory-row ABBA pattern among writers using that order; it does not establish global cross-resource deadlock freedom."
   },
+  "reviewerControlsAcceptance": {
+    "packCommit": "1dd29ee536a9c7a3cfd30b07558e828ca6f9f274",
+    "sourceSha256": "823ad5fd2ab3e55fe8762e1cd6ec5975788866dacab573c8f8426ec595a2f1d5",
+    "probes": {
+      "P1_deferredAcquisition": "PASS (P1_ACCOUNTING_REJECTS_UNRESOLVED_CONNECT)",
+      "P2_pidInitialization": "PASS (P2_NO_ACTIVE_PID_CLEAN_RELEASE)",
+      "P3_delayedCancellationControl": "PASS (P3_DEADLINE_LATCHES_BEFORE_CANCEL_COMPLETES, P3_LATE_SOURCE_CANNOT_CHANGE_FAILURE, P3_CONTROL_REGISTERED_WHILE_BLOCKED, P3_CLEANUP_OWNS_CONTROL_BEFORE_REVIEWER_RESCUE, P3_NO_ACTIVE_CONTROL_CLEAN_RELEASE, P3_INDEPENDENT_OUTCOMES_OBSERVED)",
+      "P4_terminalActionFailure": "PASS (P4_TERMINAL_FAILURE_VISIBLE_AND_REJECTED)",
+      "P5_completeLifecycleAndRegressions": "PASS (P5_UNMODIFIED_SUBJECT_REGRESSIONS, P5_ACTUAL_CHILD_OWNERSHIP: queryCount=296, connectCount=12, pendingQueries=0, pendingConnects=0, violationCount=0)"
+    },
+    "allProbesPassing": true,
+    "exitCode": 0,
+    "readyForReview": true
+  },
   "auditLimits": {
     "genericDbAuthorityClosure": "NOT EVALUATED",
     "actorPoolClosure": "OUT OF SCOPE",
@@ -351,11 +367,12 @@
     "databaseExecutionSafety": "VERIFIED (strictly newly created disposable PostgreSQL fixtures; zero dotenv / DATABASE_URL usage)"
   },
   "regressionSummary": {
-    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs: Cases A, A2, B, C, C2, C3, Demonstrations D, E, F, G, negative control, replays, outer rollback, role isolation)",
+    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs: 1 test, 1 pass, 0 fail; Cases A, A2, B, C, C2, C3, Demonstrations D, E, F, G, negative control, replays, outer rollback, role isolation)",
     "w4c4Diagnostic": "PASS (1/1 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs) [carried-forward]",
-    "w3bPaymentComposition": "PASS (56/56 in src/test/harvo/w3b_canonical_composition_pg.test.ts: 28 BASELINE_054 + 28 POST_060) [carried-forward]",
-    "w3bPaymentEvidence": "PASS (38/38 in src/test/harvo/w3b_canonical_payment_pg.test.ts) [carried-forward]",
-    "w3aCanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts) [carried-forward]",
+    "w3bPaymentComposition": "PASS (56/56 in src/test/harvo/w3b_canonical_composition_pg.test.ts: 28 BASELINE_054 + 28 POST_060) [carried-forward: 56 of 107]",
+    "w3bPaymentEvidence": "PASS (38/38 in src/test/harvo/w3b_canonical_payment_pg.test.ts) [carried-forward: 38 of 107]",
+    "w3aCanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts) [carried-forward: 13 of 107]",
+    "carriedForwardTotal": 107,
     "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts) [carried-forward]",
     "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs) [carried-forward]"
   },

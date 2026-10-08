@@ -221,12 +221,20 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
     const offerId = draft.offerId;
 
     // Helper: Create valid matched-capture payment attempt fixture
-    const setupPaymentAttemptFixture = async (offsetDays = 10, nights = 2, ownerClient = fixture.owner) => {
+    const setupPaymentAttemptFixture = async (offsetDays = 10, nights = 2, ownerClient = fixture.owner, coordinator = null) => {
+      const coord = coordinator || ownerClient?.__coordinator || null;
+      let staysPool = stays;
+      let paymentPool = paymentWorker;
+      if (coord) {
+        staysPool = coord.createTrackedPool(stays, 'stays_fixture');
+        paymentPool = coord.createTrackedPool(paymentWorker, 'payment_fixture');
+      }
+
       const checkIn = addDays(fixture.today, offsetDays);
       const checkOut = addDays(fixture.today, offsetDays + nights);
 
       const quote = await createItineraryQuote(
-        stays,
+        staysPool,
         {
           offerId,
           revision: 1,
@@ -238,7 +246,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         'user:10'
       );
 
-      const holdRes = await acquireHold(stays, {
+      const holdRes = await acquireHold(staysPool, {
         roomTypeId: 101,
         checkIn,
         checkOut,
@@ -263,7 +271,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
       const orderRef = 'order_test_' + randomUUID();
       const paymentRef = 'pay_test_' + randomUUID();
-      const attempt = await createPaymentAttempt(paymentWorker, {
+      const attempt = await createPaymentAttempt(paymentPool, {
         commandId: randomUUID(),
         holderPrincipal: 'user:10',
         originKind: 'RAZORPAY',
@@ -272,7 +280,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         providerOrderRef: orderRef,
       });
 
-      await ingestProviderEvent(paymentWorker, {
+      await ingestProviderEvent(paymentPool, {
         attemptId: attempt.attemptId,
         originKind: 'RAZORPAY',
         providerEventId: 'evt_cap_' + randomUUID(),
@@ -595,6 +603,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         this.acquisitionAttempts = new Map();
         this.terminalActions = new Map();
         this.activeOperationsByClient = new Map();
+        this.coordinator = null;
       }
 
       createAcquisitionAttempt(attemptId, pool, roleName, deadlineAt) {
@@ -607,9 +616,64 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           client: null,
           pid: null,
           error: null,
+          unresolved: true,
         };
         this.acquisitionAttempts.set(attemptId, attempt);
         return attempt;
+      }
+
+      _wrapClient(client, entry) {
+        client.__coordinator = this.coordinator;
+
+        const originalRelease = client.release.bind(client);
+        entry.rawRelease = originalRelease;
+
+        const originalQuery = entry.rawQuery || client.query.bind(client);
+        entry.rawQuery = originalQuery;
+
+        const tracker = this;
+
+        client.query = function (sql, ...args) {
+          const coord = tracker.coordinator;
+          if (!coord || coord.state === 'closed') {
+            return originalQuery(sql, ...args);
+          }
+
+          let hasActiveOp = false;
+          for (const op of coord.operations.values()) {
+            if (op.owningClient === client && op.started && !op.settled && entry.activeOps.has(op.name)) {
+              if (coord.currentSetupName && op.name === coord.currentSetupName) {
+                continue;
+              }
+              hasActiveOp = true;
+              break;
+            }
+          }
+
+          if (!hasActiveOp) {
+            const opName = `child_query_${entry.roleName}_${randomUUID().slice(0, 8)}`;
+            const childOp = coord.registerOperation(opName, {
+              owningClient: client,
+              deadlineAt: coord.currentDeadlineAt,
+            });
+            const p = childOp.execute(() => originalQuery(sql, ...args));
+            p.catch(() => {});
+            return p;
+          }
+
+          return originalQuery(sql, ...args);
+        };
+
+        client.release = function (err) {
+          if (entry.state === 'released' || entry.state === 'discarded' || entry.state === 'late_returned') {
+            return;
+          }
+          if (err) {
+            tracker.discard(client, err);
+          } else {
+            tracker.releaseClean(client);
+          }
+        };
       }
 
       async acquire(pool, roleName, deadlineAt) {
@@ -619,6 +683,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         const remaining = deadlineAt - Date.now();
         if (remaining <= 0) {
           attempt.status = 'timed_out';
+          attempt.unresolved = false;
           attempt.error = new HarnessDeadlineError(`CLIENT_ACQUISITION_BUDGET_EXPIRED: ${roleName}`);
           throw attempt.error;
         }
@@ -628,6 +693,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           rawConnectPromise = pool.connect();
         } catch (err) {
           attempt.status = 'failed';
+          attempt.unresolved = false;
           attempt.error = err;
           throw err;
         }
@@ -635,37 +701,44 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         const trackedConnectPromise = rawConnectPromise.then(
           (client) => {
             if (attempt.status === 'timed_out') {
-              // Late returned client handled and accounted for immediately
               attempt.status = 'late_returned';
               attempt.client = client;
+              attempt.unresolved = false;
+              const discardErr = new Error('LATE_CLIENT_DISCARDED');
               const entry = {
                 client,
                 roleName,
-                pid: null,
+                pid: client.processID ?? null,
                 state: 'late_returned',
-                discardErr: new Error('LATE_CLIENT_DISCARDED'),
+                discardErr,
                 activeOps: new Set(),
               };
               this.entries.set(client, entry);
-              this.deliberatelyDiscardedSet.add(client);
+              this.deliberatelyDiscardedSet?.add(client);
+              let terminalErr = null;
               try {
                 client.connection?.stream?.destroy?.();
-              } catch {}
+              } catch (e) {
+                terminalErr = e;
+              }
               try {
-                client.release(entry.discardErr);
-              } catch {}
+                client.release(discardErr);
+              } catch (e) {
+                terminalErr = terminalErr ? new AggregateError([terminalErr, e]) : e;
+              }
               this.terminalActions.set(client, {
                 method: 'discard_late',
                 attempted: true,
-                success: true,
-                failed: false,
-                error: null,
+                success: !terminalErr,
+                failed: Boolean(terminalErr),
+                error: terminalErr,
               });
               return client;
             }
 
             attempt.status = 'acquired';
             attempt.client = client;
+            attempt.unresolved = false;
             const entry = {
               client,
               roleName,
@@ -676,10 +749,12 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             };
             this.entries.set(client, entry);
             this.activeOperationsByClient.set(client, entry.activeOps);
+            this._wrapClient(client, entry);
             return client;
           },
           (err) => {
             attempt.status = 'failed';
+            attempt.unresolved = false;
             attempt.error = err;
             throw err;
           }
@@ -697,8 +772,23 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
         const entry = this.entries.get(client);
         try {
+          const pidOpName = `pid_init_${roleName}`;
+          let pidOp = null;
+          if (this.coordinator && this.coordinator.isOpen) {
+            pidOp = this.coordinator.registerOperation(pidOpName, {
+              owningClient: client,
+              deadlineAt,
+              cancel: async () => {
+                const pid = client.processID;
+                if (pid && this.coordinator.cancellationConn) {
+                  await this.coordinator.cancellationConn.query('SELECT pg_cancel_backend($1)', [pid]).catch(() => {});
+                }
+              },
+            });
+          }
+
           const pidRes = await runWithDeadline(
-            () => client.query('SELECT pg_backend_pid() AS pid'),
+            () => pidOp ? pidOp.execute(() => client.query('SELECT pg_backend_pid() AS pid')) : client.query('SELECT pg_backend_pid() AS pid'),
             deadlineAt,
             () => new HarnessDeadlineError(`PID_INITIALIZATION_TIMEOUT: ${roleName}`)
           );
@@ -715,7 +805,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       }
 
       getPid(client) {
-        return this.entries.get(client)?.pid ?? null;
+        return this.entries.get(client)?.pid ?? client?.processID ?? null;
       }
 
       getRole(client) {
@@ -768,7 +858,8 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
         try {
           entry.state = 'released';
-          entry.client.release();
+          const doRelease = entry.rawRelease || client.release.bind(client);
+          doRelease();
           this.terminalActions.get(client).success = true;
         } catch (err) {
           entry.state = 'release_failed';
@@ -791,6 +882,10 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           return;
         }
 
+        entry.state = 'discarded';
+        entry.discardErr = err;
+        this.deliberatelyDiscardedSet?.add(client);
+
         this.terminalActions.set(client, {
           method: 'discard',
           attempted: true,
@@ -799,22 +894,27 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           error: null,
         });
 
-        entry.state = 'discarded';
-        entry.discardErr = err;
-        this.deliberatelyDiscardedSet.add(entry.client);
+        let discardErr = null;
+        try {
+          client.connection?.stream?.destroy?.();
+        } catch (streamErr) {
+          discardErr = streamErr;
+        }
 
         try {
-          entry.client.connection?.stream?.destroy?.();
-        } catch {}
-
-        try {
-          entry.client.release(err);
-          this.terminalActions.get(client).success = true;
+          const doRelease = entry.rawRelease || client.release.bind(client);
+          doRelease(err);
         } catch (relErr) {
+          discardErr = discardErr ? new AggregateError([discardErr, relErr]) : relErr;
+        }
+
+        if (discardErr) {
           const act = this.terminalActions.get(client);
           act.failed = true;
-          act.error = relErr;
-          throw relErr;
+          act.error = discardErr;
+          throw discardErr;
+        } else {
+          this.terminalActions.get(client).success = true;
         }
       }
 
@@ -831,14 +931,14 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         for (const [client, action] of this.terminalActions) {
           const entry = this.entries.get(client);
           if (action.failed) {
-            terminalFailures.push(`${entry?.roleName}: ${action.error?.message}`);
+            terminalFailures.push(`${entry?.roleName || action.method}: ${action.error?.message}`);
           }
         }
 
         const unresolvedAcquisitions = [];
         for (const [, attempt] of this.acquisitionAttempts) {
-          if (attempt.status === 'pending') {
-            unresolvedAcquisitions.push(attempt.roleName);
+          if (attempt.status === 'pending' || attempt.unresolved) {
+            unresolvedAcquisitions.push(`${attempt.roleName} (status ${attempt.status}, unresolved)`);
           }
         }
 
@@ -958,17 +1058,30 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       return new TrackedQueryAdapter(client, null);
     };
 
-    const verifyBackendsCleanOrAbsent = async (cancellationConn, pidsToVerify, deadlineAt) => {
+    const verifyBackendsCleanOrAbsent = async (cancellationConn, pidsToVerify, deadlineAt, coordinator = null) => {
       return await runWithDeadline(
         async () => {
           const results = {};
           for (const { pid, role } of pidsToVerify) {
-            const { rows } = await cancellationConn.query(
-              `SELECT pid, state, query, backend_xid, backend_xmin
-               FROM pg_stat_activity
-               WHERE pid = $1`,
-              [pid]
-            );
+            let res;
+            if (coordinator && typeof coordinator.runCleanupQuery === 'function') {
+              res = await coordinator.runCleanupQuery(
+                cancellationConn,
+                `SELECT pid, state, query, backend_xid, backend_xmin
+                 FROM pg_stat_activity
+                 WHERE pid = $1`,
+                [pid],
+                deadlineAt
+              );
+            } else {
+              res = await cancellationConn.query(
+                `SELECT pid, state, query, backend_xid, backend_xmin
+                 FROM pg_stat_activity
+                 WHERE pid = $1`,
+                [pid]
+              );
+            }
+            const rows = res.rows;
             if (rows.length === 0) {
               results[role] = { pid, status: 'ABSENT' };
             } else {
@@ -1020,12 +1133,14 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         this.normalDeadlineAt = this.scenarioDeadlineAt - this.cleanupDeadlineMs;
 
         this.tracker = new ClientTracker({ deliberatelyDiscardedSet });
+        this.tracker.coordinator = this;
 
         this.operations = new Map();
         this.unsettledWork = new Set();
         this.state = 'active'; // 'active' | 'cleaning' | 'verifying' | 'closed'
         this.adapters = new Set();
         this.cancellationConn = null;
+        this.currentSetupName = null;
       }
 
       get isOpen() {
@@ -1039,10 +1154,57 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         return this.normalDeadlineAt;
       }
 
+      createTrackedPool(underlyingPool, rolePrefix) {
+        const coord = this;
+        return new Proxy(underlyingPool, {
+          get(target, prop, receiver) {
+            if (prop === 'connect') {
+              return async function (...args) {
+                if (typeof args[0] === 'function') {
+                  const callback = args[0];
+                  try {
+                    const client = await coord.tracker.acquire(
+                      target,
+                      `${rolePrefix}_${randomUUID().slice(0, 8)}`,
+                      coord.currentDeadlineAt
+                    );
+                    return callback(null, client, (err) => {
+                      if (err) {
+                        coord.tracker.discard(client, err);
+                      } else {
+                        coord.tracker.releaseClean(client);
+                      }
+                    });
+                  } catch (err) {
+                    return callback(err);
+                  }
+                }
+                const client = await coord.tracker.acquire(
+                  target,
+                  `${rolePrefix}_${randomUUID().slice(0, 8)}`,
+                  coord.currentDeadlineAt
+                );
+                return client;
+              };
+            }
+            return Reflect.get(target, prop, receiver);
+          },
+        });
+      }
+
       createQueryAdapter(client, options = {}) {
         const adapter = new TrackedQueryAdapter(client, this, options);
         this.adapters.add(adapter);
         return adapter;
+      }
+
+      async runCleanupQuery(client, sql, args = [], deadlineAt = null) {
+        const opName = `cleanup_query_${randomUUID().slice(0, 8)}`;
+        const op = this.registerOperation(opName, {
+          owningClient: client,
+          deadlineAt: deadlineAt ?? this.currentDeadlineAt,
+        });
+        return await op.execute(() => client.query(sql, args));
       }
 
       registerOperation(name, { owningClient = null, cancel = null, deadlineAt = null } = {}) {
@@ -1060,6 +1222,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           deadlineAt: effectiveDeadlineAt,
           started: false,
           settled: false,
+          cancelled: false,
           result: null,
           error: null,
           promise: null,
@@ -1067,7 +1230,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             if (this.state === 'closed') {
               throw new Error(`COORDINATOR_SCOPE_CLOSED: Operation ${name} rejected because coordinator is closed`);
             }
-            if (this.state === 'cleaning') {
+            if (this.state === 'cleaning' && !name.startsWith('cleanup_') && !name.startsWith('cancel_') && !name.startsWith('control_') && !name.startsWith('child_query_') && !name.startsWith('adapter_query_')) {
               throw new Error(`COORDINATOR_SCOPE_CLEANING: Operation ${name} rejected because coordinator is in cleanup`);
             }
             const remaining = op.deadlineAt - Date.now();
@@ -1083,11 +1246,16 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
             let timerId;
             const timeoutPromise = new Promise((_, reject) => {
-              timerId = setTimeout(async () => {
-                if (op.cancel && !op.settled) {
-                  try {
-                    await op.cancel();
-                  } catch {}
+              timerId = setTimeout(() => {
+                if (op.cancel && !op.cancelled) {
+                  op.cancelled = true;
+                  const cancelClient = this.cancellationConn;
+                  const cancelOpName = `cancel_${name}_${randomUUID().slice(0, 8)}`;
+                  const cancelOp = this.registerOperation(cancelOpName, {
+                    owningClient: cancelClient,
+                    deadlineAt: this.scenarioDeadlineAt,
+                  });
+                  cancelOp.execute(() => op.cancel()).catch(() => {});
                 }
                 reject(new HarnessDeadlineError(`OPERATION_TIMEOUT: ${name}`));
               }, remaining);
@@ -1095,7 +1263,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
             try {
               const p = startFn();
-              op.promise = p
+              op.promise = Promise.resolve(p)
                 .then((res) => {
                   op.settled = true;
                   op.result = res;
@@ -1117,6 +1285,8 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
                   throw err;
                 });
 
+              op.promise.catch(() => {});
+
               return await Promise.race([op.promise, timeoutPromise]);
             } finally {
               clearTimeout(timerId);
@@ -1129,8 +1299,19 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       }
 
       async runOperation(name, startFn, options = {}) {
-        const op = this.registerOperation(name, options);
-        return await op.execute(startFn);
+        const isSetup = ['setup_fixture', 'setup_c2_fixture', 'setup_c3_fixture'].includes(name);
+        const prevSetup = this.currentSetupName;
+        if (isSetup) {
+          this.currentSetupName = name;
+        }
+        try {
+          const op = this.registerOperation(name, options);
+          return await op.execute(startFn);
+        } finally {
+          if (isSetup) {
+            this.currentSetupName = prevSetup;
+          }
+        }
       }
 
       async waitForCondition(name, predicateStartFn, { deadlineAt = this.normalDeadlineAt, intervalMs = 20 } = {}) {
@@ -1187,7 +1368,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             for (const blocker of blockers) {
               if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
                 await runWithDeadline(
-                  () => blocker.query('ROLLBACK'),
+                  () => this.runCleanupQuery(blocker, 'ROLLBACK', [], gracefulDeadlineAt),
                   gracefulDeadlineAt,
                   () => new HarnessDeadlineError('CLEANUP_BLOCKER_ROLLBACK_TIMEOUT')
                 );
@@ -1208,7 +1389,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             if (compPromise && compQueryState && !compQueryState.settled) {
               if (cancellationConn && compPid) {
                 await runWithDeadline(
-                  () => cancellationConn.query('SELECT pg_cancel_backend($1)', [compPid]),
+                  () => this.runCleanupQuery(cancellationConn, 'SELECT pg_cancel_backend($1)', [compPid], gracefulDeadlineAt),
                   gracefulDeadlineAt,
                   () => new HarnessDeadlineError('CLEANUP_CANCELLATION_QUERY_TIMEOUT')
                 );
@@ -1223,7 +1404,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             // Step 4: Rollback composition transaction
             if (compConn && !this.tracker.isDiscarded(compConn)) {
               await runWithDeadline(
-                () => compConn.query('ROLLBACK'),
+                () => this.runCleanupQuery(compConn, 'ROLLBACK', [], gracefulDeadlineAt),
                 gracefulDeadlineAt,
                 () => new HarnessDeadlineError('CLEANUP_ROLLBACK_TIMEOUT')
               );
@@ -1233,7 +1414,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             for (const blocker of retainedBlockers) {
               if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
                 await runWithDeadline(
-                  () => blocker.query('ROLLBACK'),
+                  () => this.runCleanupQuery(blocker, 'ROLLBACK', [], gracefulDeadlineAt),
                   gracefulDeadlineAt,
                   () => new HarnessDeadlineError('CLEANUP_RETAINED_BLOCKER_ROLLBACK_TIMEOUT')
                 );
@@ -1243,9 +1424,15 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             // Step 6: Outstanding registered operations check
             for (const [, op] of this.operations) {
               if (op.started && !op.settled) {
-                if (op.cancel) {
+                if (op.cancel && !op.cancelled) {
+                  op.cancelled = true;
+                  const cancelOpName = `cleanup_cancel_${op.name}_${randomUUID().slice(0, 8)}`;
+                  const cancelOp = this.registerOperation(cancelOpName, {
+                    owningClient: this.cancellationConn,
+                    deadlineAt: gracefulDeadlineAt,
+                  });
                   await runWithDeadline(
-                    () => op.cancel(),
+                    () => cancelOp.execute(() => op.cancel()),
                     gracefulDeadlineAt,
                     () => new HarnessDeadlineError(`CLEANUP_OP_CANCEL_TIMEOUT: ${op.name}`)
                   ).catch((err) => cleanupErrors.push(err));
@@ -1268,7 +1455,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
               if (delayedControlOp && !delayedControlSettled) {
                 if (cancellationConn) {
                   await runWithDeadline(
-                    () => cancellationConn.query('SELECT pg_cancel_backend($1)', [delayedControlOp.pid]),
+                    () => this.runCleanupQuery(cancellationConn, 'SELECT pg_cancel_backend($1)', [delayedControlOp.pid], cleanupDeadlineAt),
                     cleanupDeadlineAt,
                     () => new HarnessDeadlineError('FALLBACK_DELAYED_CONTROL_CANCEL_TIMEOUT')
                   ).catch((err) => cleanupErrors.push(err));
@@ -1277,7 +1464,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
                   () => delayedControlOp.promise.catch((e) => ({ clientError: e })),
                   cleanupDeadlineAt,
                   () => new HarnessDeadlineError('FALLBACK_DELAYED_CONTROL_SETTLEMENT_TIMEOUT')
-                );
+                ).catch((err) => cleanupErrors.push(err));
                 delayedControlSettled = true;
               }
 
@@ -1287,7 +1474,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
                 if (cancellationConn && compPid) {
                   await runWithDeadline(
-                    () => cancellationConn.query('SELECT pg_terminate_backend($1)', [compPid]),
+                    () => this.runCleanupQuery(cancellationConn, 'SELECT pg_terminate_backend($1)', [compPid], cleanupDeadlineAt),
                     cleanupDeadlineAt,
                     () => new HarnessDeadlineError('FALLBACK_TERMINATE_BACKEND_TIMEOUT')
                   ).catch((err) => cleanupErrors.push(err));
@@ -1298,7 +1485,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
                     () => compPromise,
                     cleanupDeadlineAt,
                     () => new HarnessDeadlineError('FALLBACK_COMPOSITION_SETTLEMENT_TIMEOUT')
-                  );
+                  ).catch((err) => { cleanupErrors.push(err); return null; });
                   if (outcome && outcome.clientError && compQueryState) {
                     compQueryState.settled = true;
                     compQueryState.clientError = outcome.clientError;
@@ -1309,7 +1496,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
               for (const blocker of allBlockers) {
                 if (!this.tracker.isReleased(blocker) && !this.tracker.isDiscarded(blocker)) {
                   await runWithDeadline(
-                    () => blocker.query('ROLLBACK'),
+                    () => this.runCleanupQuery(blocker, 'ROLLBACK', [], cleanupDeadlineAt),
                     cleanupDeadlineAt,
                     () => new HarnessDeadlineError('FALLBACK_BLOCKER_ROLLBACK_TIMEOUT')
                   ).catch((err) => cleanupErrors.push(err));
@@ -1318,9 +1505,15 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
               for (const [, op] of this.operations) {
                 if (op.started && !op.settled) {
-                  if (op.cancel) {
+                  if (op.cancel && !op.cancelled) {
+                    op.cancelled = true;
+                    const cancelOpName = `fallback_cancel_${op.name}_${randomUUID().slice(0, 8)}`;
+                    const cancelOp = this.registerOperation(cancelOpName, {
+                      owningClient: this.cancellationConn,
+                      deadlineAt: cleanupDeadlineAt,
+                    });
                     await runWithDeadline(
-                      () => op.cancel(),
+                      () => cancelOp.execute(() => op.cancel()),
                       cleanupDeadlineAt,
                       () => new HarnessDeadlineError(`FALLBACK_OP_CANCEL_TIMEOUT: ${op.name}`)
                     ).catch((err) => cleanupErrors.push(err));
@@ -1342,13 +1535,29 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
           // If committed was true, ensure any outstanding operations are settled
           for (const [, op] of this.operations) {
             if (op.started && !op.settled) {
-              if (op.cancel) {
+              if (op.cancel && !op.cancelled) {
+                op.cancelled = true;
+                const cancelOpName = `cleanup_cancel_${op.name}_${randomUUID().slice(0, 8)}`;
+                const cancelOp = this.registerOperation(cancelOpName, {
+                  owningClient: this.cancellationConn,
+                  deadlineAt: gracefulDeadlineAt,
+                });
                 await runWithDeadline(
-                  () => op.cancel(),
+                  () => cancelOp.execute(() => op.cancel()),
                   gracefulDeadlineAt,
                   () => new HarnessDeadlineError(`CLEANUP_OP_CANCEL_TIMEOUT: ${op.name}`)
                 ).catch((err) => cleanupErrors.push(err));
+              } else if (!op.cancel && op.owningClient && cancellationConn && op.owningClient !== cancellationConn) {
+                const pid = this.tracker.getPid(op.owningClient);
+                if (pid) {
+                  await runWithDeadline(
+                    () => this.runCleanupQuery(cancellationConn, 'SELECT pg_cancel_backend($1)', [pid], gracefulDeadlineAt),
+                    gracefulDeadlineAt,
+                    () => new HarnessDeadlineError('CLEANUP_CANCEL_BACKEND_TIMEOUT')
+                  ).catch((err) => cleanupErrors.push(err));
+                }
               }
+
               if (op.promise) {
                 await runWithDeadline(
                   () => op.promise.catch((e) => e),
@@ -1365,11 +1574,11 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         if (compPid) pidsToVerify.push({ pid: compPid, role: 'comp' });
         if (delayedControlOp?.pid) pidsToVerify.push({ pid: delayedControlOp.pid, role: 'delayedControl' });
         for (const blocker of allBlockers) {
-          const pid = this.tracker.getPid(blocker);
+          const pid = this.tracker.getPid(blocker) || blocker.processID;
           if (pid) pidsToVerify.push({ pid, role: this.tracker.getRole(blocker) });
         }
         if (observerConn) {
-          const pid = this.tracker.getPid(observerConn);
+          const pid = this.tracker.getPid(observerConn) || observerConn.processID;
           if (pid) pidsToVerify.push({ pid, role: 'observer' });
         }
 
@@ -1379,7 +1588,8 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             backendObservations = await verifyBackendsCleanOrAbsent(
               cancellationConn,
               pidsToVerify,
-              cleanupDeadlineAt
+              cleanupDeadlineAt,
+              this
             );
           } catch (backendErr) {
             cleanupErrors.push(backendErr);
@@ -1387,6 +1597,20 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         }
 
         // Client Release Accounting
+        // First discard any clients with active operations or failed initializations
+        for (const [client, entry] of this.tracker.entries) {
+          if (!this.tracker.isReleased(client) && !this.tracker.isDiscarded(client)) {
+            if (entry.state === 'initialization_failed' || (entry.activeOps && entry.activeOps.size > 0)) {
+              try {
+                this.tracker.discard(client, new Error('CLEANUP_DISCARD_ACTIVE_OR_FAILED'));
+              } catch (err) {
+                cleanupErrors.push(err);
+              }
+            }
+          }
+        }
+
+        // Then release remaining clean clients
         for (const [client] of this.tracker.entries) {
           if (!this.tracker.isReleased(client) && !this.tracker.isDiscarded(client)) {
             try {
@@ -1394,6 +1618,13 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
             } catch (err) {
               cleanupErrors.push(err);
             }
+          }
+        }
+
+        // Include any terminal action failures in cleanupErrors
+        for (const [, action] of this.tracker.terminalActions) {
+          if (action.failed && action.error && !cleanupErrors.includes(action.error)) {
+            cleanupErrors.push(action.error);
           }
         }
 
@@ -1440,8 +1671,8 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
         const unresolvedAcquisitions = [];
         for (const [, attempt] of this.tracker.acquisitionAttempts) {
-          if (attempt.status === 'pending') {
-            unresolvedAcquisitions.push(attempt.roleName);
+          if (attempt.status === 'pending' || attempt.unresolved) {
+            unresolvedAcquisitions.push(`${attempt.roleName} (status ${attempt.status}, unresolved)`);
           }
         }
         assert.equal(
@@ -1471,6 +1702,9 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
 
         for (const [client, action] of this.tracker.terminalActions) {
           const entry = this.tracker.entries.get(client);
+          if (action.failed) {
+            assert.fail(`Final accounting failed: client ${entry?.roleName || action.method} had terminal action failure: ${action.error?.message}`);
+          }
           if (action.method === 'releaseClean' && !action.success) {
             assert.fail(`Final accounting failed: client ${entry?.roleName} failed clean release`);
           }
@@ -1578,7 +1812,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         blockPid = coordinator.tracker.getPid(blockConn);
 
         fExpiry = await coordinator.runOperation('setup_fixture', () =>
-          setupPaymentAttemptFixture(20, 2, observerConn)
+          setupPaymentAttemptFixture(20, 2, observerConn, coordinator)
         );
         expiryCommand = randomUUID();
 
@@ -1816,7 +2050,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         compFailPid = coordinator.tracker.getPid(compFailConn);
 
         fFail = await coordinator.runOperation('setup_c2_fixture', () =>
-          setupPaymentAttemptFixture(60, 2, observerConn)
+          setupPaymentAttemptFixture(60, 2, observerConn, coordinator)
         );
         failCommand = randomUUID();
 
@@ -2052,7 +2286,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
         controlPid = coordinator.tracker.getPid(controlConn);
 
         fDelay = await coordinator.runOperation('setup_c3_fixture', () =>
-          setupPaymentAttemptFixture(70, 2, observerConn)
+          setupPaymentAttemptFixture(70, 2, observerConn, coordinator)
         );
         delayCommand = randomUUID();
 
@@ -2448,6 +2682,7 @@ test('W4-C4 payment composition lock-order hardening verification (Migration 060
       const rawLateClient = await fixture.owner.connect();
       lateAttempt.status = 'late_returned';
       lateAttempt.client = rawLateClient;
+      lateAttempt.unresolved = false;
       const lateEntry = {
         client: rawLateClient,
         roleName: 'lateClient',
