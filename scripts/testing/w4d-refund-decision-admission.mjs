@@ -778,6 +778,8 @@ test('W4-D canonical cancellation refund decision admission verification', async
       assert.ok(admRowA01, 'Admission provenance row must exist');
       assert.equal(admRowA01.action_authorization_id, prepA01.actionReceipt.id);
       assert.equal(admRowA01.decision_evidence_id, admittedA01.evidenceId);
+      assert.ok(admRowA01.checker_appointment_grant_id, 'Admission row must retain checker appointment grant id');
+      assert.ok(admRowA01.checker_appointment_role_version_id, 'Admission row must retain checker appointment role version id');
 
       // Assert decision evidence row in DB
       const devRowA01 = (await fixture.owner.query(

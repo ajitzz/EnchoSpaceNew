@@ -24,7 +24,7 @@ const reasonCodeSchema = z.string().regex(/^[A-Z0-9_]{1,64}$/);
 export const admissionPacketSchema = z.object({
   admissionCommandId: z.string().uuid(),
   decisionRef: z.string().trim().min(1).max(128),
-  decisionVersion: z.number().int().positive(),
+  decisionVersion: z.number().int().positive().max(2147483647),
   reservationId: z.string().uuid(),
   cancellationEventId: z.string().uuid(),
   cancellationReleaseId: z.string().uuid(),
@@ -39,7 +39,10 @@ export const admissionPacketSchema = z.object({
   approvedAmountMinor: decimalMinorSchema,
   currency: z.literal('INR'),
   reasonCode: reasonCodeSchema,
-  reasonText: z.string().max(500).nullable(),
+  reasonText: z.string().max(500).refine(
+    (s) => !/[\u0000]|[\uD800-\uDFFF]/.test(s),
+    { message: 'Invalid JSON unicode' }
+  ).nullable(),
   organizationId: z.string().uuid(),
   resource: z.object({
     type: z.literal('FINANCIAL_CONTRACT'),
@@ -49,6 +52,36 @@ export const admissionPacketSchema = z.object({
   schemaVersion: z.literal(1),
   limitedMeaning: z.literal('ACCOMMODATION_CANCELLATION_REFUND_DECISION_ONLY'),
 }).strict();
+
+export function isExactPacketMatch(a: AdmissionCommandPacket, b: any): boolean {
+  if (!b || typeof b !== 'object') return false;
+  return (
+    a.admissionCommandId === b.admissionCommandId &&
+    a.decisionRef === b.decisionRef &&
+    a.decisionVersion === b.decisionVersion &&
+    a.reservationId === b.reservationId &&
+    a.cancellationEventId === b.cancellationEventId &&
+    a.cancellationReleaseId === b.cancellationReleaseId &&
+    a.paidBridgeId === b.paidBridgeId &&
+    a.paymentAttemptId === b.paymentAttemptId &&
+    a.quoteId === b.quoteId &&
+    a.payableAuthorityId === b.payableAuthorityId &&
+    a.providerOriginKind === b.providerOriginKind &&
+    a.providerPaymentRef === b.providerPaymentRef &&
+    a.supportingProviderEventId === b.supportingProviderEventId &&
+    a.supportingEvidenceHash === b.supportingEvidenceHash &&
+    a.approvedAmountMinor === b.approvedAmountMinor &&
+    a.currency === b.currency &&
+    a.reasonCode === b.reasonCode &&
+    (a.reasonText ?? null) === (b.reasonText ?? null) &&
+    a.organizationId === b.organizationId &&
+    a.resource?.type === b.resource?.type &&
+    a.resource?.id === b.resource?.id &&
+    a.environment === b.environment &&
+    a.schemaVersion === b.schemaVersion &&
+    a.limitedMeaning === b.limitedMeaning
+  );
+}
 
 export type AdmissionCommandPacket = z.infer<typeof admissionPacketSchema>;
 
@@ -69,6 +102,7 @@ export type AdmittedDecisionRecord = Readonly<{
 }>;
 
 export class CanonicalRefundDecisionAdmissionService {
+  readonly admissionPacketSchema = admissionPacketSchema;
   private readonly reader: StaffSessionReader;
   private readonly auth: PostgresWorkforceAuthorization;
   private readonly privileged: PrivilegedActions<AdmissionCommandPacket>;
@@ -197,8 +231,8 @@ export class CanonicalRefundDecisionAdmissionService {
         captured_ceiling_paise: string;
         currency: string;
       }>(
-        'SELECT * FROM get_cancellation_refund_decision_preview($1)',
-        [params.reservationId]
+        'SELECT * FROM get_cancellation_refund_decision_preview($1, $2)',
+        [params.reservationId, BigInt(params.approvedAmountMinor)]
       );
 
       if (previewRes.rows.length === 0) {
@@ -537,6 +571,8 @@ export class CanonicalRefundDecisionAdmissionService {
       postAdmissionHook?: (client: pg.PoolClient, result: unknown) => Promise<void>;
     }
   ): Promise<AdmittedDecisionRecord> {
+    const normalizedPacket = Object.freeze(this.admissionPacketSchema.parse(params.packet));
+
     // 1. Authenticate maker session and check protected guarded replay
     const prepData = await this.reader.read(makerToken, async (client, makerPrincipal) => {
       // A. Guarded Replay Check before entering NEW path
@@ -555,23 +591,17 @@ export class CanonicalRefundDecisionAdmissionService {
         checker_membership_id: string;
         command_fingerprint: string;
         replayed: boolean;
+        packet_payload?: any;
       }>(
         'SELECT * FROM get_admitted_cancellation_refund_decision($1)',
-        [params.packet.admissionCommandId]
+        [normalizedPacket.admissionCommandId]
       );
 
       if (replayRes.rows.length === 1) {
         const row = replayRes.rows[0];
 
-        // Reject changed-semantic replay: verify params.packet matches existing admitted record
-        if (
-          params.packet.admissionCommandId !== row.command_id ||
-          params.packet.reservationId !== row.reservation_id ||
-          params.packet.decisionRef !== row.decision_ref ||
-          params.packet.decisionVersion !== row.decision_version ||
-          BigInt(params.packet.approvedAmountMinor) !== BigInt(row.approved_amount_paise) ||
-          params.packet.currency !== row.currency
-        ) {
+        // Reject changed-semantic replay: verify normalizedPacket matches existing admitted record
+        if (!isExactPacketMatch(normalizedPacket, row.packet_payload)) {
           throw new PrivilegedActionError('COMMAND_CONFLICT');
         }
 
@@ -635,7 +665,7 @@ export class CanonicalRefundDecisionAdmissionService {
     const { makerPrincipal, prep } = prepData;
 
     // Verify packet has not been altered since preparation
-    const recomputedFromParams = this.fingerprintPacket(params.packet, prep.reason);
+    const recomputedFromParams = this.fingerprintPacket(normalizedPacket, prep.reason);
     const recomputedFromPrep = this.fingerprintPacket(prep.packet_payload, prep.reason);
 
     if (
@@ -654,17 +684,17 @@ export class CanonicalRefundDecisionAdmissionService {
       const admittedRecord = await this.auth.runAuthorized({
         tenant: {
           kind: 'INTERNAL_ORGANIZATION',
-          organizationId: params.packet.organizationId,
+          organizationId: normalizedPacket.organizationId,
         },
         principal: makerPrincipal,
         permission: 'accommodation.refund_decision.admit',
         resource: {
-          target: { type: 'FINANCIAL_CONTRACT', id: params.packet.reservationId },
+          target: { type: 'FINANCIAL_CONTRACT', id: normalizedPacket.reservationId },
           ancestors: [],
         },
         conditions: {
           environment: this.environment,
-          amountMinor: params.packet.approvedAmountMinor,
+          amountMinor: normalizedPacket.approvedAmountMinor,
           commandHash,
           requestedAt: new Date().toISOString(),
         },
@@ -692,7 +722,7 @@ export class CanonicalRefundDecisionAdmissionService {
           replayed: boolean;
         }>(
           'SELECT * FROM admit_cancellation_refund_decision($1, $2)',
-          [params.packet.admissionCommandId, params.actionAuthorizationId]
+          [normalizedPacket.admissionCommandId, params.actionAuthorizationId]
         )).rows[0];
 
         if (!result) {
@@ -725,6 +755,7 @@ export class CanonicalRefundDecisionAdmissionService {
       // 3. Concurrent Loser Recovery & Lost COMMIT uncertainty recovery
       const isRecoveryCandidate =
         (error instanceof Error && (
+          error.message.includes('CONTROL_LOST') ||
           (error as any).code === 'POLICY_CHANGED' ||
           error.message.includes('POLICY_CHANGED') ||
           (error as any).code === 'OUTCOME_UNKNOWN' ||
@@ -759,22 +790,16 @@ export class CanonicalRefundDecisionAdmissionService {
               checker_membership_id: string;
               command_fingerprint: string;
               replayed: boolean;
+              packet_payload?: any;
             }>(
               'SELECT * FROM get_admitted_cancellation_refund_decision($1)',
-              [params.packet.admissionCommandId]
+              [normalizedPacket.admissionCommandId]
             );
 
             if (recoveryRes.rows.length === 1) {
               const row = recoveryRes.rows[0];
-              if (
-                params.packet.admissionCommandId !== row.command_id ||
-                params.packet.reservationId !== row.reservation_id ||
-                params.packet.decisionRef !== row.decision_ref ||
-                params.packet.decisionVersion !== row.decision_version ||
-                BigInt(params.packet.approvedAmountMinor) !== BigInt(row.approved_amount_paise) ||
-                params.packet.currency !== row.currency
-              ) {
-                return null;
+              if (!isExactPacketMatch(normalizedPacket, row.packet_payload)) {
+                throw new PrivilegedActionError('COMMAND_CONFLICT');
               }
               return {
                 evidenceId: row.evidence_id,
@@ -798,7 +823,13 @@ export class CanonicalRefundDecisionAdmissionService {
           if (recovery) {
             return recovery;
           }
-        } catch {
+        } catch (recoveryErr: unknown) {
+          if (recoveryErr instanceof PrivilegedActionError && recoveryErr.code === 'COMMAND_CONFLICT') {
+            throw recoveryErr;
+          }
+          if (error instanceof Error && (error.message.includes('CONTROL_LOST') || (error as any).code === 'OUTCOME_UNKNOWN' || error.message.includes('OUTCOME_UNKNOWN'))) {
+            throw new PrivilegedActionError('OUTCOME_UNKNOWN', recoveryErr);
+          }
           // If recovery lookup fails, rethrow the original error
         }
       }
