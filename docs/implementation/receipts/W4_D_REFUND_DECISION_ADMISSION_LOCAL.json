@@ -1,0 +1,315 @@
+{
+  "task": "W4-D — CANONICAL CANCELLATION REFUND DECISION ADMISSION",
+  "canonicalBase": "909c1bf20e53f4e95cca2b80edb69bab20f569ac",
+  "workerBranch": "worker/antigravity/w4-d-refund-decision-admission",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "scope": {
+    "slice": "W4-D: AUTHENTICATED CANCELLATION REFUND DECISION ADMISSION",
+    "contract": "Maker prepares typed refund decision admission; Maker completes WebAuthn step-up ceremony; Checker reviews preview; Checker completes distinct WebAuthn step-up ceremony; Checker approves admission; Maker executes admission via PostgresWorkforceAuthorization.runAuthorized with registrar in callback; registrar validates maker/checker separation, passkey credentials, exact scope, and atomic insertion into canonical_cancellation_refund_admissions and canonical_cancellation_refund_decision_evidence with AUTHENTICATED_HUMAN_APPROVAL",
+    "downstreamRefundIssuance": "issue_cancellation_refund_authorization verifies durable admission provenance in canonical_cancellation_refund_admissions when evidence_classification = 'AUTHENTICATED_HUMAN_APPROVAL'",
+    "moneyMovement": "NONE (zero provider refund execution, zero payout dispatch, zero settlement, zero wallet credit)",
+    "remainingRefundableBalanceAccounting": "NONE",
+    "publicGuestHostIngress": "ABSENT",
+    "productionStatus": "NOT EVALUATED"
+  },
+  "frozenPrecedents": {
+    "migration060": {
+      "file": "src/migrations/060_canonical_payment_composition_lock_order_hardening.sql",
+      "sha256": "0823b6d434ebad6a6bce11196671a6ad8ff0a567049ca001fc7f4c3e9708548c"
+    },
+    "migration061": {
+      "file": "src/migrations/061_canonical_cancellation_refund_authorization.sql",
+      "sha256": "bd33f749f07f27bd4f5ff40d7cffe8bd559fac0ca8dccca3da12bb495598d1c9"
+    }
+  },
+  "migration": {
+    "file": "src/migrations/062_canonical_cancellation_refund_approval_admission.sql",
+    "sha256": "e748d01a9a150b9eedcee7711f6008789af7af5fa91be1220abf71ca72af9cd7",
+    "strategy": "Additive schema migration introducing workforce permission accommodation.refund_decision.admit, roles accommodation_finance_approver and accommodation_refund_preparer, tables canonical_cancellation_refund_admission_preparations and canonical_cancellation_refund_admissions, check constraint expansion on canonical_cancellation_refund_decision_evidence allowing AUTHENTICATED_HUMAN_APPROVAL, routines admit_cancellation_refund_decision, get_admitted_cancellation_refund_decision, and updated issue_cancellation_refund_authorization requiring durable admission provenance for AUTHENTICATED_HUMAN_APPROVAL"
+  },
+  "tables": {
+    "canonical_cancellation_refund_admission_preparations": {
+      "columns": {
+        "preparation_id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "command_id": "UUID NOT NULL UNIQUE",
+        "command_fingerprint": "TEXT NOT NULL CHECK (command_fingerprint ~ '^[a-f0-9]{64}$')",
+        "reservation_id": "UUID NOT NULL REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
+        "decision_ref": "TEXT NOT NULL CHECK (length(trim(decision_ref)) > 0)",
+        "version": "INT NOT NULL CHECK (version > 0)",
+        "approved_amount_paise": "BIGINT NOT NULL CHECK (approved_amount_paise > 0)",
+        "currency": "TEXT NOT NULL CHECK (currency = 'INR')",
+        "reason_code": "TEXT NOT NULL CHECK (reason_code ~ '^[A-Z0-9_]{1,64}$')",
+        "reason": "TEXT NOT NULL CHECK (length(trim(reason)) >= 10 AND length(reason) <= 2000)",
+        "maker_staff_id": "UUID NOT NULL REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "maker_auth_session_id": "UUID NOT NULL REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "maker_assertion_id": "UUID NOT NULL REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT",
+        "prepared_at": "TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp()",
+        "status": "TEXT NOT NULL CHECK (status IN ('PREPARED', 'APPROVED', 'ADMITTED', 'REJECTED')) DEFAULT 'PREPARED'",
+        "checker_staff_id": "UUID REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "checker_auth_session_id": "UUID REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "checker_assertion_id": "UUID REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT",
+        "approved_at": "TIMESTAMPTZ"
+      },
+      "constraints": [
+        "PRIMARY KEY (preparation_id)",
+        "UNIQUE (command_id)",
+        "FOREIGN KEY (reservation_id) REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (maker_staff_id) REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (maker_auth_session_id) REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (maker_assertion_id) REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (checker_staff_id) REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (checker_auth_session_id) REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (checker_assertion_id) REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT"
+      ],
+      "triggers": [
+        "trg_canonical_refund_prep_immutable: canonical_cancellation_refund_preparations_reject_illegal_mutation() prevents illegal state transitions and mutations"
+      ],
+      "rowLevelSecurity": "Enabled and forced: ALTER TABLE canonical_cancellation_refund_admission_preparations ENABLE ROW LEVEL SECURITY; ALTER TABLE canonical_cancellation_refund_admission_preparations FORCE ROW LEVEL SECURITY"
+    },
+    "canonical_cancellation_refund_admissions": {
+      "columns": {
+        "admission_id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "command_id": "UUID NOT NULL UNIQUE",
+        "command_fingerprint": "TEXT NOT NULL CHECK (command_fingerprint ~ '^[a-f0-9]{64}$')",
+        "reservation_id": "UUID NOT NULL UNIQUE REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
+        "decision_evidence_id": "UUID NOT NULL UNIQUE REFERENCES canonical_cancellation_refund_decision_evidence(id) ON DELETE RESTRICT",
+        "authorization_id": "UUID NOT NULL REFERENCES workforce_authorizations(id) ON DELETE RESTRICT",
+        "maker_staff_id": "UUID NOT NULL REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "maker_auth_session_id": "UUID NOT NULL REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "maker_assertion_id": "UUID NOT NULL REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT",
+        "checker_staff_id": "UUID NOT NULL REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "checker_auth_session_id": "UUID NOT NULL REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "checker_assertion_id": "UUID NOT NULL REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT",
+        "consumed_transaction_id": "XID8",
+        "admitted_at": "TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp()"
+      },
+      "constraints": [
+        "PRIMARY KEY (admission_id)",
+        "UNIQUE (command_id)",
+        "UNIQUE (reservation_id)",
+        "UNIQUE (decision_evidence_id)",
+        "FOREIGN KEY (reservation_id) REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (decision_evidence_id) REFERENCES canonical_cancellation_refund_decision_evidence(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (authorization_id) REFERENCES workforce_authorizations(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (maker_staff_id) REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (maker_auth_session_id) REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (maker_assertion_id) REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (checker_staff_id) REFERENCES staff_identities(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (checker_auth_session_id) REFERENCES staff_sessions(id) ON DELETE RESTRICT",
+        "FOREIGN KEY (checker_assertion_id) REFERENCES auth_factor_assertions(id) ON DELETE RESTRICT"
+      ],
+      "triggers": [
+        "trg_canonical_refund_admissions_immutable: canonical_cancellation_refund_admissions_reject_mutation() raises CANONICAL_REFUND_ADMISSIONS_IMMUTABLE on UPDATE or DELETE"
+      ],
+      "rowLevelSecurity": "Enabled and forced: ALTER TABLE canonical_cancellation_refund_admissions ENABLE ROW LEVEL SECURITY; ALTER TABLE canonical_cancellation_refund_admissions FORCE ROW LEVEL SECURITY"
+    }
+  },
+  "functionSignatures": [
+    {
+      "name": "admit_cancellation_refund_decision",
+      "parameters": [
+        "target_command UUID",
+        "target_reservation_id UUID",
+        "target_decision_ref TEXT",
+        "target_version INT",
+        "target_approved_amount_paise BIGINT",
+        "target_currency TEXT",
+        "target_reason_code TEXT",
+        "target_reason_text TEXT",
+        "target_maker_staff_id UUID",
+        "target_maker_session_id UUID",
+        "target_maker_assertion_id UUID",
+        "target_checker_staff_id UUID",
+        "target_checker_session_id UUID",
+        "target_checker_assertion_id UUID",
+        "target_authorization_id UUID"
+      ],
+      "returns": "TABLE (evidence_id UUID, admission_id UUID, command_id UUID, decision_ref TEXT, version INT, reservation_id UUID, approved_amount_paise BIGINT, currency TEXT, admitted_at TIMESTAMPTZ, replayed BOOLEAN)",
+      "security": "VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on"
+    },
+    {
+      "name": "get_admitted_cancellation_refund_decision",
+      "parameters": [
+        "target_command UUID",
+        "target_reservation_id UUID"
+      ],
+      "returns": "TABLE (evidence_id UUID, admission_id UUID, command_id UUID, decision_ref TEXT, version INT, reservation_id UUID, approved_amount_paise BIGINT, currency TEXT, admitted_at TIMESTAMPTZ)",
+      "security": "STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on"
+    },
+    {
+      "name": "issue_cancellation_refund_authorization",
+      "parameters": [
+        "target_command UUID",
+        "target_reservation_id UUID",
+        "target_decision_evidence_id UUID"
+      ],
+      "returns": "TABLE (authorization_id UUID, command_id UUID, decision_evidence_id UUID, decision_version INT, decision_digest TEXT, reservation_id UUID, cancellation_release_id UUID, paid_bridge_id UUID, payment_attempt_id UUID, provider_origin_kind TEXT, provider_payment_ref TEXT, approved_amount_paise BIGINT, currency TEXT, issuing_role TEXT, issuing_principal TEXT, created_at TIMESTAMPTZ, replayed BOOLEAN)",
+      "security": "VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on",
+      "provenanceGate": "When evidence_classification = 'AUTHENTICATED_HUMAN_APPROVAL', issue_cancellation_refund_authorization strictly validates existence of matching provenance in canonical_cancellation_refund_admissions; raises ADMISSION_PROVENANCE_NOT_FOUND if missing or mismatched"
+    }
+  ],
+  "focusedTestResults": {
+    "script": "scripts/testing/w4d-refund-decision-admission.mjs",
+    "sha256": "83f1b077597594509e8bb8b6a9a40510c71ac52ee6cc2c16fd8b977b719098cd",
+    "testRunner": "node --import tsx --test scripts/testing/w4d-refund-decision-admission.mjs",
+    "status": "PASS",
+    "passedTests": 1,
+    "failedTests": 0,
+    "scenarios": {
+      "NegativeControl": {
+        "title": "Missing-Registrar Negative Control: SQLSTATE 42883 before migration 062",
+        "result": "PASS",
+        "evidence": "Calling admit_cancellation_refund_decision against pre-062 schema fails with SQLSTATE 42883 (undefined_function)"
+      },
+      "A01": {
+        "title": "Positive end-to-end chain: Maker prepare -> Maker passkey -> Checker preview -> Checker passkey -> Checker approve -> Maker runAuthorized -> registrar admission",
+        "result": "PASS",
+        "evidence": "Full dual-custody ceremony completes; admission row inserted; decision evidence inserted with AUTHENTICATED_HUMAN_APPROVAL and permitted_issuer_role = 'encho_refund_issuer'; workforce authorization consumed and stamped with consumed_transaction_id; zero refund authorizations created by admission"
+      },
+      "A02": {
+        "title": "Maker self-checker and unauthorized checkers rejected",
+        "result": "PASS",
+        "evidence": "Maker attempting to approve own preparation rejected with MAKER_CHECKER_CONFLICT; staff identity lacking accommodation.refund_decision.admit permission rejected with PERMISSION_DENIED"
+      },
+      "A03": {
+        "title": "Session & Step-Up negative controls",
+        "result": "PASS",
+        "evidence": "Preparation or approval without active staff session rejected with STAFF_SESSION_REQUIRED; missing WebAuthn factor rejected with STEP_UP_REQUIRED; expired or forged assertion rejected with STEP_UP_INVALID / FACTOR_INVALID"
+      },
+      "A04": {
+        "title": "Material packet tampering after approval rejected",
+        "result": "PASS",
+        "evidence": "Altering decision_ref, amount, or reason after approval alters command fingerprint, triggering COMMAND_CONFLICT or COMMAND_FINGERPRINT_MISMATCH"
+      },
+      "A05": {
+        "title": "Canonical domain exclusions enforced at preparation preview",
+        "result": "PASS",
+        "evidence": "Active uncancelled reservation rejected with CANCELLATION_NOT_FOUND; sealed V2 reservation rejected with V2_CANCELLATION_EXCLUDED; approved amount exceeding captured ceiling rejected with AMOUNT_EXCEEDS_CAPTURE_CEILING; non-INR currency rejected with CURRENCY_NOT_SUPPORTED"
+      },
+      "A06": {
+        "title": "Guarded Replay and cross-maker execution denial",
+        "result": "PASS",
+        "evidence": "Replaying identical command by original Maker returns stored admission with replayed = true; different maker or unauthorized staff attempting replay denied with PERMISSION_DENIED"
+      },
+      "A07": {
+        "title": "Concurrency: identical race convergence and competing distinct serialization",
+        "result": "PASS",
+        "evidence": "Concurrent identical execution converges cleanly where winner inserts and loser recovers via replayed = true with POLICY_CHANGED recovery; competing distinct command for same reservation serializes on reservation root lock and raises REFUND_ALREADY_ADMITTED"
+      },
+      "A08": {
+        "title": "Injected failure rollback restores APPROVED status and zero domain rows",
+        "result": "PASS",
+        "evidence": "Simulated database failure during runAuthorized rolls back transaction; preparation remains in APPROVED status ready for retry; zero rows persisted in admissions or evidence tables"
+      },
+      "A09": {
+        "title": "Lost COMMIT acknowledgement / uncertainty recovery",
+        "result": "PASS",
+        "evidence": "When caller experiences network disconnection or timeout after database commits, subsequent retry finds existing admission via getAdmittedRefundDecision and returns replayed = true without re-executing authorization consumption"
+      },
+      "A10": {
+        "title": "Downstream issue_cancellation_refund_authorization acceptance & negative controls",
+        "result": "PASS",
+        "evidence": "Calling issue_cancellation_refund_authorization with evidence_classification = 'AUTHENTICATED_HUMAN_APPROVAL' succeeds and verifies admission provenance; forged evidence without admission provenance rejected with ADMISSION_PROVENANCE_NOT_FOUND"
+      },
+      "A11": {
+        "title": "Immutability triggers and zero side effects",
+        "result": "PASS",
+        "evidence": "Direct UPDATE or DELETE on preparations and admissions tables rejected by SQLSTATE P0001 immutability triggers; successful admission causes zero mutations across unrelated canonical domain tables"
+      }
+    }
+  },
+  "invariantsAndAttributions": [
+    {
+      "invariant": "Missing-Registrar Negative Control: admit_cancellation_refund_decision absent prior to migration 062",
+      "attribution": "TEST",
+      "evidence": "Verified in focused test suite; invoking routine before applying migration 062 fails with SQLSTATE 42883"
+    },
+    {
+      "invariant": "Dual custody: Maker and Checker must be distinct staff identities",
+      "attribution": "SCHEMA_CONSTRAINT",
+      "evidence": "canonical_cancellation_refund_admission_preparations check constraint and admit_cancellation_refund_decision routine header reject maker_staff_id = checker_staff_id with MAKER_CHECKER_CONFLICT; verified in focused test A02"
+    },
+    {
+      "invariant": "Staff session required for both preparation and approval ceremonies",
+      "attribution": "TEST",
+      "evidence": "CanonicalRefundDecisionAdmissionService requires active StaffSessionContext for both prepare and approve, raising STAFF_SESSION_REQUIRED when absent; verified in focused test A03"
+    },
+    {
+      "invariant": "Step-up WebAuthn passkey assertion required for both Maker and Checker",
+      "attribution": "TEST",
+      "evidence": "WorkforceStepUp.evaluateStepUp verifies valid user-presence WebAuthn assertion with fresh monotonic counter; missing or forged assertion rejected with STEP_UP_REQUIRED or STEP_UP_INVALID; verified in focused test A03"
+    },
+    {
+      "invariant": "Permission accommodation.refund_decision.admit required for approval and execution",
+      "attribution": "TEST",
+      "evidence": "PostgresWorkforceAuthorization.runAuthorized checks permission catalog and role grants, rejecting unauthorized staff with PERMISSION_DENIED; verified in focused test A02"
+    },
+    {
+      "invariant": "Material packet tampering after approval rejected by command fingerprint mismatch",
+      "attribution": "TEST",
+      "evidence": "PrivilegedActions.fingerprint includes decision_ref, amount, currency, and reason; altering fields after approval produces mismatched hash rejected by evaluate; verified in focused test A04"
+    },
+    {
+      "invariant": "Natural canonical domain exclusions: uncancelled, sealed V2, excess amount, non-INR",
+      "attribution": "TEST",
+      "evidence": "CanonicalRefundDecisionAdmissionService.deriveCanonicalPreview validates reservation state, cancellation release version, captured ceiling, and currency; verified in focused test A05"
+    },
+    {
+      "invariant": "Guarded idempotent replay returns existing admitted record with replayed = true",
+      "attribution": "TEST",
+      "evidence": "admitRefundDecision checks existing admission before runAuthorized and inside registrar; replaying identical command returns replayed = true without consuming fresh authorization; verified in focused test A06 and A09"
+    },
+    {
+      "invariant": "Cross-maker replay execution denied",
+      "attribution": "TEST",
+      "evidence": "admitRefundDecision validates that replaying caller matches original maker_staff_id, rejecting other staff with PERMISSION_DENIED; verified in focused test A06"
+    },
+    {
+      "invariant": "Concurrent identical admissions serialize and recover safely",
+      "attribution": "TEST",
+      "evidence": "Reservation root lock and workforce authorization consumption serialize concurrent callers; losing caller detects existing admission on POLICY_CHANGED recovery and returns replayed = true; verified in focused test A07"
+    },
+    {
+      "invariant": "Competing distinct admissions for the same reservation rejected",
+      "attribution": "TEST",
+      "evidence": "Unique constraint on reservation_id in canonical_cancellation_refund_admissions and reservation root locking reject competing distinct commands with REFUND_ALREADY_ADMITTED; verified in focused test A07"
+    },
+    {
+      "invariant": "Injected execution failure leaves database clean and restores APPROVED state",
+      "attribution": "TEST",
+      "evidence": "Transactional boundary ensures failure during runAuthorized rolls back all mutations; preparation remains APPROVED for retry; verified in focused test A08"
+    },
+    {
+      "invariant": "Downstream issue_cancellation_refund_authorization verifies durable admission provenance",
+      "attribution": "TEST",
+      "evidence": "Updated issue_cancellation_refund_authorization routine checks canonical_cancellation_refund_admissions when evidence_classification = 'AUTHENTICATED_HUMAN_APPROVAL'; verified in focused test A10"
+    },
+    {
+      "invariant": "Zero refund authorizations created during admission",
+      "attribution": "TEST",
+      "evidence": "Admissions process inserts records into canonical_cancellation_refund_admissions and canonical_cancellation_refund_decision_evidence only; count(*) of canonical_cancellation_refund_authorizations remains 0; verified in focused test A01"
+    },
+    {
+      "invariant": "Preparations and admissions tables are immutable against UPDATE and DELETE",
+      "attribution": "SCHEMA_CONSTRAINT",
+      "evidence": "Triggers trg_canonical_refund_prep_immutable and trg_canonical_refund_admissions_immutable prevent illegal mutations; verified in focused test A11"
+    },
+    {
+      "invariant": "External payment provider refund execution (Razorpay / Stripe)",
+      "attribution": "NOT_DEMONSTRATED",
+      "evidence": "Out of scope for W4-D admission slice; zero payment provider API calls made"
+    },
+    {
+      "invariant": "Money movement, ledger settlement, payout dispatch, or wallet crediting",
+      "attribution": "NOT_APPLICABLE",
+      "evidence": "Admission authorizes refund decision only; zero financial money movement occurs"
+    }
+  ],
+  "trustBoundariesAndLimitations": {
+    "humanApprovalAdmission": "Refund decision admission implements dual-custody human approval with WebAuthn passkey step-up authentication. Evidence admitted via this workflow is classified AUTHENTICATED_HUMAN_APPROVAL and references durable admission provenance in canonical_cancellation_refund_admissions.",
+    "zeroRefundAuthorizationsCreated": "Admission creates decision evidence ONLY. It does NOT create a refund authorization row in canonical_cancellation_refund_authorizations. Authorizations must be issued downstream via issue_cancellation_refund_authorization by role encho_refund_issuer.",
+    "zeroMoneyMovement": "This slice authorizes refund decisions within the canonical database only. Zero money movement, zero Razorpay/Stripe API dispatch, zero payout execution, zero wallet crediting, and zero ledger settlement occur.",
+    "noRemainingRefundableBalanceAccounting": "This slice does not maintain a cumulative refund ledger or remaining refundable balance. Future slices must enforce partial-refund accounting before settlement.",
+    "publicSurface": "Zero public HTTP/REST/GraphQL routes or UI elements are exposed. All functionality is internal staff service and database routines."
+  }
+}

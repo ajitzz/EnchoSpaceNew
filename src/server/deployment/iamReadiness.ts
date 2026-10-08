@@ -1,7 +1,12 @@
 import type pg from 'pg';
 import {isRestrictedWorkforceRuntime} from '../../lib/iam/runtimeBoundary.js';
 
-import { baseWorkforcePermissionCodes, workforcePermissionCodes } from '../../shared/iam/contracts.js';
+import {
+  baseWorkforcePermissionCodes,
+  offerWorkforcePermissionCodes,
+  accommodationWorkforcePermissionCodes,
+  workforcePermissionCodes,
+} from '../../shared/iam/contracts.js';
 import {invitationBaseOwnerPolicyNames,verifyInvitationBaseOwnerPolicies} from './iamInvitationReadiness.js';
 import {lifecycleBaseOwnerPolicyNames,verifyLifecycleBaseOwnerPolicies} from './iamLifecycleReadiness.js';
 import {sessionIssuerBaseOwnerPolicyNames,verifySessionIssuerBaseOwnerPolicies} from './iamSessionIssuerReadiness.js';
@@ -211,7 +216,18 @@ export async function verifyIamCatalog(client: pg.PoolClient) {
     SELECT to_regclass('public.sellable_offers') IS NOT NULL AS present
   `)).rows[0]?.present === true;
 
-  const expectedCodes = [...(hasOfferSchema ? workforcePermissionCodes : baseWorkforcePermissionCodes)].sort();
+  const hasAccommodationAdmission = (await client.query<{ present: boolean }>(`
+    SELECT EXISTS (
+      SELECT 1 FROM internal_permission_catalog
+      WHERE permission_code = 'accommodation.refund_decision.admit'
+    ) AS present
+  `)).rows[0]?.present === true;
+
+  const expectedCodes = [
+    ...baseWorkforcePermissionCodes,
+    ...(hasOfferSchema ? offerWorkforcePermissionCodes : []),
+    ...(hasAccommodationAdmission ? accommodationWorkforcePermissionCodes : []),
+  ].sort();
   const permissionCatalogValid = JSON.stringify(catalog) === JSON.stringify(expectedCodes);
 
   const defaults = (await client.query<{

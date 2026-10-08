@@ -56,9 +56,14 @@ export const offerWorkforcePermissionCodes = [
   'offer.accept',
 ] as const;
 
+export const accommodationWorkforcePermissionCodes = [
+  'accommodation.refund_decision.admit',
+] as const;
+
 export const workforcePermissionCodes = [
   ...baseWorkforcePermissionCodes,
   ...offerWorkforcePermissionCodes,
+  ...accommodationWorkforcePermissionCodes,
 ] as const;
 
 export const workforcePermissionCodeSchema = z.enum(workforcePermissionCodes);
