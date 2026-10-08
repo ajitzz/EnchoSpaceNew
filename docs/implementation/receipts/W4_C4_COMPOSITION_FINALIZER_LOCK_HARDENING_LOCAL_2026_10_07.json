@@ -186,7 +186,7 @@
       "measuredCleanupDurationMs": "~3500-3600ms (strictly < 5000ms, proving cutoff before 5200ms query completed)",
       "fallbackExercised": true,
       "clientDiscarded": true,
-      "clientDisposalMethod": "coordinator.discardClient(compConn, 'C4_E02_FALLBACK_DISCARD') with socket destroy and error release to prevent return to pool",
+      "clientDisposalMethod": "coordinator.tracker.discard(compConn, gracefulErr), invoked as this.tracker.discard inside the coordinator; socket destruction and captured original client release with the error prevent return as a healthy pooled client.",
       "terminationPath": "pg_terminate_backend via owner connection restricted to test-owned composition backend",
       "backendTerminationVerified": "VERIFIED (pg_stat_activity shows comp backend ABSENT)",
       "settlementError": {
@@ -231,7 +231,7 @@
     },
     "demonstrationE_delayedFallbackControl": {
       "stableIdentifier": "C4-E02-DELAYED-FALLBACK-CONTROL",
-      "scenario": "Demonstrates real database control query in fallback stage (SELECT pg_sleep(2.5)) active on database backend; cutoff at graceful budget; cancellation (pg_cancel_backend) strictly bounded by remaining cleanup deadline; zero raw unbounded awaits; all backends verified idle/clean; zero unsettled operations at exit",
+      "scenario": "Demonstration E starts SELECT pg_sleep(2.5) AS fb_delay before cleanup. The prestarted delayed query exhausts the graceful wait, after which cleanup enters fallback; the test asserts delayed-query settlement and final accounting. E does not contain a pg_stat_activity active-state assertion. The actual delayed cancellation/control-path proof is provided by P3 in reviewer pack 1dd29ee536a9c7a3cfd30b07558e828ca6f9f274, not by Demonstration E.",
       "controlQuerySql": "SELECT pg_sleep(2.5) AS fb_delay",
       "fallbackExercised": true,
       "delayedControlSettled": true,
@@ -279,7 +279,7 @@
       "scenario": "Negative control verifies that runWithDeadline given an already-expired deadline rejects immediately with HarnessDeadlineError before invoking the action",
       "actionInvocationCount": 0,
       "pendingOperationsAtExit": 0,
-      "observedError": "HarnessDeadlineError: HARNESS_DEADLINE_EXPIRED: action not started before deadline",
+      "observedError": "HarnessDeadlineError: NEGATIVE_CONTROL_BUDGET_EXPIRED",
       "status": "PASS"
     },
     "raceCaseD_nonActiveHold": {
