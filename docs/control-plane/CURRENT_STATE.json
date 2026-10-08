@@ -1,10 +1,10 @@
 {
   "canonicalBranch": "codex/canonical-development",
-  "canonicalHead": "dbba5c6af6b01f6f7e1fe931d9ede8132f4890b1",
-  "latestAcceptedSlice": "W4-C4",
-  "nextSlice": "W4-D money/refund authority (exact next task/acceptance contract unresolved)",
-  "latestMigration": 60,
-  "latestReceipt": "docs/implementation/receipts/W4_C4_COMPOSITION_FINALIZER_LOCK_HARDENING_LOCAL_2026_10_07.json",
+  "canonicalHead": "6037caf906f4880066a586119edd5305bf1583bb",
+  "latestAcceptedSlice": "W4-D local cancellation refund authorization",
+  "nextSlice": "W4-D follow-up: select the immediate refund-consumption/execution prerequisite and freeze its exact contract (unresolved; no task dispatched)",
+  "latestMigration": 61,
+  "latestReceipt": "docs/implementation/receipts/W4_D_CANCELLATION_REFUND_AUTHORIZATION_LOCAL.json",
   "integrationLedger": "docs/implementation/AGENT_INTEGRATION_LEDGER.md",
   "publicCanonicalJourneyStopsAt": "TEMPORARY_HOLD",
   "productionEvaluated": false
