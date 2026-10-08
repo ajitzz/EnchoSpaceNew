@@ -1,0 +1,200 @@
+{
+  "task": "W4-D — CANONICAL CANCELLATION REFUND AUTHORIZATION",
+  "canonicalBase": "e75b446b9754104f62d1e61ac3c665563ce40a96",
+  "workerBranch": "worker/antigravity/w4-d-cancellation-refund-authorization",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "scope": {
+    "slice": "W4-D: LOCAL CANONICAL CANCELLATION REFUND AUTHORIZATION ONLY",
+    "historicalIntentContract": "Admitted internal financial decision approves exact INR amount against captured payment and completed ENCHO_DIRECT V1 cancellation; database verifies canonical bindings and records one immutable authorization",
+    "realApprovalRegistrar": "NOT IMPLEMENTED (synthetic evidence admitted in disposable test fixtures only)",
+    "moneyMovement": "NONE (zero provider refund execution, zero payout dispatch, zero settlement, zero wallet credit)",
+    "remainingRefundableBalanceAccounting": "NONE",
+    "publicGuestHostIngress": "ABSENT",
+    "productionStatus": "NOT EVALUATED"
+  },
+  "migration": {
+    "file": "src/migrations/061_canonical_cancellation_refund_authorization.sql",
+    "sha256": "642980146ebdaa2b16bd491e58480bda1615ee7c5b64ef1d45bc05fa60d4c40a",
+    "strategy": "Additive schema extension creating canonical_cancellation_refund_decision_evidence and canonical_cancellation_refund_authorizations immutable tables with deterministic SHA-256 trigger digest, cross-binding validation triggers, immutability triggers, explicit unique constraints, atomic routine issue_cancellation_refund_authorization with strict issuer role gate, reservation root locking, replay recovery, and restricted role encho_refund_issuer provisioning"
+  },
+  "tables": {
+    "canonical_cancellation_refund_decision_evidence": {
+      "columns": {
+        "id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "decision_ref": "TEXT NOT NULL UNIQUE CHECK (length(trim(decision_ref)) > 0)",
+        "version": "INT NOT NULL DEFAULT 1 CHECK (version = 1)",
+        "decision_digest": "TEXT NOT NULL CHECK (decision_digest ~ '^[a-f0-9]{64}$')",
+        "evidence_classification": "TEXT NOT NULL CHECK (evidence_classification IN ('LOCAL_SYNTHETIC_TEST_FIXTURE', 'ACCOMMODATION_FINANCE_APPROVAL_RECORD'))",
+        "reason_text": "TEXT",
+        "approval_ref": "TEXT NOT NULL CHECK (length(trim(approval_ref)) > 0)",
+        "verifying_component": "TEXT NOT NULL CHECK (verifying_component IN ('DISPOSABLE_TEST_FIXTURE_RUNNER', 'REFUND_DECISION_REGISTRAR_SERVICE'))",
+        "verified_at": "TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp()",
+        "reservation_id": "UUID NOT NULL UNIQUE REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
+        "cancellation_event_id": "UUID NOT NULL UNIQUE REFERENCES canonical_reservation_events(event_id) ON DELETE RESTRICT",
+        "cancellation_release_id": "UUID NOT NULL UNIQUE REFERENCES canonical_reservation_cancellation_inventory_releases(release_id) ON DELETE RESTRICT",
+        "paid_bridge_id": "UUID NOT NULL UNIQUE REFERENCES canonical_payment_reservations(id) ON DELETE RESTRICT",
+        "payment_attempt_id": "UUID NOT NULL UNIQUE REFERENCES canonical_payment_attempts(id) ON DELETE RESTRICT",
+        "quote_id": "UUID NOT NULL REFERENCES stays_quotes(id) ON DELETE RESTRICT",
+        "payable_authority_id": "UUID NOT NULL UNIQUE REFERENCES canonical_payable_authorities(id) ON DELETE RESTRICT",
+        "provider_origin_kind": "TEXT NOT NULL CHECK (provider_origin_kind IN ('RAZORPAY', 'STRIPE'))",
+        "provider_payment_ref": "TEXT NOT NULL CHECK (length(trim(provider_payment_ref)) > 0)",
+        "supporting_provider_event_id": "UUID NOT NULL UNIQUE REFERENCES canonical_provider_events(id) ON DELETE RESTRICT",
+        "supporting_evidence_hash": "TEXT NOT NULL CHECK (supporting_evidence_hash ~ '^[a-f0-9]{64}$')",
+        "approved_amount_paise": "BIGINT NOT NULL CHECK (approved_amount_paise > 0)",
+        "currency": "TEXT NOT NULL CHECK (currency = 'INR')",
+        "permitted_submitting_component": "TEXT NOT NULL CHECK (permitted_submitting_component = 'REFUND_DECISION_AUTHORITY_PRIMITIVE')",
+        "permitted_issuer_role": "TEXT NOT NULL CHECK (permitted_issuer_role = 'encho_refund_issuer')",
+        "created_at": "TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp()"
+      },
+      "constraints": [
+        "uq_refund_decision_evidence_ref (decision_ref)",
+        "uq_refund_decision_evidence_reservation (reservation_id)",
+        "uq_refund_decision_evidence_cancellation_event (cancellation_event_id)",
+        "uq_refund_decision_evidence_cancellation_release (cancellation_release_id)",
+        "uq_refund_decision_evidence_paid_bridge (paid_bridge_id)",
+        "uq_refund_decision_evidence_payment_attempt (payment_attempt_id)",
+        "uq_refund_decision_evidence_payable_authority (payable_authority_id)",
+        "uq_refund_decision_evidence_provider_event (supporting_provider_event_id)",
+        "uq_refund_decision_evidence_capture (provider_origin_kind, provider_payment_ref)"
+      ],
+      "triggers": [
+        "trg_canonical_refund_decision_evidence_before_insert: canonical_cancellation_refund_decision_evidence_before_insert() enforces cross-binding consistency with canonical tables and computes deterministic SHA-256 decision_digest",
+        "trg_canonical_refund_decision_evidence_immutable: canonical_cancellation_refund_decision_evidence_reject_mutation() raises CANONICAL_REFUND_DECISION_EVIDENCE_IMMUTABLE on UPDATE or DELETE"
+      ],
+      "rowLevelSecurity": "Enabled and forced: ALTER TABLE canonical_cancellation_refund_decision_evidence ENABLE ROW LEVEL SECURITY; ALTER TABLE canonical_cancellation_refund_decision_evidence FORCE ROW LEVEL SECURITY"
+    },
+    "canonical_cancellation_refund_authorizations": {
+      "columns": {
+        "id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        "command_id": "UUID NOT NULL UNIQUE",
+        "command_fingerprint": "TEXT NOT NULL CHECK (command_fingerprint ~ '^[a-f0-9]{64}$')",
+        "decision_evidence_id": "UUID NOT NULL UNIQUE REFERENCES canonical_cancellation_refund_decision_evidence(id) ON DELETE RESTRICT",
+        "reservation_id": "UUID NOT NULL UNIQUE REFERENCES canonical_reservations(id) ON DELETE RESTRICT",
+        "cancellation_release_id": "UUID NOT NULL UNIQUE REFERENCES canonical_reservation_cancellation_inventory_releases(release_id) ON DELETE RESTRICT",
+        "paid_bridge_id": "UUID NOT NULL UNIQUE REFERENCES canonical_payment_reservations(id) ON DELETE RESTRICT",
+        "payment_attempt_id": "UUID NOT NULL UNIQUE REFERENCES canonical_payment_attempts(id) ON DELETE RESTRICT",
+        "provider_origin_kind": "TEXT NOT NULL CHECK (provider_origin_kind IN ('RAZORPAY', 'STRIPE'))",
+        "provider_payment_ref": "TEXT NOT NULL CHECK (length(trim(provider_payment_ref)) > 0)",
+        "issuing_role": "TEXT NOT NULL CHECK (issuing_role = 'encho_refund_issuer')",
+        "issuing_principal": "TEXT NOT NULL CHECK (length(trim(issuing_principal)) > 0)",
+        "created_at": "TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp()"
+      },
+      "constraints": [
+        "command_id UNIQUE",
+        "decision_evidence_id UNIQUE",
+        "reservation_id UNIQUE",
+        "cancellation_release_id UNIQUE",
+        "paid_bridge_id UNIQUE",
+        "payment_attempt_id UNIQUE",
+        "uq_refund_auth_capture UNIQUE (provider_origin_kind, provider_payment_ref)"
+      ],
+      "triggers": [
+        "trg_canonical_refund_authorizations_before_insert: canonical_cancellation_refund_authorizations_before_insert() enforces cross-binding validation against decision evidence",
+        "trg_canonical_refund_authorizations_immutable: canonical_cancellation_refund_authorizations_reject_mutation() raises CANONICAL_REFUND_AUTHORIZATION_IMMUTABLE on UPDATE or DELETE"
+      ],
+      "rowLevelSecurity": "Enabled and forced: ALTER TABLE canonical_cancellation_refund_authorizations ENABLE ROW LEVEL SECURITY; ALTER TABLE canonical_cancellation_refund_authorizations FORCE ROW LEVEL SECURITY"
+    }
+  },
+  "functionSignature": {
+    "name": "issue_cancellation_refund_authorization",
+    "parameters": [
+      "target_command UUID",
+      "target_reservation_id UUID",
+      "target_decision_evidence_id UUID"
+    ],
+    "returns": "TABLE (authorization_id UUID, command_id UUID, decision_evidence_id UUID, decision_version INT, decision_digest TEXT, reservation_id UUID, cancellation_release_id UUID, paid_bridge_id UUID, payment_attempt_id UUID, provider_origin_kind TEXT, provider_payment_ref TEXT, approved_amount_paise BIGINT, currency TEXT, issuing_role TEXT, issuing_principal TEXT, created_at TIMESTAMPTZ, replayed BOOLEAN)",
+    "security": "VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on",
+    "roleGate": "Enforces session_user = 'encho_refund_issuer' OR pg_has_role(session_user, 'encho_refund_issuer', 'MEMBER'); raises REFUND_ISSUER_UNAUTHORIZED otherwise",
+    "orderingAndGates": [
+      "1. Caller validation: verifies session_user has role encho_refund_issuer",
+      "2. Input validation: non-null command, reservation, and evidence UUIDs",
+      "3. Evidence admission: verifies permitted_issuer_role = 'encho_refund_issuer', permitted_submitting_component = 'REFUND_DECISION_AUTHORITY_PRIMITIVE', classification = 'LOCAL_SYNTHETIC_TEST_FIXTURE', matching reservation_id",
+      "4. Reservation root lock: SELECT ... FROM canonical_reservations FOR UPDATE",
+      "5. Semantic command fingerprinting: SHA-256 over canonical JSONB payload",
+      "6. Replay check: returns stored authorization with replayed = true if command matches; raises REFUND_COMMAND_CONFLICT on conflict; raises REFUND_ALREADY_AUTHORIZED if reservation/evidence already bound to different command",
+      "7. Canonical subject derivation: latest event CANCELLED by INTERNAL_DECISION for ENCHO_DIRECT, unique V1 cancellation release with effective version 1 and revision NULL, matching night counts, zero sealed V2 revisions, COMMITTED paid bridge, APPROVED payable authority with currency INR",
+      "8. Reconciliation gates: payment attempt locked FOR UPDATE; state MATCHED_CAPTURE; matched_at NOT NULL; reconciliation_reason IS NULL; zero unresolved payment reconciliations; authority hash matches expected_authority_hash",
+      "9. Capture group verification: coherent PROCESSED capture group, unique payment ref and order ref, ceiling >= approved amount > 0, supporting event verified, zero cross-attempt aliases, capture uniqueness check",
+      "10. Atomic insertion: inserts into canonical_cancellation_refund_authorizations; catches unique_violation for race recovery; returns complete table projection with replayed = false"
+    ]
+  },
+  "rolePrivileges": {
+    "roleName": "encho_refund_issuer",
+    "grants": [
+      "GRANT USAGE ON SCHEMA public",
+      "GRANT EXECUTE ON FUNCTION issue_cancellation_refund_authorization(UUID, UUID, UUID)"
+    ],
+    "absenceOfExtraPrivileges": {
+      "tableDml": "ZERO direct INSERT, UPDATE, DELETE, or SELECT on canonical_cancellation_refund_decision_evidence, canonical_cancellation_refund_authorizations, canonical_reservations, canonical_payment_attempts, or inventory_days",
+      "schemaCreate": "ZERO CREATE on schema public or current_database()",
+      "superuser": "NOT rolsuper, NOT rolbypassrls, NOT rolcreatedb, NOT rolcreaterole, NOT rolreplication"
+    }
+  },
+  "focusedTestResults": {
+    "script": "scripts/testing/w4d-cancellation-refund-authorization.mjs",
+    "sha256": "519abd36953bc3366f23fc798011789d015dc40423f92f47336a38f74a0ade7f",
+    "testRunner": "node --import tsx --test scripts/testing/w4d-cancellation-refund-authorization.mjs",
+    "status": "PASS",
+    "passedTests": 1,
+    "failedTests": 0,
+    "scenarios": {
+      "T01": {
+        "title": "Valid paid V1 cancellation plus admitted synthetic decision returns complete authorization",
+        "result": "PASS",
+        "evidence": "Successfully issued refund authorization with replayed = false; all derived bindings match canonical records; verified row persisted in canonical_cancellation_refund_authorizations"
+      },
+      "T02": {
+        "title": "Payable differs from room subtotal: follows payable/capture authority",
+        "result": "PASS",
+        "evidence": "2-night reservation with 1,100,000 paise room subtotal and 1,300,000 paise payable authority; approved amount 1,200,000 paise exceeds room subtotal but remains within captured ceiling; successfully authorized"
+      },
+      "T03": {
+        "title": "Missing/forged approval and issuer evidence-DML denial",
+        "result": "PASS",
+        "evidence": "Non-existent evidence rejected; unauthenticated caller rejected with 42501; role without issuer permission rejected with REFUND_ISSUER_UNAUTHORIZED; issuer direct INSERT/UPDATE/DELETE on evidence denied with 42501"
+      },
+      "T04": {
+        "title": "Cross-resource evidence/authorization insert rejection",
+        "result": "PASS",
+        "evidence": "Independent database triggers reject mismatched reservation, mismatched cancellation release, mismatched paid bridge, mismatched payment attempt, and mismatched capture ref on both tables"
+      },
+      "T05": {
+        "title": "ACTIVE/request-only, external, direct-only, and V2 exclusions",
+        "result": "PASS",
+        "evidence": "ACTIVE uncancelled reservation rejected; external origin rejected; direct-finalizer-only rejected; V2 cancellation release rejected with V2_CANCELLATION_RELEASE_EXCLUDED"
+      },
+      "T06": {
+        "title": "Invalid amount/currency, conflicting capture, unresolved reconciliation",
+        "result": "PASS",
+        "evidence": "Approved amount > capture ceiling rejected with REFUND_AMOUNT_EXCEEDS_CAPTURE; unresolved reconciliation rejected with PAYMENT_RECONCILIATION_UNRESOLVED; visible cross-attempt alias rejected with CAPTURE_CROSS_ATTEMPT_ALIAS_AMBIGUOUS"
+      },
+      "T07": {
+        "title": "Equivalent duplicate captures yield one ceiling (no summing)",
+        "result": "PASS",
+        "evidence": "Two duplicate capture events for same attempt verified in DB; attempting to authorize 2x captured amount rejected with REFUND_AMOUNT_EXCEEDS_CAPTURE; authorizing single captured ceiling succeeds"
+      },
+      "T08": {
+        "title": "Exact authorized replay after later financial observations",
+        "result": "PASS",
+        "evidence": "Replay with identical command returns exact authorization with replayed = true; replay with changed semantics rejected with REFUND_COMMAND_CONFLICT; unauthorized caller replay attempt rejected with 42501"
+      },
+      "T09": {
+        "title": "Two real connections: identical converge, competing blocked",
+        "result": "PASS",
+        "evidence": "Concurrent executions of identical command on two separate issuer connections converge (one insertion, one recovery replay); distinct competing command on same reservation rejected with REFUND_ALREADY_AUTHORIZED"
+      },
+      "T10": {
+        "title": "Immutability, injected failure rollback, and zero domain row mutation",
+        "result": "PASS",
+        "evidence": "UPDATE and DELETE rejected on evidence and authorizations; injected failure rolls back transaction cleanly; verified zero mutation to canonical_reservations, canonical_reservation_nights, booking_holds, inventory_days, or stays_quotes"
+      }
+    }
+  },
+  "trustBoundariesAndLimitations": {
+    "syntheticEvidenceBoundary": "Decision evidence admitted in local testing is explicitly classified LOCAL_SYNTHETIC_TEST_FIXTURE with verifying component DISPOSABLE_TEST_FIXTURE_RUNNER. It does NOT represent a real founder or human approval.",
+    "missingApprovalRegistrar": "Production approval registrar is NOT implemented in this slice. A future dedicated registrar service must verify real human financial approval and write ACCOMMODATION_FINANCE_APPROVAL_RECORD evidence.",
+    "zeroMoneyMovement": "This slice authorizes refund intent within the canonical database only. Zero money movement, zero Razorpay/Stripe API dispatch, zero payout execution, zero wallet crediting, and zero ledger settlement occur.",
+    "noRemainingRefundableBalanceAccounting": "This slice does not maintain a cumulative refund ledger or remaining refundable balance. Future slices must enforce partial-refund accounting before settlement.",
+    "publicSurface": "Zero public HTTP/REST/GraphQL routes or UI elements are exposed. All functionality is internal database routines under role encho_refund_issuer."
+  }
+}
