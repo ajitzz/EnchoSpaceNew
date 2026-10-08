@@ -216,17 +216,14 @@ export async function verifyIamCatalog(client: pg.PoolClient) {
     SELECT to_regclass('public.sellable_offers') IS NOT NULL AS present
   `)).rows[0]?.present === true;
 
-  const hasAccommodationAdmission = (await client.query<{ present: boolean }>(`
-    SELECT EXISTS (
-      SELECT 1 FROM internal_permission_catalog
-      WHERE permission_code = 'accommodation.refund_decision.admit'
-    ) AS present
+  const hasAccommodationAdmissionSchema = (await client.query<{ present: boolean }>(`
+    SELECT to_regclass('public.canonical_cancellation_refund_decision_admissions') IS NOT NULL AS present
   `)).rows[0]?.present === true;
 
   const expectedCodes = [
     ...baseWorkforcePermissionCodes,
     ...(hasOfferSchema ? offerWorkforcePermissionCodes : []),
-    ...(hasAccommodationAdmission ? accommodationWorkforcePermissionCodes : []),
+    ...(hasAccommodationAdmissionSchema ? accommodationWorkforcePermissionCodes : []),
   ].sort();
   const permissionCatalogValid = JSON.stringify(catalog) === JSON.stringify(expectedCodes);
 

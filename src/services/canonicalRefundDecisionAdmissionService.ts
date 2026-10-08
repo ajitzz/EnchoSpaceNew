@@ -1,8 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { z } from 'zod';
-import { StaffSessionReader, WorkforceSessionError } from '../lib/iam/staffSessions.js';
-import { PostgresWorkforceAuthorization } from '../lib/iam/postgresAuthorization.js';
+import { StaffSessionReader, WorkforceSessionError, staffSessionCredential } from '../lib/iam/staffSessions.js';
+import { isRestrictedWorkforceRuntime } from '../lib/iam/runtimeBoundary.js';
+import { parsePrincipalContext, type PrincipalContext } from '../shared/iam/principalContext.js';
+import { requireExecutionContext } from '../lib/observability/executionContext.js';
+import {
+  PostgresWorkforceAuthorization,
+  WorkforceCommandOutcomeUnknownError,
+} from '../lib/iam/postgresAuthorization.js';
 import {
   PrivilegedActions,
   PrivilegedActionError,
@@ -11,7 +17,6 @@ import {
   type PrivilegedActionRequestInput,
 } from '../lib/iam/privilegedActions.js';
 import { workforceEnvironmentSchema } from '../shared/iam/contracts.js';
-import type { PrincipalContext } from '../shared/iam/principalContext.js';
 
 const decimalMinorSchema = z.string().regex(/^[1-9][0-9]*$/);
 const reasonCodeSchema = z.string().regex(/^[A-Z0-9_]{1,64}$/);
@@ -140,95 +145,32 @@ export class CanonicalRefundDecisionAdmissionService {
         throw new WorkforceSessionError('STAFF_SESSION_REQUIRED');
       }
 
-      // 1. Validate reservation root
-      const res = (await client.query<{ id: string }>(
-        'SELECT id FROM canonical_reservations WHERE id = $1',
-        [params.reservationId]
-      )).rows[0];
-      if (!res) throw new Error('RESERVATION_NOT_FOUND');
-
-      // 2. Validate latest event is CANCELLED by INTERNAL_DECISION for ENCHO_DIRECT
-      const cancelEvent = (await client.query<{
-        event_id: string;
-        event_type: string;
-        origin_kind: string;
-        actor_kind: string;
-        decision_source_kind: string;
-      }>(
-        `SELECT event_id, event_type, origin_kind, actor_kind, decision_source_kind
-         FROM canonical_reservation_events
-         WHERE reservation_id = $1
-         ORDER BY sequence_number DESC
-         LIMIT 1`,
-        [params.reservationId]
-      )).rows[0];
-
-      if (!cancelEvent || cancelEvent.event_type !== 'CANCELLED' ||
-          cancelEvent.origin_kind !== 'ENCHO_DIRECT' ||
-          cancelEvent.actor_kind !== 'INTERNAL_DECISION' ||
-          cancelEvent.decision_source_kind !== 'INTERNAL_AUTHORITY_PRIMITIVE') {
-        throw new Error('RESERVATION_NOT_CANCELLED');
-      }
-
-      // 3. Validate unique V1 cancellation release
-      const release = (await client.query<{
-        release_id: string;
-        released_effective_version: number;
-        released_revision_id: string | null;
-      }>(
-        `SELECT release_id, released_effective_version, released_revision_id
-         FROM canonical_reservation_cancellation_inventory_releases
-         WHERE reservation_id = $1`,
-        [params.reservationId]
-      )).rows[0];
-
-      if (!release || release.released_effective_version !== 1 || release.released_revision_id !== null) {
-        throw new Error('CANCELLATION_RELEASE_INVALID');
-      }
-
-      // 4. Validate paid bridge
-      const bridge = (await client.query<{
-        id: string;
+      // Call protected database preview function
+      const previewRes = await client.query<{
+        reservation_id: string;
+        cancellation_event_id: string;
+        cancellation_release_id: string;
+        paid_bridge_id: string;
         payment_attempt_id: string;
         quote_id: string;
-      }>(
-        'SELECT id, payment_attempt_id, quote_id FROM canonical_payment_reservations WHERE reservation_id = $1',
-        [params.reservationId]
-      )).rows[0];
-      if (!bridge) throw new Error('PAID_BRIDGE_NOT_FOUND');
-
-      // 5. Validate payable authority
-      const payable = (await client.query<{
-        id: string;
+        payable_authority_id: string;
+        provider_origin_kind: 'RAZORPAY' | 'STRIPE';
+        provider_payment_ref: string;
+        supporting_provider_event_id: string;
+        supporting_evidence_hash: string;
+        captured_ceiling_paise: string;
         currency: string;
       }>(
-        'SELECT id, currency FROM canonical_payable_authorities WHERE quote_id = $1',
-        [bridge.quote_id]
-      )).rows[0];
-      if (!payable || payable.currency !== 'INR') throw new Error('PAYABLE_AUTHORITY_INVALID');
+        'SELECT * FROM get_cancellation_refund_decision_preview($1)',
+        [params.reservationId]
+      );
 
-      // 6. Validate capture facts
-      const captures = (await client.query<{
-        id: string;
-        origin_kind: 'RAZORPAY' | 'STRIPE';
-        provider_payment_ref: string;
-        evidence_hash: string;
-        reported_amount_paise: string;
-      }>(
-        `SELECT id, origin_kind, provider_payment_ref, evidence_hash, reported_amount_paise
-         FROM canonical_provider_events
-         WHERE payment_attempt_id = $1
-           AND normalized_event_type = 'PAYMENT_CAPTURED'`,
-        [bridge.payment_attempt_id]
-      )).rows;
+      if (previewRes.rows.length === 0) {
+        throw new Error('RESERVATION_NOT_FOUND');
+      }
 
-      if (!captures.length) throw new Error('NO_VERIFIED_CAPTURES_FOUND');
-
-      const distinctAmounts = new Set(captures.map(c => c.reported_amount_paise));
-      if (distinctAmounts.size > 1) throw new Error('CAPTURE_AMOUNT_CONFLICT');
-
-      const capture = captures[0];
-      const ceiling = BigInt(capture.reported_amount_paise);
+      const preview = previewRes.rows[0];
+      const ceiling = BigInt(preview.captured_ceiling_paise);
       const requested = BigInt(params.approvedAmountMinor);
 
       if (requested <= 0n || requested > ceiling) {
@@ -240,16 +182,16 @@ export class CanonicalRefundDecisionAdmissionService {
         decisionRef: params.decisionRef,
         decisionVersion: params.decisionVersion ?? 1,
         reservationId: params.reservationId,
-        cancellationEventId: cancelEvent.event_id,
-        cancellationReleaseId: release.release_id,
-        paidBridgeId: bridge.id,
-        paymentAttemptId: bridge.payment_attempt_id,
-        quoteId: bridge.quote_id,
-        payableAuthorityId: payable.id,
-        providerOriginKind: capture.origin_kind,
-        providerPaymentRef: capture.provider_payment_ref,
-        supportingProviderEventId: capture.id,
-        supportingEvidenceHash: capture.evidence_hash,
+        cancellationEventId: preview.cancellation_event_id,
+        cancellationReleaseId: preview.cancellation_release_id,
+        paidBridgeId: preview.paid_bridge_id,
+        paymentAttemptId: preview.payment_attempt_id,
+        quoteId: preview.quote_id,
+        payableAuthorityId: preview.payable_authority_id,
+        providerOriginKind: preview.provider_origin_kind,
+        providerPaymentRef: preview.provider_payment_ref,
+        supportingProviderEventId: preview.supporting_provider_event_id,
+        supportingEvidenceHash: preview.supporting_evidence_hash,
         approvedAmountMinor: params.approvedAmountMinor,
         currency: 'INR',
         reasonCode: params.reasonCode,
@@ -274,6 +216,7 @@ export class CanonicalRefundDecisionAdmissionService {
     actionReceipt: PrivilegedActionReceipt;
     commandFingerprint: string;
     envelope: PrivilegedActionRequestInput<AdmissionCommandPacket>;
+    replayed: boolean;
   }> {
     const envelope = await this.reader.read(makerToken, async (_client, makerPrincipal) => {
       return this.buildRequestEnvelope(
@@ -286,34 +229,115 @@ export class CanonicalRefundDecisionAdmissionService {
 
     const commandFingerprint = this.fingerprint(envelope);
 
-    // Call privilegedActions.request to create PENDING action authorization
+    // Call privilegedActions.request to create/replay PENDING action authorization
     const requested = await this.privileged.request(envelope);
 
-    // Retain exact prepared packet in database
-    await this.staffPool.query(
-      `INSERT INTO canonical_cancellation_refund_decision_preparations (
-        command_id,
-        action_authorization_id,
-        reservation_id,
-        command_fingerprint,
-        maker_membership_id,
-        packet_payload
-      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
-      [
-        params.packet.admissionCommandId,
-        requested.receipt.id,
-        params.packet.reservationId,
-        commandFingerprint,
-        envelope.context.principal.membershipId,
-        JSON.stringify(params.packet),
-      ]
-    );
+    // Retain exact prepared packet in database via protected routine
+    const prepResult = await this.executeWithStaffSessionWrite(makerToken, async (client, _makerPrincipal) => {
+      const res = await client.query<{
+        preparation_id: string;
+        command_id: string;
+        action_authorization_id: string;
+        reservation_id: string;
+        command_fingerprint: string;
+        maker_membership_id: string;
+        packet_payload: unknown;
+        created_at: Date;
+        replayed: boolean;
+      }>(
+        `SELECT * FROM prepare_cancellation_refund_decision(
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+        )`,
+        [
+          params.packet.admissionCommandId,
+          requested.receipt.id,
+          params.packet.reservationId,
+          params.packet.decisionRef,
+          params.packet.decisionVersion,
+          BigInt(params.packet.approvedAmountMinor),
+          params.packet.currency,
+          params.packet.reasonCode,
+          params.reason,
+          commandFingerprint,
+          JSON.stringify(params.packet),
+        ]
+      );
+      return res.rows[0];
+    });
 
     return {
       actionReceipt: requested.receipt,
       commandFingerprint,
       envelope,
+      replayed: prepResult.replayed,
     };
+  }
+
+  private async executeWithStaffSessionWrite<T>(
+    authorization: unknown,
+    work: (client: pg.PoolClient, principal: PrincipalContext) => Promise<T>
+  ): Promise<T> {
+    const credential = staffSessionCredential(authorization);
+    const digest = createHash('sha256').update(credential).digest('hex');
+    const trace = requireExecutionContext();
+    const client = await this.staffPool.connect();
+    let discard = false;
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout='5s'");
+      await client.query("SET LOCAL statement_timeout='10s'");
+      if (!(await isRestrictedWorkforceRuntime(client))) {
+        throw new WorkforceSessionError('WORKFORCE_UNAVAILABLE');
+      }
+      await client.query("SELECT set_config('app.workforce_environment',$1,true)", [this.environment]);
+      const result = await client.query('SELECT * FROM internal_iam_authenticate_session($1)', [digest]);
+      if (result.rowCount !== 1 || !result.rows[0]) {
+        throw new WorkforceSessionError('STAFF_SESSION_REQUIRED');
+      }
+      const session = result.rows[0];
+      const principal = parsePrincipalContext({
+        accountId: session.account_id,
+        actorKind: 'STAFF',
+        organizationId: session.organization_id,
+        membershipId: session.membership_id,
+        sessionId: session.session_id,
+        assuranceLevel: session.assurance_level,
+        authenticatedAt: session.authenticated_at instanceof Date ? session.authenticated_at.toISOString() : String(session.authenticated_at),
+        correlationId: trace.correlationId,
+        operationId: trace.operationId,
+      });
+      await client.query(
+        `SELECT set_config('app.current_user_id',$1,true),
+                set_config('app.organization_id',$2,true),
+                set_config('app.membership_id',$3,true),
+                set_config('app.staff_session_id',$4,true),
+                set_config('app.bypass_rls','false',true),
+                set_config('app.marketing_admin','false',true)`,
+        [String(principal.accountId), principal.organizationId, principal.membershipId, principal.sessionId]
+      );
+      const active = (await client.query<{valid: boolean}>('SELECT internal_iam_lock_authority() AS valid')).rows[0];
+      if (!active?.valid) {
+        throw new WorkforceSessionError('STAFF_SESSION_REQUIRED');
+      }
+      if (this.environment === 'PRODUCTION') {
+        const approved = await client.query(`SELECT 1 FROM internal_iam_current_policy p
+          JOIN internal_iam_policy_versions v ON v.id=p.version_id
+          WHERE p.singleton AND v.approval_status='APPROVED'`);
+        if (approved.rowCount !== 1) throw new WorkforceSessionError('WORKFORCE_UNAVAILABLE');
+      }
+      const value = await work(client, principal);
+      await client.query('COMMIT');
+      return value;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        discard = true;
+      }
+      throw error;
+    } finally {
+      client.release(discard);
+    }
   }
 
   async getRefundDecisionPreview(
@@ -325,12 +349,21 @@ export class CanonicalRefundDecisionAdmissionService {
     commandFingerprint: string;
   }> {
     return this.reader.read(checkerToken, async (client, checkerPrincipal) => {
-      // 1. Verify checker possesses accommodation_finance_approver appointment
+      // 1. Read action authorization (verifies checker membership and scope)
+      const readResult = await this.privileged.read({
+        principal: checkerPrincipal,
+        organizationId: checkerPrincipal.organizationId,
+        authorizationId,
+      });
+
+      // 2. Verify dedicated checker appointment in PostgreSQL
       const appointment = (await client.query<{ valid: boolean }>(
         `SELECT EXISTS (
-          SELECT 1 FROM internal_membership_grants g
+          SELECT 1
+          FROM internal_membership_grants g
           JOIN internal_role_versions v ON v.id = g.role_version_id AND v.organization_id = g.organization_id
-          JOIN internal_role_definitions r ON r.id = v.role_id
+          JOIN internal_role_definitions r ON r.id = v.role_id AND r.organization_id = g.organization_id
+          JOIN internal_role_current_versions rcv ON rcv.role_id = r.id AND rcv.version_id = v.id
           LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
           WHERE g.organization_id = $1
             AND g.membership_id = $2
@@ -338,21 +371,20 @@ export class CanonicalRefundDecisionAdmissionService {
             AND g.environment = $3
             AND g.valid_from <= clock_timestamp()
             AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+            AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= $4::bigint)
             AND rev.grant_id IS NULL
         ) AS valid`,
-        [checkerPrincipal.organizationId, checkerPrincipal.membershipId, this.environment]
+        [
+          checkerPrincipal.organizationId,
+          checkerPrincipal.membershipId,
+          this.environment,
+          readResult.receipt.amountMinor ? BigInt(readResult.receipt.amountMinor) : 0n,
+        ]
       )).rows[0]?.valid;
 
       if (!appointment) {
         throw new PrivilegedActionError('PERMISSION_DENIED');
       }
-
-      // 2. Read action authorization
-      const readResult = await this.privileged.read({
-        principal: checkerPrincipal,
-        organizationId: checkerPrincipal.organizationId,
-        authorizationId,
-      });
 
       // 3. Load retained preparation
       const prepRow = (await client.query<{
@@ -360,8 +392,7 @@ export class CanonicalRefundDecisionAdmissionService {
         command_fingerprint: string;
       }>(
         `SELECT packet_payload, command_fingerprint
-         FROM canonical_cancellation_refund_decision_preparations
-         WHERE action_authorization_id = $1`,
+         FROM get_cancellation_refund_decision_preparation($1)`,
         [authorizationId]
       )).rows[0];
 
@@ -392,12 +423,35 @@ export class CanonicalRefundDecisionAdmissionService {
     }
   ): Promise<PrivilegedActionResult> {
     return this.reader.read(checkerToken, async (client, checkerPrincipal) => {
-      // 1. Verify checker appointment in PostgreSQL
+      // 1. Load authorization to inspect amount and scope
+      const authRow = (await client.query<{
+        amount_minor: string | null;
+        maker_membership_id: string;
+        resource_id: string;
+      }>(
+        `SELECT amount_minor, maker_membership_id, resource_id
+         FROM internal_action_authorizations
+         WHERE id = $1`,
+        [params.authorizationId]
+      )).rows[0];
+
+      if (!authRow) {
+        throw new PrivilegedActionError('ACTION_NOT_FOUND');
+      }
+
+      if (authRow.maker_membership_id === checkerPrincipal.membershipId) {
+        throw new PrivilegedActionError('MAKER_CHECKER_CONFLICT');
+      }
+
+      // 2. Verify dedicated checker appointment in PostgreSQL
+      const approvedMinor = authRow.amount_minor ? BigInt(authRow.amount_minor) : 0n;
       const appointment = (await client.query<{ valid: boolean }>(
         `SELECT EXISTS (
-          SELECT 1 FROM internal_membership_grants g
+          SELECT 1
+          FROM internal_membership_grants g
           JOIN internal_role_versions v ON v.id = g.role_version_id AND v.organization_id = g.organization_id
-          JOIN internal_role_definitions r ON r.id = v.role_id
+          JOIN internal_role_definitions r ON r.id = v.role_id AND r.organization_id = g.organization_id
+          JOIN internal_role_current_versions rcv ON rcv.role_id = r.id AND rcv.version_id = v.id
           LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
           WHERE g.organization_id = $1
             AND g.membership_id = $2
@@ -405,16 +459,18 @@ export class CanonicalRefundDecisionAdmissionService {
             AND g.environment = $3
             AND g.valid_from <= clock_timestamp()
             AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+            AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= $4)
+            AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'RESERVATION' AND g.scope_id = $5))
             AND rev.grant_id IS NULL
         ) AS valid`,
-        [checkerPrincipal.organizationId, checkerPrincipal.membershipId, this.environment]
+        [checkerPrincipal.organizationId, checkerPrincipal.membershipId, this.environment, approvedMinor, authRow.resource_id]
       )).rows[0]?.valid;
 
       if (!appointment) {
         throw new PrivilegedActionError('PERMISSION_DENIED');
       }
 
-      // 2. Execute approve
+      // 3. Execute approve
       return this.privileged.approve({
         principal: checkerPrincipal,
         organizationId: checkerPrincipal.organizationId,
@@ -433,9 +489,10 @@ export class CanonicalRefundDecisionAdmissionService {
       actionAuthorizationId: string;
       makerStepUpReceiptId: string;
       injectedFailureHook?: (client: pg.PoolClient) => Promise<void>;
+      postAdmissionHook?: (client: pg.PoolClient, result: unknown) => Promise<void>;
     }
   ): Promise<AdmittedDecisionRecord> {
-    // 1. Authenticate maker session and check replay / load preparation
+    // 1. Authenticate maker session and check protected guarded replay
     const prepData = await this.reader.read(makerToken, async (client, makerPrincipal) => {
       // A. Guarded Replay Check before entering NEW path
       const replayRes = await client.query<{
@@ -460,40 +517,6 @@ export class CanonicalRefundDecisionAdmissionService {
 
       if (replayRes.rows.length === 1) {
         const row = replayRes.rows[0];
-        // Enforce maker equality
-        if (row.maker_membership_id !== makerPrincipal.membershipId) {
-          throw new PrivilegedActionError('PERMISSION_DENIED');
-        }
-
-        // Load prepared packet & reason to verify fingerprint on replay
-        const prepRow = (await client.query<{
-          packet_payload: AdmissionCommandPacket;
-          command_fingerprint: string;
-          reason: string;
-        }>(
-          `SELECT p.packet_payload, p.command_fingerprint, a.reason
-           FROM canonical_cancellation_refund_decision_preparations p
-           JOIN internal_action_authorizations a ON a.id = p.action_authorization_id
-           WHERE p.command_id = $1`,
-          [params.packet.admissionCommandId]
-        )).rows[0];
-
-        if (!prepRow) {
-          throw new PrivilegedActionError('COMMAND_CONFLICT');
-        }
-
-        const expectedEnvelope = this.buildRequestEnvelope(
-          makerPrincipal,
-          params.packet,
-          params.makerStepUpReceiptId,
-          prepRow.reason
-        );
-        const expectedFingerprint = this.fingerprint(expectedEnvelope);
-
-        if (row.command_fingerprint !== expectedFingerprint) {
-          throw new PrivilegedActionError('COMMAND_CONFLICT');
-        }
-
         return {
           isReplay: true as const,
           makerPrincipal,
@@ -526,9 +549,8 @@ export class CanonicalRefundDecisionAdmissionService {
       }>(
         `SELECT p.command_fingerprint, p.action_authorization_id, p.maker_membership_id, p.packet_payload,
                 a.reason, a.command_hash
-         FROM canonical_cancellation_refund_decision_preparations p
-         JOIN internal_action_authorizations a ON a.id = p.action_authorization_id
-         WHERE p.action_authorization_id = $1`,
+         FROM get_cancellation_refund_decision_preparation($1) p
+         JOIN internal_action_authorizations a ON a.id = p.action_authorization_id`,
         [params.actionAuthorizationId]
       );
 
@@ -591,7 +613,7 @@ export class CanonicalRefundDecisionAdmissionService {
           stepUpReceiptId: params.makerStepUpReceiptId,
         },
       }, async (client, _decision) => {
-        // Optional failure injection hook (for testing rollback in A08)
+        // Optional pre-registrar failure hook
         if (params.injectedFailureHook) {
           await params.injectedFailureHook(client);
         }
@@ -617,6 +639,11 @@ export class CanonicalRefundDecisionAdmissionService {
           throw new Error('ADMISSION_REGISTRATION_FAILED');
         }
 
+        // Optional post-admission failure hook (for testing rollback at audit stage in A08)
+        if (params.postAdmissionHook) {
+          await params.postAdmissionHook(client, result);
+        }
+
         return {
           evidenceId: result.evidence_id,
           admissionId: result.admission_id,
@@ -640,7 +667,9 @@ export class CanonicalRefundDecisionAdmissionService {
         (error instanceof Error && (
           (error as any).code === 'POLICY_CHANGED' ||
           error.message.includes('POLICY_CHANGED') ||
-          error.message.includes('WorkforceCommandOutcomeUnknownError') ||
+          (error as any).code === 'OUTCOME_UNKNOWN' ||
+          error.message.includes('OUTCOME_UNKNOWN') ||
+          error instanceof WorkforceCommandOutcomeUnknownError ||
           (error as any).code === '40001' || // serialization_failure
           (error as any).code === '40P01' || // deadlock_detected
           (error as any).code === '23505' || // unique_violation
@@ -648,37 +677,35 @@ export class CanonicalRefundDecisionAdmissionService {
           (error as any).name === 'WorkforceCommandOutcomeUnknownError'
         )) ||
         (error && typeof error === 'object' && (
-          ('code' in error && (error as { code: string }).code === 'POLICY_CHANGED') ||
-          ('reason' in error && (error as { reason: string }).reason === 'POLICY_CHANGED')
+          (error as any).code === 'POLICY_CHANGED' ||
+          (error as any).code === 'OUTCOME_UNKNOWN'
         ));
 
       if (isRecoveryCandidate) {
-        const recovered = await this.reader.read(makerToken, async (client, principal) => {
-          const res = await client.query<{
-            evidence_id: string;
-            admission_id: string;
-            command_id: string;
-            decision_ref: string;
-            decision_version: number;
-            decision_digest: string;
-            reservation_id: string;
-            approved_amount_paise: string;
-            currency: string;
-            admitted_at: Date;
-            maker_membership_id: string;
-            checker_membership_id: string;
-            command_fingerprint: string;
-            replayed: boolean;
-          }>(
-            'SELECT * FROM get_admitted_cancellation_refund_decision($1)',
-            [params.packet.admissionCommandId]
-          );
+        try {
+          const recovery = await this.reader.read(makerToken, async (client, recoveryPrincipal) => {
+            const recoveryRes = await client.query<{
+              evidence_id: string;
+              admission_id: string;
+              command_id: string;
+              decision_ref: string;
+              decision_version: number;
+              decision_digest: string;
+              reservation_id: string;
+              approved_amount_paise: string;
+              currency: string;
+              admitted_at: Date;
+              maker_membership_id: string;
+              checker_membership_id: string;
+              command_fingerprint: string;
+              replayed: boolean;
+            }>(
+              'SELECT * FROM get_admitted_cancellation_refund_decision($1)',
+              [params.packet.admissionCommandId]
+            );
 
-          if (res.rows.length === 1) {
-            const row = res.rows[0];
-            if (row.maker_membership_id === principal.membershipId &&
-                row.command_fingerprint === commandHash &&
-                row.reservation_id === params.packet.reservationId) {
+            if (recoveryRes.rows.length === 1) {
+              const row = recoveryRes.rows[0];
               return {
                 evidenceId: row.evidence_id,
                 admissionId: row.admission_id,
@@ -695,12 +722,14 @@ export class CanonicalRefundDecisionAdmissionService {
                 replayed: true,
               };
             }
-          }
-          return null;
-        });
+            return null;
+          });
 
-        if (recovered) {
-          return recovered;
+          if (recovery) {
+            return recovery;
+          }
+        } catch {
+          // If recovery lookup fails, rethrow the original error
         }
       }
 

@@ -14,6 +14,7 @@
 --   - Retains exact server-prepared packet in canonical_cancellation_refund_decision_preparations.
 --   - Updates issue_cancellation_refund_authorization to validate durable admission provenance
 --     for AUTHENTICATED_HUMAN_APPROVAL while preserving LOCAL_SYNTHETIC_TEST_FIXTURE.
+--   - Narrow authenticated, resource-scoped preparation, preview and replay routines.
 --   - Admission creates zero refund authorizations.
 
 -- 1. Extend evidence_classification Check Constraint on canonical_cancellation_refund_decision_evidence
@@ -165,7 +166,461 @@ BEGIN
   END LOOP;
 END $seed$;
 
--- 5. Protected Registrar Function: admit_cancellation_refund_decision
+-- 5. Protected Preview Interface: get_cancellation_refund_decision_preview
+CREATE OR REPLACE FUNCTION get_cancellation_refund_decision_preview(
+  target_reservation_id UUID
+)
+RETURNS TABLE (
+  reservation_id UUID,
+  cancellation_event_id UUID,
+  cancellation_release_id UUID,
+  paid_bridge_id UUID,
+  payment_attempt_id UUID,
+  quote_id UUID,
+  payable_authority_id UUID,
+  provider_origin_kind TEXT,
+  provider_payment_ref TEXT,
+  supporting_provider_event_id UUID,
+  supporting_evidence_hash TEXT,
+  captured_ceiling_paise BIGINT,
+  currency TEXT
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+SET row_security = on
+AS $$
+#variable_conflict use_column
+DECLARE
+  current_user_str TEXT;
+  current_org UUID;
+  current_membership UUID;
+  current_env TEXT;
+  res_row RECORD;
+  cancel_event RECORD;
+  rel_row RECORD;
+  rel_nights_count INT;
+  res_nights_count INT;
+  bridge_row RECORD;
+  payable_row RECORD;
+  attempt_row RECORD;
+  prov_event RECORD;
+  capture_amounts BIGINT[];
+  capture_refs TEXT[];
+  captured_ceiling BIGINT;
+BEGIN
+  -- Read session RLS context
+  current_user_str := nullif(current_setting('app.current_user_id', true), '');
+  current_org := nullif(current_setting('app.organization_id', true), '')::uuid;
+  current_membership := nullif(current_setting('app.membership_id', true), '')::uuid;
+  current_env := coalesce(nullif(current_setting('app.workforce_environment', true), ''), 'LOCAL');
+
+  IF current_user_str IS NULL OR current_org IS NULL OR current_membership IS NULL THEN
+    RAISE EXCEPTION 'SESSION_CONTEXT_REQUIRED';
+  END IF;
+
+  -- Verify caller has active membership and capability in target_org
+  IF NOT EXISTS (
+    SELECT 1
+    FROM internal_organization_memberships m
+    JOIN internal_membership_grants g ON g.membership_id = m.id AND g.organization_id = m.organization_id
+    JOIN internal_role_permissions rp ON rp.role_version_id = g.role_version_id
+    LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
+    WHERE m.id = current_membership
+      AND m.organization_id = current_org
+      AND m.status = 'ACTIVE'
+      AND rp.permission_code = 'accommodation.refund_decision.admit'
+      AND g.environment = current_env
+      AND g.valid_from <= clock_timestamp()
+      AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+      AND rev.grant_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
+  -- Load reservation
+  SELECT * INTO res_row
+  FROM canonical_reservations cr
+  WHERE cr.id = target_reservation_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'RESERVATION_NOT_FOUND';
+  END IF;
+
+  -- Cancellation event
+  SELECT * INTO cancel_event
+  FROM canonical_reservation_events cre
+  WHERE cre.reservation_id = target_reservation_id
+  ORDER BY cre.sequence_number DESC
+  LIMIT 1;
+  IF NOT FOUND OR cancel_event.event_type IS DISTINCT FROM 'CANCELLED'
+     OR cancel_event.origin_kind IS DISTINCT FROM 'ENCHO_DIRECT'
+     OR cancel_event.actor_kind IS DISTINCT FROM 'INTERNAL_DECISION'
+     OR cancel_event.decision_source_kind IS DISTINCT FROM 'INTERNAL_AUTHORITY_PRIMITIVE' THEN
+    RAISE EXCEPTION 'RESERVATION_NOT_CANCELLED';
+  END IF;
+
+  -- Release V1
+  SELECT * INTO rel_row
+  FROM canonical_reservation_cancellation_inventory_releases cir
+  WHERE cir.reservation_id = target_reservation_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CANCELLATION_RELEASE_NOT_FOUND';
+  END IF;
+  IF rel_row.released_effective_version IS DISTINCT FROM 1 OR rel_row.released_revision_id IS NOT NULL THEN
+    RAISE EXCEPTION 'V2_CANCELLATION_RELEASE_EXCLUDED';
+  END IF;
+
+  -- Release nights
+  SELECT count(*) INTO rel_nights_count
+  FROM canonical_reservation_cancellation_release_nights crn
+  WHERE crn.release_id = rel_row.release_id;
+  SELECT count(*) INTO res_nights_count
+  FROM canonical_reservation_nights crn
+  WHERE crn.reservation_id = target_reservation_id;
+  IF rel_nights_count = 0 OR rel_nights_count IS DISTINCT FROM res_nights_count THEN
+    RAISE EXCEPTION 'CANCELLATION_RELEASE_NIGHTS_INCOHERENT';
+  END IF;
+
+  -- Sealed V2
+  IF EXISTS (
+    SELECT 1 FROM canonical_reservation_revision_seals s
+    JOIN canonical_reservation_revisions r ON r.id = s.revision_id
+    WHERE r.reservation_id = target_reservation_id
+  ) THEN
+    RAISE EXCEPTION 'SEALED_V2_REVISION_EXCLUDED';
+  END IF;
+
+  -- Paid bridge
+  SELECT * INTO bridge_row
+  FROM canonical_payment_reservations cpr
+  WHERE cpr.reservation_id = target_reservation_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAID_BRIDGE_NOT_FOUND';
+  END IF;
+  IF bridge_row.status IS DISTINCT FROM 'COMMITTED' THEN
+    RAISE EXCEPTION 'PAID_BRIDGE_NOT_COMMITTED';
+  END IF;
+
+  -- Payable authority
+  SELECT * INTO payable_row
+  FROM canonical_payable_authorities cpa
+  WHERE cpa.quote_id = bridge_row.quote_id AND cpa.status = 'APPROVED';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYABLE_AUTHORITY_NOT_FOUND';
+  END IF;
+  IF payable_row.currency IS DISTINCT FROM 'INR' THEN
+    RAISE EXCEPTION 'CURRENCY_NOT_SUPPORTED';
+  END IF;
+
+  -- Payment attempt
+  SELECT * INTO attempt_row
+  FROM canonical_payment_attempts cpa
+  WHERE cpa.id = bridge_row.payment_attempt_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_ATTEMPT_NOT_FOUND';
+  END IF;
+  IF attempt_row.payment_state IS DISTINCT FROM 'MATCHED_CAPTURE' THEN
+    RAISE EXCEPTION 'PAYMENT_STATE_NOT_MATCHED_CAPTURE';
+  END IF;
+  IF attempt_row.reconciliation_reason IS NOT NULL THEN
+    RAISE EXCEPTION 'PAYMENT_RECONCILIATION_UNRESOLVED';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM canonical_payment_reconciliations cpr
+    WHERE cpr.payment_attempt_id = attempt_row.id AND NOT cpr.resolved
+  ) THEN
+    RAISE EXCEPTION 'PAYMENT_RECONCILIATION_UNRESOLVED';
+  END IF;
+
+  -- Capture group
+  SELECT
+    array_agg(DISTINCT cpe.reported_amount_paise),
+    array_agg(DISTINCT cpe.provider_payment_ref)
+  INTO capture_amounts, capture_refs
+  FROM canonical_provider_events cpe
+  WHERE cpe.payment_attempt_id = attempt_row.id
+    AND cpe.normalized_event_type = 'PAYMENT_CAPTURED'
+    AND cpe.status = 'PROCESSED';
+
+  IF capture_amounts IS NULL OR array_length(capture_amounts, 1) = 0 THEN
+    RAISE EXCEPTION 'PAYMENT_CAPTURE_GROUP_EMPTY';
+  END IF;
+  IF array_length(capture_amounts, 1) > 1 THEN
+    RAISE EXCEPTION 'CAPTURE_AMOUNT_CONFLICT';
+  END IF;
+  IF array_length(capture_refs, 1) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'CAPTURE_PAYMENT_REF_AMBIGUOUS';
+  END IF;
+
+  captured_ceiling := capture_amounts[1];
+
+  -- Supporting provider event
+  SELECT * INTO prov_event
+  FROM canonical_provider_events cpe
+  WHERE cpe.payment_attempt_id = attempt_row.id
+    AND cpe.normalized_event_type = 'PAYMENT_CAPTURED'
+    AND cpe.status = 'PROCESSED'
+  ORDER BY cpe.received_at ASC
+  LIMIT 1;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SUPPORTING_PROVIDER_EVENT_NOT_FOUND';
+  END IF;
+
+  RETURN QUERY SELECT
+    res_row.id,
+    cancel_event.event_id,
+    rel_row.release_id,
+    bridge_row.id,
+    attempt_row.id,
+    bridge_row.quote_id,
+    payable_row.id,
+    prov_event.origin_kind,
+    prov_event.provider_payment_ref,
+    prov_event.id,
+    prov_event.evidence_hash,
+    captured_ceiling,
+    'INR'::text;
+  RETURN;
+END;
+$$;
+
+-- 6. Protected Preparation Interface: prepare_cancellation_refund_decision
+CREATE OR REPLACE FUNCTION prepare_cancellation_refund_decision(
+  target_command_id UUID,
+  target_action_authorization_id UUID,
+  target_reservation_id UUID,
+  target_decision_ref TEXT,
+  target_version INT,
+  target_approved_amount_paise BIGINT,
+  target_currency TEXT,
+  target_reason_code TEXT,
+  target_reason TEXT,
+  target_command_fingerprint TEXT,
+  target_packet_payload JSONB
+)
+RETURNS TABLE (
+  preparation_id UUID,
+  command_id UUID,
+  action_authorization_id UUID,
+  reservation_id UUID,
+  command_fingerprint TEXT,
+  maker_membership_id UUID,
+  packet_payload JSONB,
+  created_at TIMESTAMPTZ,
+  replayed BOOLEAN
+)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+SET row_security = on
+AS $$
+#variable_conflict use_column
+DECLARE
+  current_user_str TEXT;
+  current_org UUID;
+  current_membership UUID;
+  current_env TEXT;
+  existing_prep RECORD;
+  auth_row RECORD;
+  new_prep RECORD;
+BEGIN
+  -- Read session RLS context
+  current_user_str := nullif(current_setting('app.current_user_id', true), '');
+  current_org := nullif(current_setting('app.organization_id', true), '')::uuid;
+  current_membership := nullif(current_setting('app.membership_id', true), '')::uuid;
+  current_env := coalesce(nullif(current_setting('app.workforce_environment', true), ''), 'LOCAL');
+
+  IF current_user_str IS NULL OR current_org IS NULL OR current_membership IS NULL THEN
+    RAISE EXCEPTION 'SESSION_CONTEXT_REQUIRED';
+  END IF;
+
+  -- Input checks
+  IF target_command_id IS NULL OR target_action_authorization_id IS NULL OR target_reservation_id IS NULL
+     OR target_decision_ref IS NULL OR length(trim(target_decision_ref)) = 0
+     OR target_version IS NULL OR target_version <= 0
+     OR target_approved_amount_paise IS NULL OR target_approved_amount_paise <= 0
+     OR target_currency IS DISTINCT FROM 'INR'
+     OR target_reason_code IS NULL OR target_reason IS NULL OR length(trim(target_reason)) < 10 THEN
+    RAISE EXCEPTION 'PREPARATION_INPUT_INVALID';
+  END IF;
+
+  -- Verify Maker has active membership with accommodation.refund_decision.admit capability
+  IF NOT EXISTS (
+    SELECT 1
+    FROM internal_organization_memberships m
+    JOIN internal_membership_grants g ON g.membership_id = m.id AND g.organization_id = m.organization_id
+    JOIN internal_role_permissions rp ON rp.role_version_id = g.role_version_id
+    LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
+    WHERE m.id = current_membership
+      AND m.organization_id = current_org
+      AND m.status = 'ACTIVE'
+      AND rp.permission_code = 'accommodation.refund_decision.admit'
+      AND g.environment = current_env
+      AND g.valid_from <= clock_timestamp()
+      AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+      AND rev.grant_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
+  -- 1. Idempotent Retention Check
+  SELECT * INTO existing_prep
+  FROM canonical_cancellation_refund_decision_preparations p
+  WHERE p.command_id = target_command_id
+  FOR UPDATE;
+
+  IF FOUND THEN
+    -- Check if identical packet by same maker
+    IF existing_prep.maker_membership_id IS NOT DISTINCT FROM current_membership
+       AND existing_prep.reservation_id IS NOT DISTINCT FROM target_reservation_id
+       AND existing_prep.command_fingerprint IS NOT DISTINCT FROM target_command_fingerprint
+       AND existing_prep.action_authorization_id IS NOT DISTINCT FROM target_action_authorization_id THEN
+      RETURN QUERY SELECT
+        existing_prep.id,
+        existing_prep.command_id,
+        existing_prep.action_authorization_id,
+        existing_prep.reservation_id,
+        existing_prep.command_fingerprint,
+        existing_prep.maker_membership_id,
+        existing_prep.packet_payload,
+        existing_prep.created_at,
+        TRUE;
+      RETURN;
+    ELSE
+      -- Changed semantics conflicts!
+      RAISE EXCEPTION 'COMMAND_CONFLICT';
+    END IF;
+  END IF;
+
+  -- Check if action_authorization_id is already bound to another command
+  IF EXISTS (
+    SELECT 1 FROM canonical_cancellation_refund_decision_preparations p
+    WHERE p.action_authorization_id = target_action_authorization_id
+  ) THEN
+    RAISE EXCEPTION 'COMMAND_CONFLICT';
+  END IF;
+
+  -- Verify action authorization exists in DB and belongs to current_membership
+  SELECT * INTO auth_row
+  FROM internal_action_authorizations a
+  WHERE a.id = target_action_authorization_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ACTION_AUTHORIZATION_NOT_FOUND';
+  END IF;
+
+  IF auth_row.maker_membership_id IS DISTINCT FROM current_membership THEN
+    RAISE EXCEPTION 'MAKER_PRINCIPAL_MISMATCH';
+  END IF;
+
+  IF auth_row.command_hash IS DISTINCT FROM target_command_fingerprint THEN
+    RAISE EXCEPTION 'COMMAND_FINGERPRINT_MISMATCH';
+  END IF;
+
+  -- Insert preparation row
+  INSERT INTO canonical_cancellation_refund_decision_preparations (
+    command_id,
+    action_authorization_id,
+    reservation_id,
+    command_fingerprint,
+    maker_membership_id,
+    packet_payload
+  ) VALUES (
+    target_command_id,
+    target_action_authorization_id,
+    target_reservation_id,
+    target_command_fingerprint,
+    current_membership,
+    target_packet_payload
+  ) RETURNING * INTO new_prep;
+
+  RETURN QUERY SELECT
+    new_prep.id,
+    new_prep.command_id,
+    new_prep.action_authorization_id,
+    new_prep.reservation_id,
+    new_prep.command_fingerprint,
+    new_prep.maker_membership_id,
+    new_prep.packet_payload,
+    new_prep.created_at,
+    FALSE;
+  RETURN;
+END;
+$$;
+
+-- 6b. Protected Preparation Interface: get_cancellation_refund_decision_preparation
+CREATE OR REPLACE FUNCTION get_cancellation_refund_decision_preparation(
+  target_action_authorization_id UUID
+)
+RETURNS TABLE (
+  preparation_id UUID,
+  command_id UUID,
+  action_authorization_id UUID,
+  reservation_id UUID,
+  command_fingerprint TEXT,
+  maker_membership_id UUID,
+  packet_payload JSONB,
+  created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+SET row_security = on
+AS $$
+#variable_conflict use_column
+DECLARE
+  current_user_str TEXT;
+  current_org UUID;
+  current_membership UUID;
+  current_env TEXT;
+  prep_row RECORD;
+BEGIN
+  current_user_str := nullif(current_setting('app.current_user_id', true), '');
+  current_org := nullif(current_setting('app.organization_id', true), '')::uuid;
+  current_membership := nullif(current_setting('app.membership_id', true), '')::uuid;
+  current_env := coalesce(nullif(current_setting('app.workforce_environment', true), ''), 'LOCAL');
+
+  IF current_user_str IS NULL OR current_org IS NULL OR current_membership IS NULL THEN
+    RAISE EXCEPTION 'SESSION_CONTEXT_REQUIRED';
+  END IF;
+
+  -- Verify caller has active membership and capability in current_org
+  IF NOT EXISTS (
+    SELECT 1
+    FROM internal_organization_memberships m
+    JOIN internal_membership_grants g ON g.membership_id = m.id AND g.organization_id = m.organization_id
+    JOIN internal_role_permissions rp ON rp.role_version_id = g.role_version_id
+    LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
+    WHERE m.id = current_membership
+      AND m.organization_id = current_org
+      AND m.status = 'ACTIVE'
+      AND rp.permission_code = 'accommodation.refund_decision.admit'
+      AND g.environment = current_env
+      AND g.valid_from <= clock_timestamp()
+      AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+      AND rev.grant_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
+  SELECT * INTO prep_row
+  FROM canonical_cancellation_refund_decision_preparations p
+  WHERE p.action_authorization_id = target_action_authorization_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ACTION_NOT_FOUND';
+  END IF;
+
+  RETURN QUERY SELECT
+    prep_row.id,
+    prep_row.command_id,
+    prep_row.action_authorization_id,
+    prep_row.reservation_id,
+    prep_row.command_fingerprint,
+    prep_row.maker_membership_id,
+    prep_row.packet_payload,
+    prep_row.created_at;
+END;
+$$;
+
+-- 7. Protected Registrar Function: admit_cancellation_refund_decision
 CREATE OR REPLACE FUNCTION admit_cancellation_refund_decision(
   target_command UUID,
   target_action_authorization_id UUID
@@ -200,11 +655,14 @@ DECLARE
   res_row RECORD;
   cancel_event RECORD;
   rel_row RECORD;
+  rel_nights_count INT;
+  res_nights_count INT;
   bridge_row RECORD;
   payable_row RECORD;
   attempt_row RECORD;
   prov_event RECORD;
   capture_amounts BIGINT[];
+  capture_refs TEXT[];
   captured_ceiling BIGINT;
   new_evidence RECORD;
   new_admission RECORD;
@@ -279,6 +737,16 @@ BEGIN
     RAISE EXCEPTION 'COMMAND_FINGERPRINT_MISMATCH';
   END IF;
 
+  IF prep_row.action_authorization_id IS DISTINCT FROM auth_row.id THEN
+    RAISE EXCEPTION 'COMMAND_CONFLICT';
+  END IF;
+
+  -- Check exact envelope bounds
+  IF auth_row.resource_id IS DISTINCT FROM prep_row.reservation_id::text
+     OR auth_row.amount_minor::text IS DISTINCT FROM (prep_row.packet_payload->>'approvedAmountMinor') THEN
+    RAISE EXCEPTION 'COMMAND_CONFLICT';
+  END IF;
+
   IF prep_row.maker_membership_id IS DISTINCT FROM auth_row.maker_membership_id THEN
     RAISE EXCEPTION 'PREPARATION_MAKER_MISMATCH';
   END IF;
@@ -306,7 +774,7 @@ BEGIN
     RAISE EXCEPTION 'MAKER_CHECKER_CONFLICT';
   END IF;
 
-  -- 6. Verify Checker Appointment in PostgreSQL
+  -- 6. Verify Dedicated Checker Appointment in PostgreSQL
   SELECT * INTO checker_member
   FROM internal_organization_memberships m
   WHERE m.id = app_row.checker_membership_id
@@ -318,12 +786,17 @@ BEGIN
     RAISE EXCEPTION 'CHECKER_MEMBERSHIP_INACTIVE';
   END IF;
 
-  -- Checker must hold unrevoked grant for accommodation_finance_approver
+  approved_minor := (prep_row.packet_payload->>'approvedAmountMinor')::bigint;
+
+  -- Dedicated Appointment Verification:
+  -- Checker must hold unrevoked dedicated grant for accommodation_finance_approver
+  -- matching current role version, environment, amount ceiling, and valid date bounds.
   IF NOT EXISTS (
     SELECT 1
     FROM internal_membership_grants g
     JOIN internal_role_versions v ON v.id = g.role_version_id AND v.organization_id = g.organization_id
-    JOIN internal_role_definitions r ON r.id = v.role_id
+    JOIN internal_role_definitions r ON r.id = v.role_id AND r.organization_id = g.organization_id
+    JOIN internal_role_current_versions rcv ON rcv.role_id = r.id AND rcv.version_id = v.id
     LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
     WHERE g.organization_id = current_org
       AND g.membership_id = app_row.checker_membership_id
@@ -331,6 +804,8 @@ BEGIN
       AND g.environment = current_env
       AND g.valid_from <= app_row.created_at
       AND (g.valid_until IS NULL OR g.valid_until > app_row.created_at)
+      AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= approved_minor)
+      AND (g.scope_type = 'ORGANIZATION' OR (g.scope_type = 'RESERVATION' AND g.scope_id = prep_row.reservation_id::text))
       AND rev.grant_id IS NULL
   ) THEN
     RAISE EXCEPTION 'CHECKER_APPOINTMENT_INVALID';
@@ -382,6 +857,26 @@ BEGIN
     RAISE EXCEPTION 'V2_CANCELLATION_RELEASE_EXCLUDED';
   END IF;
 
+  -- Verify release nights match reservation nights
+  SELECT count(*) INTO rel_nights_count
+  FROM canonical_reservation_cancellation_release_nights crn
+  WHERE crn.release_id = rel_row.release_id;
+  SELECT count(*) INTO res_nights_count
+  FROM canonical_reservation_nights crn
+  WHERE crn.reservation_id = prep_row.reservation_id;
+  IF rel_nights_count = 0 OR rel_nights_count IS DISTINCT FROM res_nights_count THEN
+    RAISE EXCEPTION 'CANCELLATION_RELEASE_NIGHTS_INCOHERENT';
+  END IF;
+
+  -- Verify no sealed V2+ revisions
+  IF EXISTS (
+    SELECT 1 FROM canonical_reservation_revision_seals s
+    JOIN canonical_reservation_revisions r ON r.id = s.revision_id
+    WHERE r.reservation_id = prep_row.reservation_id
+  ) THEN
+    RAISE EXCEPTION 'SEALED_V2_REVISION_EXCLUDED';
+  END IF;
+
   -- Paid bridge
   SELECT * INTO bridge_row
   FROM canonical_payment_reservations cpr
@@ -390,20 +885,36 @@ BEGIN
   IF NOT FOUND OR bridge_row.id::text IS DISTINCT FROM (prep_row.packet_payload->>'paidBridgeId') THEN
     RAISE EXCEPTION 'PAID_BRIDGE_MISMATCH';
   END IF;
+  IF bridge_row.status IS DISTINCT FROM 'COMMITTED' THEN
+    RAISE EXCEPTION 'PAID_BRIDGE_NOT_COMMITTED';
+  END IF;
 
   -- Payment attempt
   SELECT * INTO attempt_row
   FROM canonical_payment_attempts cpa
-  WHERE cpa.id = bridge_row.payment_attempt_id;
+  WHERE cpa.id = bridge_row.payment_attempt_id
+  FOR UPDATE;
 
   IF NOT FOUND OR attempt_row.id::text IS DISTINCT FROM (prep_row.packet_payload->>'paymentAttemptId') THEN
     RAISE EXCEPTION 'PAYMENT_ATTEMPT_MISMATCH';
+  END IF;
+  IF attempt_row.payment_state IS DISTINCT FROM 'MATCHED_CAPTURE' THEN
+    RAISE EXCEPTION 'PAYMENT_STATE_NOT_MATCHED_CAPTURE';
+  END IF;
+  IF attempt_row.reconciliation_reason IS NOT NULL THEN
+    RAISE EXCEPTION 'PAYMENT_RECONCILIATION_UNRESOLVED';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM canonical_payment_reconciliations cpr
+    WHERE cpr.payment_attempt_id = attempt_row.id AND NOT cpr.resolved
+  ) THEN
+    RAISE EXCEPTION 'PAYMENT_RECONCILIATION_UNRESOLVED';
   END IF;
 
   -- Stays quote & Payable authority
   SELECT * INTO payable_row
   FROM canonical_payable_authorities pa
-  WHERE pa.quote_id = bridge_row.quote_id;
+  WHERE pa.quote_id = bridge_row.quote_id AND pa.status = 'APPROVED';
 
   IF NOT FOUND OR payable_row.id::text IS DISTINCT FROM (prep_row.packet_payload->>'payableAuthorityId') THEN
     RAISE EXCEPTION 'PAYABLE_AUTHORITY_MISMATCH';
@@ -433,13 +944,14 @@ BEGIN
   END IF;
 
   -- Capture ceiling validation
-  SELECT array_agg(DISTINCT cpe.reported_amount_paise)
-  INTO capture_amounts
+  SELECT
+    array_agg(DISTINCT cpe.reported_amount_paise),
+    array_agg(DISTINCT cpe.provider_payment_ref)
+  INTO capture_amounts, capture_refs
   FROM canonical_provider_events cpe
   WHERE cpe.payment_attempt_id = attempt_row.id
     AND cpe.normalized_event_type = 'PAYMENT_CAPTURED'
-    AND cpe.origin_kind = prov_event.origin_kind
-    AND cpe.provider_payment_ref = prov_event.provider_payment_ref;
+    AND cpe.status = 'PROCESSED';
 
   IF capture_amounts IS NULL OR array_length(capture_amounts, 1) = 0 THEN
     RAISE EXCEPTION 'NO_VERIFIED_CAPTURES_FOUND';
@@ -448,9 +960,11 @@ BEGIN
   IF array_length(capture_amounts, 1) > 1 THEN
     RAISE EXCEPTION 'CAPTURE_AMOUNT_CONFLICT';
   END IF;
+  IF array_length(capture_refs, 1) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'CAPTURE_PAYMENT_REF_AMBIGUOUS';
+  END IF;
 
   captured_ceiling := capture_amounts[1];
-  approved_minor := (prep_row.packet_payload->>'approvedAmountMinor')::bigint;
 
   IF approved_minor <= 0 THEN
     RAISE EXCEPTION 'APPROVED_AMOUNT_INVALID';
@@ -556,7 +1070,7 @@ BEGIN
 END;
 $$;
 
--- 6. Protected Guarded Replay Function: get_admitted_cancellation_refund_decision
+-- 8. Protected Guarded Replay Function: get_admitted_cancellation_refund_decision
 CREATE OR REPLACE FUNCTION get_admitted_cancellation_refund_decision(
   target_command_id UUID
 )
@@ -584,11 +1098,13 @@ AS $$
 DECLARE
   current_membership UUID;
   current_org UUID;
+  current_env TEXT;
   adm_row RECORD;
   dev_row RECORD;
 BEGIN
   current_membership := nullif(current_setting('app.membership_id', true), '')::uuid;
   current_org := nullif(current_setting('app.organization_id', true), '')::uuid;
+  current_env := coalesce(nullif(current_setting('app.workforce_environment', true), ''), 'LOCAL');
 
   IF current_membership IS NULL OR current_org IS NULL THEN
     RAISE EXCEPTION 'SESSION_CONTEXT_REQUIRED';
@@ -600,6 +1116,25 @@ BEGIN
 
   IF NOT FOUND THEN
     RETURN;
+  END IF;
+
+  -- Scoped capability check: verify current session has active, unrevoked capability in target_org and current_env
+  IF NOT EXISTS (
+    SELECT 1
+    FROM internal_organization_memberships m
+    JOIN internal_membership_grants g ON g.membership_id = m.id AND g.organization_id = m.organization_id
+    JOIN internal_role_permissions rp ON rp.role_version_id = g.role_version_id
+    LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
+    WHERE m.id = current_membership
+      AND m.organization_id = current_org
+      AND m.status = 'ACTIVE'
+      AND rp.permission_code = 'accommodation.refund_decision.admit'
+      AND g.environment = current_env
+      AND g.valid_from <= clock_timestamp()
+      AND (g.valid_until IS NULL OR g.valid_until > clock_timestamp())
+      AND rev.grant_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
   END IF;
 
   -- Scoped access guard: only the original Maker who created this command can replay its execution
@@ -634,7 +1169,8 @@ BEGIN
 END;
 $$;
 
--- 7. Update issue_cancellation_refund_authorization to validate durable admission provenance
+-- 9. Accepted Financial Authority Restoration: issue_cancellation_refund_authorization
+-- Faithful restoration of accepted 061 implementation with provenance check for AUTHENTICATED_HUMAN_APPROVAL.
 CREATE OR REPLACE FUNCTION issue_cancellation_refund_authorization(
   target_command UUID,
   target_reservation_id UUID,
@@ -728,12 +1264,7 @@ BEGIN
     WHERE adm.decision_evidence_id = evidence.id;
 
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'EVIDENCE_PROVENANCE_NOT_FOUND';
-    END IF;
-
-    IF adm_row.action_authorization_id::text IS DISTINCT FROM evidence.approval_ref
-      OR adm_row.checker_membership_id::text IS DISTINCT FROM evidence.approver_identity_ref THEN
-      RAISE EXCEPTION 'EVIDENCE_PROVENANCE_MISMATCH';
+      RAISE EXCEPTION 'ADMISSION_PROVENANCE_NOT_FOUND';
     END IF;
   END IF;
 
@@ -808,6 +1339,7 @@ BEGIN
   END IF;
 
   -- 6. NEW Issuance: Derive and validate canonical subjects
+  -- Verify cancellation event: latest event must be CANCELLED by INTERNAL_DECISION for ENCHO_DIRECT
   SELECT * INTO cancel_event
   FROM canonical_reservation_events cre
   WHERE cre.reservation_id = target_reservation_id
@@ -844,130 +1376,157 @@ BEGIN
     RAISE EXCEPTION 'V2_CANCELLATION_RELEASE_EXCLUDED';
   END IF;
 
-  -- Verify exact release night count matches reservation night count
+  -- Verify coherent release night evidence
   SELECT count(*) INTO rel_nights_count
   FROM canonical_reservation_cancellation_release_nights crn
   WHERE crn.release_id = rel_row.release_id;
-
   SELECT count(*) INTO res_nights_count
-  FROM canonical_reservation_nights rn
-  WHERE rn.reservation_id = target_reservation_id;
-
-  IF rel_nights_count IS DISTINCT FROM res_nights_count OR rel_nights_count = 0 THEN
-    RAISE EXCEPTION 'CANCELLATION_RELEASE_NIGHTS_MISMATCH';
+  FROM canonical_reservation_nights crn
+  WHERE crn.reservation_id = target_reservation_id;
+  IF rel_nights_count = 0 OR rel_nights_count IS DISTINCT FROM res_nights_count THEN
+    RAISE EXCEPTION 'CANCELLATION_RELEASE_NIGHTS_INCOHERENT';
   END IF;
 
-  -- Verify paid bridge and payment attempt
+  -- Verify no sealed V2+ revisions exist
+  IF EXISTS (
+    SELECT 1 FROM canonical_reservation_revision_seals s
+    JOIN canonical_reservation_revisions r ON r.id = s.revision_id
+    WHERE r.reservation_id = target_reservation_id
+  ) THEN
+    RAISE EXCEPTION 'SEALED_V2_REVISION_EXCLUDED';
+  END IF;
+
+  -- Verify unique immutable COMMITTED paid bridge
   SELECT * INTO bridge_row
   FROM canonical_payment_reservations cpr
   WHERE cpr.reservation_id = target_reservation_id;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'PAID_BRIDGE_NOT_FOUND';
+    RAISE EXCEPTION 'DIRECT_FINALIZER_ONLY_EXCLUDED';
+  END IF;
+  IF bridge_row.status IS DISTINCT FROM 'COMMITTED' THEN
+    RAISE EXCEPTION 'PAID_BRIDGE_NOT_COMMITTED';
   END IF;
   IF bridge_row.id IS DISTINCT FROM evidence.paid_bridge_id THEN
     RAISE EXCEPTION 'EVIDENCE_PAID_BRIDGE_MISMATCH';
   END IF;
+  IF bridge_row.payment_attempt_id IS DISTINCT FROM evidence.payment_attempt_id THEN
+    RAISE EXCEPTION 'EVIDENCE_PAYMENT_ATTEMPT_MISMATCH';
+  END IF;
+  IF bridge_row.quote_id IS DISTINCT FROM evidence.quote_id THEN
+    RAISE EXCEPTION 'EVIDENCE_QUOTE_MISMATCH';
+  END IF;
 
+  -- Verify payable authority
   SELECT * INTO payable_row
-  FROM canonical_payable_authorities pa
-  WHERE pa.quote_id = bridge_row.quote_id;
+  FROM canonical_payable_authorities cpa
+  WHERE cpa.quote_id = bridge_row.quote_id AND cpa.status = 'APPROVED';
   IF NOT FOUND THEN
     RAISE EXCEPTION 'PAYABLE_AUTHORITY_NOT_FOUND';
   END IF;
   IF payable_row.id IS DISTINCT FROM evidence.payable_authority_id THEN
     RAISE EXCEPTION 'EVIDENCE_PAYABLE_AUTHORITY_MISMATCH';
   END IF;
-  IF payable_row.currency IS DISTINCT FROM 'INR' THEN
-    RAISE EXCEPTION 'PAYABLE_CURRENCY_INVALID';
+  IF payable_row.currency IS DISTINCT FROM evidence.currency THEN
+    RAISE EXCEPTION 'EVIDENCE_CURRENCY_MISMATCH';
   END IF;
 
+  -- 7. Lock payment attempt FOR UPDATE and check reconciliation gates
   SELECT * INTO attempt_row
   FROM canonical_payment_attempts cpa
-  WHERE cpa.id = bridge_row.payment_attempt_id;
+  WHERE cpa.id = bridge_row.payment_attempt_id
+  FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'PAYMENT_ATTEMPT_NOT_FOUND';
   END IF;
-  IF attempt_row.id IS DISTINCT FROM evidence.payment_attempt_id THEN
-    RAISE EXCEPTION 'EVIDENCE_PAYMENT_ATTEMPT_MISMATCH';
+  IF attempt_row.payment_state IS DISTINCT FROM 'MATCHED_CAPTURE' THEN
+    RAISE EXCEPTION 'PAYMENT_STATE_NOT_MATCHED_CAPTURE';
+  END IF;
+  IF attempt_row.matched_at IS NULL THEN
+    RAISE EXCEPTION 'PAYMENT_MATCHED_AT_MISSING';
+  END IF;
+  IF attempt_row.reconciliation_reason IS NOT NULL THEN
+    RAISE EXCEPTION 'PAYMENT_RECONCILIATION_UNRESOLVED';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM canonical_payment_reconciliations cpr
+    WHERE cpr.payment_attempt_id = attempt_row.id AND NOT cpr.resolved
+  ) THEN
+    RAISE EXCEPTION 'PAYMENT_RECONCILIATION_UNRESOLVED';
   END IF;
 
-  -- Verify supporting provider event matches capture facts
+  -- Check payable authority hash matches attempt
+  IF payable_row.contract_hash IS DISTINCT FROM attempt_row.expected_authority_hash THEN
+    RAISE EXCEPTION 'EVIDENCE_AUTHORITY_HASH_MISMATCH';
+  END IF;
+
+  -- 8. Verify Processed Capture Group
+  SELECT
+    array_agg(DISTINCT cpe.reported_amount_paise),
+    array_agg(DISTINCT cpe.provider_payment_ref),
+    array_agg(DISTINCT cpe.provider_order_ref)
+  INTO capture_amounts, capture_refs, capture_orders
+  FROM canonical_provider_events cpe
+  WHERE cpe.payment_attempt_id = attempt_row.id
+    AND cpe.normalized_event_type = 'PAYMENT_CAPTURED'
+    AND cpe.status = 'PROCESSED';
+
+  IF capture_amounts IS NULL OR array_length(capture_amounts, 1) = 0 THEN
+    RAISE EXCEPTION 'PAYMENT_CAPTURE_GROUP_EMPTY';
+  END IF;
+  IF array_length(capture_amounts, 1) > 1 THEN
+    RAISE EXCEPTION 'CAPTURE_AMOUNT_CONFLICT';
+  END IF;
+  IF array_length(capture_refs, 1) IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'CAPTURE_PAYMENT_REF_AMBIGUOUS';
+  END IF;
+  IF capture_refs[1] IS NULL OR length(trim(capture_refs[1])) = 0 THEN
+    RAISE EXCEPTION 'CAPTURE_PAYMENT_REF_EMPTY';
+  END IF;
+  IF array_length(capture_orders, 1) IS DISTINCT FROM 1 OR capture_orders[1] IS DISTINCT FROM attempt_row.provider_order_ref THEN
+    RAISE EXCEPTION 'CAPTURE_ORDER_REF_MISMATCH';
+  END IF;
+
+  captured_ceiling := capture_amounts[1];
+  derived_capture_ref := capture_refs[1];
+
+  IF derived_capture_ref IS DISTINCT FROM evidence.provider_payment_ref THEN
+    RAISE EXCEPTION 'EVIDENCE_PROVIDER_PAYMENT_REF_MISMATCH';
+  END IF;
+  IF attempt_row.origin_kind IS DISTINCT FROM evidence.provider_origin_kind THEN
+    RAISE EXCEPTION 'EVIDENCE_PROVIDER_ORIGIN_MISMATCH';
+  END IF;
+
+  -- Verify supporting provider event belongs to capture group
   SELECT * INTO capture_event
   FROM canonical_provider_events cpe
   WHERE cpe.id = evidence.supporting_provider_event_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'SUPPORTING_PROVIDER_EVENT_NOT_FOUND';
   END IF;
-  IF capture_event.payment_attempt_id IS DISTINCT FROM attempt_row.id THEN
-    RAISE EXCEPTION 'PROVIDER_EVENT_ATTEMPT_MISMATCH';
-  END IF;
-  IF capture_event.origin_kind IS DISTINCT FROM evidence.provider_origin_kind THEN
-    RAISE EXCEPTION 'PROVIDER_ORIGIN_MISMATCH';
-  END IF;
-  IF capture_event.provider_payment_ref IS DISTINCT FROM evidence.provider_payment_ref THEN
-    RAISE EXCEPTION 'PROVIDER_PAYMENT_REF_MISMATCH';
-  END IF;
-  IF capture_event.evidence_hash IS DISTINCT FROM evidence.supporting_evidence_hash THEN
-    RAISE EXCEPTION 'PROVIDER_EVIDENCE_HASH_MISMATCH';
+  IF capture_event.payment_attempt_id IS DISTINCT FROM attempt_row.id
+    OR capture_event.normalized_event_type IS DISTINCT FROM 'PAYMENT_CAPTURED'
+    OR capture_event.status IS DISTINCT FROM 'PROCESSED'
+    OR capture_event.evidence_hash IS DISTINCT FROM evidence.supporting_evidence_hash THEN
+    RAISE EXCEPTION 'SUPPORTING_PROVIDER_EVENT_MISMATCH';
   END IF;
 
-  -- Verify captured ceiling: array of DISTINCT reported_amount_paise for capture events
-  SELECT
-    array_agg(DISTINCT cpe.reported_amount_paise),
-    array_agg(DISTINCT cpe.provider_payment_ref),
-    array_agg(DISTINCT cpe.provider_order_ref)
-  INTO
-    capture_amounts,
-    capture_refs,
-    capture_orders
-  FROM canonical_provider_events cpe
-  WHERE cpe.payment_attempt_id = attempt_row.id
-    AND cpe.normalized_event_type = 'PAYMENT_CAPTURED'
-    AND cpe.origin_kind = evidence.provider_origin_kind
-    AND cpe.provider_payment_ref = evidence.provider_payment_ref;
-
-  IF capture_amounts IS NULL OR array_length(capture_amounts, 1) = 0 THEN
-    RAISE EXCEPTION 'NO_VERIFIED_CAPTURES_FOUND';
+  -- Validate approved amount within capture ceiling
+  IF evidence.approved_amount_paise <= 0 OR evidence.approved_amount_paise > captured_ceiling THEN
+    RAISE EXCEPTION 'REFUND_AMOUNT_EXCEEDS_CAPTURE';
   END IF;
 
-  IF array_length(capture_amounts, 1) > 1 THEN
-    RAISE EXCEPTION 'CAPTURE_AMOUNT_CONFLICT';
-  END IF;
-
-  captured_ceiling := capture_amounts[1];
-  IF captured_ceiling <= 0 THEN
-    RAISE EXCEPTION 'CAPTURED_CEILING_INVALID';
-  END IF;
-
-  IF evidence.approved_amount_paise > captured_ceiling THEN
-    RAISE EXCEPTION 'AMOUNT_EXCEEDS_CAPTURED_CEILING';
-  END IF;
-
-  IF array_length(capture_refs, 1) > 1 THEN
-    RAISE EXCEPTION 'CAPTURE_PAYMENT_REF_CONFLICT';
-  END IF;
-  derived_capture_ref := capture_refs[1];
-
-  -- Check reconciliation state
-  IF EXISTS (
-    SELECT 1 FROM canonical_payment_reconciliations cpr
-    WHERE cpr.payment_attempt_id = attempt_row.id
-      AND NOT cpr.resolved
-  ) THEN
-    RAISE EXCEPTION 'PAYMENT_RECONCILIATION_UNRESOLVED';
-  END IF;
-
-  -- Check cross-attempt alias conflicts
+  -- Reject visible cross-attempt aliases of the same capture
   IF EXISTS (
     SELECT 1 FROM canonical_provider_events cpe
-    WHERE cpe.origin_kind = evidence.provider_origin_kind
+    WHERE cpe.origin_kind = attempt_row.origin_kind
       AND cpe.provider_payment_ref = derived_capture_ref
-      AND cpe.payment_attempt_id IS DISTINCT FROM attempt_row.id
+      AND cpe.payment_attempt_id <> attempt_row.id
+      AND cpe.status = 'PROCESSED'
   ) THEN
-    RAISE EXCEPTION 'CAPTURE_CROSS_ATTEMPT_ALIAS_CONFLICT';
+    RAISE EXCEPTION 'CAPTURE_CROSS_ATTEMPT_ALIAS_AMBIGUOUS';
   END IF;
 
-  -- 7. Insert into canonical_cancellation_refund_authorizations
+  -- 9. Insert Authorization atomically
   BEGIN
     INSERT INTO canonical_cancellation_refund_authorizations (
       command_id,
@@ -989,7 +1548,7 @@ BEGIN
       rel_row.release_id,
       bridge_row.id,
       attempt_row.id,
-      evidence.provider_origin_kind,
+      attempt_row.origin_kind,
       derived_capture_ref,
       'encho_refund_issuer',
       invoking_user
@@ -1053,14 +1612,14 @@ BEGIN
 END;
 $$;
 
--- 8. Row Level Security & Grants
+-- 10. Row Level Security & Grants (Least Privilege)
 ALTER TABLE canonical_cancellation_refund_decision_preparations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE canonical_cancellation_refund_decision_preparations FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS canonical_refund_decision_prep_owner
   ON canonical_cancellation_refund_decision_preparations;
 CREATE POLICY canonical_refund_decision_prep_owner
-  ON canonical_cancellation_refund_decision_preparations FOR ALL
+  ON canonical_cancellation_refund_decision_preparations FOR ALL TO current_user
   USING (true) WITH CHECK (true);
 
 ALTER TABLE canonical_cancellation_refund_decision_admissions ENABLE ROW LEVEL SECURITY;
@@ -1069,38 +1628,17 @@ ALTER TABLE canonical_cancellation_refund_decision_admissions FORCE ROW LEVEL SE
 DROP POLICY IF EXISTS canonical_refund_decision_adm_owner
   ON canonical_cancellation_refund_decision_admissions;
 CREATE POLICY canonical_refund_decision_adm_owner
-  ON canonical_cancellation_refund_decision_admissions FOR ALL
+  ON canonical_cancellation_refund_decision_admissions FOR ALL TO current_user
   USING (true) WITH CHECK (true);
 
 REVOKE ALL ON canonical_cancellation_refund_decision_preparations FROM PUBLIC;
 REVOKE ALL ON canonical_cancellation_refund_decision_admissions FROM PUBLIC;
+
+REVOKE ALL ON FUNCTION get_cancellation_refund_decision_preview(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION get_cancellation_refund_decision_preparation(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION prepare_cancellation_refund_decision(UUID, UUID, UUID, TEXT, INT, BIGINT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION admit_cancellation_refund_decision(UUID, UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION get_admitted_cancellation_refund_decision(UUID) FROM PUBLIC;
-
--- Read policies for canonical facts inspection during refund preparation and preview
-DROP POLICY IF EXISTS canonical_reservations_staff_read ON canonical_reservations;
-CREATE POLICY canonical_reservations_staff_read ON canonical_reservations
-  FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS canonical_reservation_events_staff_read ON canonical_reservation_events;
-CREATE POLICY canonical_reservation_events_staff_read ON canonical_reservation_events
-  FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS canonical_cancellation_releases_staff_read ON canonical_reservation_cancellation_inventory_releases;
-CREATE POLICY canonical_cancellation_releases_staff_read ON canonical_reservation_cancellation_inventory_releases
-  FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS canonical_payment_reservations_staff_read ON canonical_payment_reservations;
-CREATE POLICY canonical_payment_reservations_staff_read ON canonical_payment_reservations
-  FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS canonical_payable_authorities_staff_read ON canonical_payable_authorities;
-CREATE POLICY canonical_payable_authorities_staff_read ON canonical_payable_authorities
-  FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS canonical_provider_events_staff_read ON canonical_provider_events;
-CREATE POLICY canonical_provider_events_staff_read ON canonical_provider_events
-  FOR SELECT USING (true);
 
 DO $runtime_grants$
 DECLARE
@@ -1109,10 +1647,11 @@ DECLARE
 BEGIN
   FOREACH r IN ARRAY runtime_roles LOOP
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
-      EXECUTE format('GRANT SELECT, INSERT ON canonical_cancellation_refund_decision_preparations TO %I', r);
+      EXECUTE format('GRANT EXECUTE ON FUNCTION get_cancellation_refund_decision_preview(UUID) TO %I', r);
+      EXECUTE format('GRANT EXECUTE ON FUNCTION get_cancellation_refund_decision_preparation(UUID) TO %I', r);
+      EXECUTE format('GRANT EXECUTE ON FUNCTION prepare_cancellation_refund_decision(UUID, UUID, UUID, TEXT, INT, BIGINT, TEXT, TEXT, TEXT, TEXT, JSONB) TO %I', r);
       EXECUTE format('GRANT EXECUTE ON FUNCTION admit_cancellation_refund_decision(UUID, UUID) TO %I', r);
       EXECUTE format('GRANT EXECUTE ON FUNCTION get_admitted_cancellation_refund_decision(UUID) TO %I', r);
-      EXECUTE format('GRANT SELECT ON canonical_reservations, canonical_reservation_events, canonical_reservation_cancellation_inventory_releases, canonical_payment_reservations, canonical_payable_authorities, canonical_provider_events TO %I', r);
     END IF;
   END LOOP;
 END $runtime_grants$;
