@@ -40,7 +40,7 @@ export const admissionPacketSchema = z.object({
   currency: z.literal('INR'),
   reasonCode: reasonCodeSchema,
   reasonText: z.string().max(500).refine(
-    (s) => !/[\u0000]|[\uD800-\uDFFF]/.test(s),
+    (s) => s.isWellFormed() && !s.includes('\0'),
     { message: 'Invalid JSON unicode' }
   ).nullable(),
   organizationId: z.string().uuid(),
