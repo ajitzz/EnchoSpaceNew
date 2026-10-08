@@ -21,35 +21,56 @@ import {
 import {addDays, createW1AcceptedOfferFixture} from './helpers/w1AcceptedOfferFixture.js';
 import {applyIsolatedMigration} from './helpers/isolatedMigration.js';
 
-describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Composition Authority', () => {
-  let fixture: Awaited<ReturnType<typeof createW1AcceptedOfferFixture>>;
-  let stays: pg.Pool;
-  let paymentWorker: pg.Pool;
-  let compositionWorker: pg.Pool;
-  let offerId: string;
-  let nextOffset = 1;
+interface SchemaVariant {
+  id: 'BASELINE_054' | 'POST_060';
+  apply060: boolean;
+}
 
-  beforeAll(async () => {
-    fixture = await createW1AcceptedOfferFixture({serverCompatible: true});
-    await fixture.owner.query(`CREATE TABLE bookings(id SERIAL PRIMARY KEY,listing_id INT NOT NULL,
-      status TEXT NOT NULL,start_date DATE,end_date DATE)`);
-    await applyIsolatedMigration(fixture.owner, '041_stays_canonical_commerce.sql');
-    await fixture.owner.query(`CREATE ROLE encho_stays_web LOGIN NOSUPERUSER NOBYPASSRLS
-      NOCREATEDB NOCREATEROLE NOREPLICATION`);
-    await applyIsolatedMigration(fixture.owner, '050_accepted_offer_itinerary_quotes.sql');
-    await fixture.owner.query(`CREATE ROLE encho_reservation_worker LOGIN NOSUPERUSER NOBYPASSRLS
-      NOCREATEROLE NOREPLICATION`);
-    await applyIsolatedMigration(fixture.owner, '052_canonical_reservation_hold_finalization.sql');
+function runCompositionTestSuite(variant: SchemaVariant) {
+  describe(`W3-B Task 3: Internal Verified Payment -> Canonical Reservation Composition Authority [${variant.id}]`, () => {
+    let fixture: Awaited<ReturnType<typeof createW1AcceptedOfferFixture>>;
+    let stays: pg.Pool;
+    let paymentWorker: pg.Pool;
+    let compositionWorker: pg.Pool;
+    let offerId: string;
+    let nextOffset = 1;
 
-    // Provision restricted payment worker role
-    await fixture.owner.query(`CREATE ROLE encho_payment_worker LOGIN NOSUPERUSER NOBYPASSRLS
-      NOCREATEDB NOCREATEROLE NOREPLICATION`);
-    await applyIsolatedMigration(fixture.owner, '053_canonical_payment_evidence_and_reconciliation.sql');
+    beforeAll(async () => {
+      fixture = await createW1AcceptedOfferFixture({serverCompatible: true});
+      await fixture.owner.query(`CREATE TABLE bookings(id SERIAL PRIMARY KEY,listing_id INT NOT NULL,
+        status TEXT NOT NULL,start_date DATE,end_date DATE)`);
+      await applyIsolatedMigration(fixture.owner, '041_stays_canonical_commerce.sql');
+      await fixture.owner.query(`CREATE ROLE encho_stays_web LOGIN NOSUPERUSER NOBYPASSRLS
+        NOCREATEDB NOCREATEROLE NOREPLICATION`);
+      await applyIsolatedMigration(fixture.owner, '050_accepted_offer_itinerary_quotes.sql');
+      await fixture.owner.query(`CREATE ROLE encho_reservation_worker LOGIN NOSUPERUSER NOBYPASSRLS
+        NOCREATEROLE NOREPLICATION`);
+      await applyIsolatedMigration(fixture.owner, '052_canonical_reservation_hold_finalization.sql');
 
-    // Provision restricted composition worker role
-    await fixture.owner.query(`CREATE ROLE encho_composition_worker LOGIN NOSUPERUSER NOBYPASSRLS
-      NOCREATEDB NOCREATEROLE NOREPLICATION`);
-    await applyIsolatedMigration(fixture.owner, '054_canonical_payment_reservation_composition.sql');
+      // Provision restricted payment worker role
+      await fixture.owner.query(`CREATE ROLE encho_payment_worker LOGIN NOSUPERUSER NOBYPASSRLS
+        NOCREATEDB NOCREATEROLE NOREPLICATION`);
+      await applyIsolatedMigration(fixture.owner, '053_canonical_payment_evidence_and_reconciliation.sql');
+
+      // Provision restricted composition worker role
+      await fixture.owner.query(`CREATE ROLE encho_composition_worker LOGIN NOSUPERUSER NOBYPASSRLS
+        NOCREATEDB NOCREATEROLE NOREPLICATION`);
+      await applyIsolatedMigration(fixture.owner, '054_canonical_payment_reservation_composition.sql');
+
+      if (variant.apply060) {
+        await applyIsolatedMigration(fixture.owner, '060_canonical_payment_composition_lock_order_hardening.sql');
+      }
+
+      const funcInfo = await fixture.owner.query(`
+        SELECT p.oid::regprocedure::text AS function,
+               pg_get_userbyid(p.proowner) AS owner,
+               p.prosecdef,
+               p.proconfig,
+               encode(sha256(convert_to(pg_get_functiondef(p.oid), 'UTF8')), 'hex') AS function_hash
+        FROM pg_proc p
+        WHERE p.oid = 'canonical_compose_payment_reservation(uuid,uuid)'::regprocedure
+      `);
+      console.log(`REVIEW_${variant.id}_SCHEMA`, JSON.stringify(funcInfo.rows[0]));
 
     stays = new pg.Pool({...fixture.owner.options, user: 'encho_stays_web'});
     paymentWorker = new pg.Pool({...fixture.owner.options, user: 'encho_payment_worker', max: 8});
@@ -1269,3 +1290,7 @@ describe('W3-B Task 3: Internal Verified Payment -> Canonical Reservation Compos
     expect(serverSource).not.toContain('canonical_compose_payment_reservation');
   });
 });
+}
+
+runCompositionTestSuite({ id: 'BASELINE_054', apply060: false });
+runCompositionTestSuite({ id: 'POST_060', apply060: true });

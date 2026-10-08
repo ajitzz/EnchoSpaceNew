@@ -1,0 +1,384 @@
+{
+  "task": "W4-C4: Payment Composition Lock-Order Hardening",
+  "canonicalBase": "e2479b1c7601e21a6198b7784fa93ac3a4e27dad",
+  "originalWorkerCommit": "f768af6b8f3db63c77f8c66aedada82340f67543",
+  "correctedDiagnosticCommit": "2ff6c39da4c4a1ae44bcd384df32cb208d5a36c2",
+  "hardeningCommit": "08949428a67f6403d7e76e0710d3f8683f70a44d",
+  "workerBranch": "worker/antigravity/w4-c4-lock-order-diagnostic",
+  "reviewerPackCommit": "1dd29ee536a9c7a3cfd30b07558e828ca6f9f274",
+  "sourceSha256": "823ad5fd2ab3e55fe8762e1cd6ec5975788866dacab573c8f8426ec595a2f1d5",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "migration060": {
+    "path": "src/migrations/060_canonical_payment_composition_lock_order_hardening.sql",
+    "sha256": "0823b6d434ebad6a6bce11196671a6ad8ff0a567049ca001fc7f4c3e9708548c",
+    "functionRedefined": "canonical_compose_payment_reservation(UUID, UUID)",
+    "oldLockOrder": "canonical_payment_attempts (id) FOR UPDATE -> booking_holds (id) FOR UPDATE -> canonical_reservation_commands (command_id) FOR UPDATE -> inventory_days",
+    "newLockOrder": "canonical_payment_attempts (id) FOR UPDATE -> canonical_reservation_commands (command_id) FOR UPDATE -> booking_holds (id) FOR UPDATE -> inventory_days"
+  },
+  "preFixEvidence": {
+    "defect": "C4-01: CURRENT LOCK-ORDER DEFECT (Deadlock between direct finalizer and payment composition on same hold and same command)",
+    "preFixDirectFinalizerOrder": "canonical_reservation_commands -> booking_holds -> inventory_days",
+    "preFixCompositionOrder": "canonical_payment_attempts -> booking_holds -> canonical_reservation_commands -> inventory_days",
+    "preFixPostgresError": "40P01",
+    "preFixReconciliation": "RECONCILIATION_REQUIRED / FINALIZER_FAILURE with details.error_code = '40P01'",
+    "proofReference": "Probe 8 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs"
+  },
+  "postFixVerification": {
+    "raceCaseA_directWins": {
+      "scenario": "Direct finalizer completes first on hold H1 with command C1; concurrent composition on SAME H1 and SAME C1 observes command contention, serializes behind direct finalizer, and observes consumed hold",
+      "synchronization": "Command-scoped AFTER INSERT gate trigger on canonical_reservation_commands; pg_stat_activity wait observation on pg_blocking_pids",
+      "directFinalizerClientError": null,
+      "directFinalizerResult": {
+        "replayed": false,
+        "reservationCreated": true
+      },
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "FINALIZER_FAILURE",
+        "reservationId": null,
+        "replayed": false
+      },
+      "storedReconciliation": {
+        "reason": "FINALIZER_FAILURE",
+        "details": {
+          "reason": "FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT"
+        }
+      },
+      "reservationCount": 1,
+      "bridgeCount": 0,
+      "inventoryMovement": "EXACTLY_ONCE (held -1, booked +1, blocked/total unchanged)",
+      "deadlock40P01Observed": false,
+      "lockTimeout55P03Observed": false,
+      "status": "PASS"
+    },
+    "raceCaseA2_sequentialConsumedHold": {
+      "scenario": "Direct finalizer commits first with command C1; composition subsequently arrives on same hold with DIFFERENT command C2",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "HOLD_EXPIRED",
+        "reservationId": null
+      },
+      "reservationCount": 1,
+      "bridgeCount": 0,
+      "status": "PASS"
+    },
+    "raceCaseB_compositionWins": {
+      "scenario": "Composition arrives first for hold H1 and command C1; concurrent direct finalizer targets SAME H1 and SAME C1",
+      "synchronization": "Command-scoped AFTER INSERT gate trigger on canonical_reservation_commands; direct finalizer observed waiting on command lock held by composition via pg_stat_activity and pg_blocking_pids",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "COMMITTED",
+        "replayed": false,
+        "reservationCreated": true
+      },
+      "directFinalizerClientError": null,
+      "directFinalizerResult": {
+        "replayed": true,
+        "reservationMatching": true
+      },
+      "exactReplaySnapshot": "DEEP_EQUAL (zero additional effects on exact composition replay)",
+      "reservationCount": 1,
+      "bridgeCount": 1,
+      "inventoryMovement": "EXACTLY_ONCE (held -1, booked +1, blocked/total unchanged)",
+      "deadlock40P01Observed": false,
+      "lockTimeout55P03Observed": false,
+      "status": "PASS"
+    },
+    "raceCaseC_expiryWhileWaiting": {
+      "scenario": "Hold is verified unexpired at start (clock_timestamp() < expires_at); independent owner connection holds booking_holds(id) FOR UPDATE; composition starts in an explicit transaction on compExpiryConn; observed waiting on booking_holds lock; database time advances past expires_at while waiting; owner lock is released; normal reconciliation committed only on success",
+      "explicitTransactionScope": "BEGIN -> SET LOCAL lock_timeout = '8s' -> SET LOCAL statement_timeout = '12s' -> assert effective settings -> composition query -> normal validation -> COMMIT",
+      "effectiveLockTimeout": "8s",
+      "effectiveStatementTimeout": "12s",
+      "settingsVerifiedOnInvocationConnection": true,
+      "initialFreshness": "VERIFIED (clock_timestamp() < expires_at)",
+      "lockContentionObserved": "VERIFIED (composition blocked on owner backend via pg_blocking_pids)",
+      "clockCrossingObserved": "VERIFIED (clock_timestamp() > expires_at while blocked)",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "HOLD_EXPIRED",
+        "replayed": false
+      },
+      "storedReconciliation": {
+        "reason": "HOLD_EXPIRED",
+        "details": {
+          "error_code": "P0001",
+          "error_message": "RESERVATION_HOLD_EXPIRED"
+        }
+      },
+      "normalReconciliationCommitted": true,
+      "survivingAllocations": {
+        "reservations": 0,
+        "nights": 0,
+        "commandFences": 0,
+        "bridges": 0,
+        "inventoryCountersDelta": 0
+      },
+      "captureEvidencePreserved": true,
+      "backendActivityClean": "VERIFIED (state: idle, backend_xid: null, backend_xmin: null)",
+      "declaredScenarioDeadlineMs": 15000,
+      "declaredCleanupDeadlineMs": 5000,
+      "gracefulCleanupBudgetMs": 3500,
+      "fallbackReserveMs": 1500,
+      "pendingOperationsAtExit": 0,
+      "errorPreservation": "Coordinator tracks scenario and cleanup error states; throws combined error if cleanup fails even on successful scenario; clean connection released on success",
+      "status": "PASS"
+    },
+    "raceCaseC2_injectedFailureCleanup": {
+      "scenario": "Fresh unexpired hold and matched capture; primary hold blocker holds booking_holds FOR UPDATE; secondary retained inventory blocker holds inventory_days FOR UPDATE; composition starts in explicit transaction with lock_timeout '8s' and statement_timeout '12s'; composition blocked on hold blocker; hold blocker commits; composition proceeds into finalizer and blocks on retained inventory blocker; deliberate observation failure injected (INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST); common cleanup runs while inventory blocker is still held",
+      "stableIdentifier": "C4-E02-FAILURE-CLEANUP",
+      "explicitTransactionScope": "BEGIN -> SET LOCAL lock_timeout = '8s' -> SET LOCAL statement_timeout = '12s' -> assert effective settings -> invocation -> blocking -> injected failure -> cancellation -> ROLLBACK",
+      "effectiveLockTimeout": "8s",
+      "effectiveStatementTimeout": "12s",
+      "settingsVerifiedOnInvocationConnection": true,
+      "primaryBlockerObserved": "VERIFIED (comp blocked on holdLocker via pg_blocking_pids)",
+      "secondaryBlockerObserved": "VERIFIED (comp blocked on inventoryLocker via pg_blocking_pids)",
+      "injectedObservationFailure": "INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST",
+      "cancellationPath": "pg_cancel_backend via owner connection restricted to test-owned composition backend",
+      "settlementError": {
+        "clientErrorCode": "57014",
+        "clientErrorMessage": "canceling statement due to user request"
+      },
+      "returnedDomainResult": null,
+      "storedReconciliation": null,
+      "declaredScenarioDeadlineMs": 15000,
+      "declaredCleanupDeadlineMs": 5000,
+      "gracefulCleanupBudgetMs": 3500,
+      "fallbackReserveMs": 1500,
+      "measuredCleanupDurationMs": "<= 5000ms (measured < 50ms)",
+      "fallbackExercised": false,
+      "clientDiscarded": false,
+      "pendingOperationsAtExit": 0,
+      "errorPreservation": "Original injected observation failure preserved directly without modification because cleanup completed cleanly with zero cleanup errors",
+      "transactionRolledBack": true,
+      "scopedBaselineRestored": "EXACT_DEEP_EQUAL (beforeFail == afterFail)",
+      "queryTransactionLeak": "ABSENT (state: idle, backend_xid: null, backend_xmin: null)",
+      "connectionCleanup": "VERIFIED (clean backend released; retained inventory blocker rolled back afterward in final cleanup)",
+      "survivingAllocations": {
+        "reservations": 0,
+        "nights": 0,
+        "commandFences": 0,
+        "bridges": 0,
+        "reconciliations": 0
+      },
+      "captureEvidencePreserved": true,
+      "status": "PASS"
+    },
+    "raceCaseC3_delayedControlFallback": {
+      "scenario": "Fresh unexpired hold and matched capture; primary hold blocker holds booking_holds FOR UPDATE; secondary retained inventory blocker holds inventory_days FOR UPDATE; composition starts in explicit transaction with lock_timeout '8s' and statement_timeout '12s'; deliberate observation failure injected (INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST); cleanup begins under 5000ms deadline; cleanup control stage hook runs real database SQL query (SELECT pg_sleep(5.2) AS delay_result) on controlConn; control query observed active in pg_stat_activity; active graceful control deadline cuts off the stage at 3500ms (CLEANUP_CONTROL_STAGE_TIMEOUT); fallback is triggered with 1500ms reserve; fallback actively cancels control query via pg_cancel_backend and awaits settlement; composition client is deliberately discarded and backend terminated via pg_terminate_backend; backend termination verified in pg_stat_activity; retained inventory blocker cleanly rolled back; baseline restored; both original injected error and cleanup timeout error are preserved in AggregateError",
+      "stableIdentifier": "C4-E02-DELAYED-CONTROL-FALLBACK",
+      "explicitTransactionScope": "BEGIN -> SET LOCAL lock_timeout = '8s' -> SET LOCAL statement_timeout = '12s' -> assert effective settings -> invocation -> blocking -> injected failure -> real database control query (5.2s) -> active cutoff (3500ms) -> fallback (1500ms reserve) -> pg_cancel_backend(control) -> pg_terminate_backend(comp) -> client discard",
+      "effectiveLockTimeout": "8s",
+      "effectiveStatementTimeout": "12s",
+      "settingsVerifiedOnInvocationConnection": true,
+      "primaryBlockerObserved": "VERIFIED (comp blocked on holdLocker via pg_blocking_pids)",
+      "secondaryBlockerObserved": "VERIFIED (comp blocked on inventoryLocker via pg_blocking_pids)",
+      "injectedObservationFailure": "INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST",
+      "controlQuerySql": "SELECT pg_sleep(5.2) AS delay_result",
+      "controlQueryObservedActive": "VERIFIED (pg_stat_activity query state: active)",
+      "controlQueryCancellation": "VERIFIED (pg_cancel_backend called, query settled with code 57014)",
+      "declaredScenarioDeadlineMs": 15000,
+      "declaredCleanupDeadlineMs": 5000,
+      "gracefulCleanupBudgetMs": 3500,
+      "fallbackReserveMs": 1500,
+      "measuredCleanupDurationMs": "~3500-3600ms (strictly < 5000ms, proving cutoff before 5200ms query completed)",
+      "fallbackExercised": true,
+      "clientDiscarded": true,
+      "clientDisposalMethod": "coordinator.tracker.discard(compConn, gracefulErr), invoked as this.tracker.discard inside the coordinator; socket destruction and captured original client release with the error prevent return as a healthy pooled client.",
+      "terminationPath": "pg_terminate_backend via owner connection restricted to test-owned composition backend",
+      "backendTerminationVerified": "VERIFIED (pg_stat_activity shows comp backend ABSENT)",
+      "settlementError": {
+        "clientErrorCode": null,
+        "clientErrorMessage": "Connection terminated"
+      },
+      "returnedDomainResult": null,
+      "storedReconciliation": null,
+      "transactionRolledBack": true,
+      "scopedBaselineRestored": "EXACT_DEEP_EQUAL (beforeDelay == afterDelay)",
+      "backendStatesAtExit": {
+        "compositionBackend": "ABSENT",
+        "controlBackend": "IDLE_CLEAN",
+        "holdBlockerBackend": "IDLE_CLEAN",
+        "retainedInventoryBlockerBackend": "IDLE_CLEAN"
+      },
+      "pendingOperationsAtExit": 0,
+      "survivingAllocations": {
+        "reservations": 0,
+        "nights": 0,
+        "commandFences": 0,
+        "bridges": 0,
+        "reconciliations": 0
+      },
+      "captureEvidencePreserved": true,
+      "errorPreservation": "AggregateError combining INJECTED_OBSERVATION_FAILURE_FOR_CLEANUP_TEST and CLEANUP_CONTROL_STAGE_TIMEOUT",
+      "status": "PASS"
+    },
+    "demonstrationD_timedOutObserver": {
+      "stableIdentifier": "C4-E02-TIMED-OUT-OBSERVER",
+      "scenario": "Demonstrates fix for reviewer false-positive defect where observer ran SELECT pg_sleep(1.2) under 40ms budget; verified cancellation callback is invoked, observer query cancelled with 57014, backend verified idle, clean release only after settlement, and 0 unsettled operations at exit",
+      "cancellationCallbackInvoked": true,
+      "settlementError": {
+        "clientErrorCode": "57014",
+        "clientErrorMessage": "canceling statement due to user request"
+      },
+      "backendStatusAtExit": "IDLE_CLEAN",
+      "pendingOperationsAtExit": 0,
+      "unresolvedAcquisitionsAtExit": 0,
+      "unsettledOperationsAtExit": 0,
+      "status": "PASS"
+    },
+    "demonstrationE_delayedFallbackControl": {
+      "stableIdentifier": "C4-E02-DELAYED-FALLBACK-CONTROL",
+      "scenario": "Demonstration E starts SELECT pg_sleep(2.5) AS fb_delay before cleanup. The prestarted delayed query exhausts the graceful wait, after which cleanup enters fallback; the test asserts delayed-query settlement and final accounting. E does not contain a pg_stat_activity active-state assertion. The actual delayed cancellation/control-path proof is provided by P3 in reviewer pack 1dd29ee536a9c7a3cfd30b07558e828ca6f9f274, not by Demonstration E.",
+      "controlQuerySql": "SELECT pg_sleep(2.5) AS fb_delay",
+      "fallbackExercised": true,
+      "delayedControlSettled": true,
+      "cleanupDurationMs": "<= 3000ms",
+      "pendingOperationsAtExit": 0,
+      "unresolvedAcquisitionsAtExit": 0,
+      "unsettledOperationsAtExit": 0,
+      "status": "PASS"
+    },
+    "demonstrationF_partialAcquisition": {
+      "stableIdentifier": "C4-E02-PARTIAL-ACQUISITION",
+      "scenario": "Demonstrates client lifecycle ownership from first checkout: Client 1 acquired; Client 2 acquisition attempt with expired budget throws HarnessDeadlineError; late-returned client simulation intercepted, accounted in tracker, socket destroyed, released with error; Client 1 cleanly released; zero orphaned or unaccounted clients",
+      "partialAcquisitionHandled": true,
+      "expiredAcquisitionError": "HarnessDeadlineError: CLIENT_ACQUISITION_BUDGET_EXPIRED: client2_expired",
+      "lateReturnedClientHandled": true,
+      "lateClientDisposal": "socket destroyed and released with error to prevent return to pool",
+      "unaccountedClients": 0,
+      "unresolvedAcquisitionsAtExit": 0,
+      "unsettledOperationsAtExit": 0,
+      "status": "PASS"
+    },
+    "demonstrationG_finalAccounting": {
+      "stableIdentifier": "C4-E02-FINAL-ACCOUNTING",
+      "scenario": "Demonstrates strict final accounting assertions: runs after restoration verification; fails if artificial pending operation is present; passes with 0 unresolved acquisitions, 0 unsettled operations, 0 queued operations, 0 unaccounted clients, and 0 busy clients released clean",
+      "rejectedArtificialPendingOp": true,
+      "assertedCriteria": {
+        "unresolvedAcquisitions": 0,
+        "unsettledOperations": 0,
+        "queuedOperations": 0,
+        "unaccountedClients": 0,
+        "busyClientsReleasedClean": 0
+      },
+      "status": "PASS"
+    },
+    "finalAccounting": {
+      "unresolvedAcquisitions": 0,
+      "unsettledOperations": 0,
+      "queuedOperations": 0,
+      "unaccountedClients": 0,
+      "busyClientsReleasedClean": 0,
+      "allTerminalActionsAudited": true,
+      "status": "PASS"
+    },
+    "deadlineNegativeControl": {
+      "scenario": "Negative control verifies that runWithDeadline given an already-expired deadline rejects immediately with HarnessDeadlineError before invoking the action",
+      "actionInvocationCount": 0,
+      "pendingOperationsAtExit": 0,
+      "observedError": "HarnessDeadlineError: NEGATIVE_CONTROL_BUDGET_EXPIRED",
+      "status": "PASS"
+    },
+    "raceCaseD_nonActiveHold": {
+      "scenario": "Hold status is updated to RELEASED prior to composition (test fixture preparation by owner; no claim that release workflow ran)",
+      "compositionClientError": null,
+      "compositionDomainResult": {
+        "compositionState": "RECONCILIATION_REQUIRED",
+        "reconciliationReason": "HOLD_EXPIRED",
+        "reservationId": null
+      },
+      "storedReconciliation": {
+        "reason": "HOLD_EXPIRED",
+        "details": {
+          "error_code": "P0001",
+          "error_message": "RESERVATION_HOLD_NOT_ACTIVE"
+        }
+      },
+      "reservationCount": 0,
+      "bridgeCount": 0,
+      "inventoryMovement": 0,
+      "status": "PASS"
+    },
+    "replayCases": {
+      "exactCompositionReplay": "PASS (returns stored canonical_payment_reservations record with replayed = true, zero additional effects verified by scoped snapshot deep-equality)",
+      "directFinalizerCommandReplay": "PASS (unchanged, returns stored reservation_id with replayed = true)",
+      "changedCommandForComposedAttempt": "PASS (throws PAYMENT_ALREADY_COMPOSED)",
+      "changedAttemptForComposedCommand": "PASS (throws COMPOSITION_COMMAND_CONFLICT)",
+      "outsideCompositionFinalizerReplay": "PASS (rejected into RECONCILIATION_REQUIRED / FINALIZER_FAILURE with reason FINALIZER_REPLAY_WITHOUT_COMPOSITION_RECEIPT; zero adoption into COMMITTED bridge)"
+    },
+    "outerTransactionRollback": {
+      "injectionPoint": "Temporary BEFORE INSERT trigger on canonical_payment_reservations asserts prior reservation visibility and raises P7777",
+      "observedErrorCode": "P7777",
+      "observedErrorMessage": "REVIEW_BRIDGE_FAILURE_AFTER_FINALIZER",
+      "scopedSnapshotRestoration": "EXACT_EQUALITY (entire outer transaction rolled back: zero reservations, zero nights, hold remains ACTIVE, zero inventory increments)",
+      "status": "PASS"
+    },
+    "roleIsolation": {
+      "encho_composition_worker": {
+        "canExecuteComposition": true,
+        "canDirectlyExecuteFinalizer": false,
+        "rawTableDml": false
+      },
+      "encho_reservation_worker": {
+        "canDirectlyExecuteFinalizer": true
+      },
+      "privilegeEscalations": "NONE (no superuser, no bypassrls, no createdb, no createrole)",
+      "status": "PASS"
+    }
+  },
+  "lockOrderSummary": {
+    "postFixDirectFinalizerOrder": "canonical_reservation_commands -> booking_holds -> inventory_days",
+    "postFixCompositionOrder": "canonical_payment_attempts -> canonical_reservation_commands -> booking_holds -> inventory_days",
+    "postFixLockInversion": "ABSENT",
+    "postFix40P01": "ABSENT",
+    "currentDeadlockCycleAfter060": "ABSENT for the bounded C4 writer graph",
+    "currentHardeningRequiredAfter060": "NO"
+  },
+  "futureModifierContract": {
+    "futureOldNewUnion": "RECOMMENDED",
+    "unionClaim": "NARROW / INVENTORY-ROW ABBA ONLY",
+    "unionWording": "A deterministic lock of the deduplicated OLD+NEW inventory-day union prevents the demonstrated inventory-row ABBA pattern among writers using that order; it does not establish global cross-resource deadlock freedom."
+  },
+  "reviewerControlsAcceptance": {
+    "packCommit": "1dd29ee536a9c7a3cfd30b07558e828ca6f9f274",
+    "sourceSha256": "823ad5fd2ab3e55fe8762e1cd6ec5975788866dacab573c8f8426ec595a2f1d5",
+    "probes": {
+      "P1_deferredAcquisition": "PASS (P1_ACCOUNTING_REJECTS_UNRESOLVED_CONNECT)",
+      "P2_pidInitialization": "PASS (P2_NO_ACTIVE_PID_CLEAN_RELEASE)",
+      "P3_delayedCancellationControl": "PASS (P3_DEADLINE_LATCHES_BEFORE_CANCEL_COMPLETES, P3_LATE_SOURCE_CANNOT_CHANGE_FAILURE, P3_CONTROL_REGISTERED_WHILE_BLOCKED, P3_CLEANUP_OWNS_CONTROL_BEFORE_REVIEWER_RESCUE, P3_NO_ACTIVE_CONTROL_CLEAN_RELEASE, P3_INDEPENDENT_OUTCOMES_OBSERVED)",
+      "P4_terminalActionFailure": "PASS (P4_TERMINAL_FAILURE_VISIBLE_AND_REJECTED)",
+      "P5_completeLifecycleAndRegressions": "PASS (P5_UNMODIFIED_SUBJECT_REGRESSIONS, P5_ACTUAL_CHILD_OWNERSHIP: queryCount=296, connectCount=12, pendingQueries=0, pendingConnects=0, violationCount=0)"
+    },
+    "allProbesPassing": true,
+    "exitCode": 0,
+    "readyForReview": true
+  },
+  "auditLimits": {
+    "genericDbAuthorityClosure": "NOT EVALUATED",
+    "actorPoolClosure": "OUT OF SCOPE",
+    "physicalModificationWriter": "ABSENT",
+    "w4dFinancialClearance": "NOT IMPLEMENTED",
+    "guestHostPublicIngress": "ABSENT",
+    "productionDatabase": "NOT EVALUATED",
+    "historicalCommandBTarget": "UNKNOWN / OWNER FOLLOW-UP",
+    "databaseExecutionSafety": "VERIFIED (strictly newly created disposable PostgreSQL fixtures; zero dotenv / DATABASE_URL usage)"
+  },
+  "regressionSummary": {
+    "w4c4HardeningTest": "PASS (1/1 in scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs: 1 test, 1 pass, 0 fail; Cases A, A2, B, C, C2, C3, Demonstrations D, E, F, G, negative control, replays, outer rollback, role isolation)",
+    "w4c4Diagnostic": "PASS (1/1 in scripts/testing/w4c4-inventory-lock-order-diagnostic.mjs) [carried-forward]",
+    "w3bPaymentComposition": "PASS (56/56 in src/test/harvo/w3b_canonical_composition_pg.test.ts: 28 BASELINE_054 + 28 POST_060) [carried-forward: 56 of 107]",
+    "w3bPaymentEvidence": "PASS (38/38 in src/test/harvo/w3b_canonical_payment_pg.test.ts) [carried-forward: 38 of 107]",
+    "w3aCanonicalReservation": "PASS (13/13 in src/test/harvo/w3_canonical_reservation_pg.test.ts) [carried-forward: 13 of 107]",
+    "carriedForwardTotal": 107,
+    "w4bCanonicalCancellation": "PASS (52/52 in src/test/harvo/w4b_canonical_cancellation_pg.test.ts) [carried-forward]",
+    "w4c2VersionAwareCancellation": "PASS (1/1 in scripts/testing/w4c2-version-aware-cancellation.mjs) [carried-forward]"
+  },
+  "staticChecks": {
+    "eslint": "PASS (npx eslint scripts/testing/w4c4-composition-finalizer-lock-hardening.mjs)",
+    "jsonValidation": "PASS (python3 -m json.tool)",
+    "diffCheck": "PASS (git diff --check)"
+  }
+}
