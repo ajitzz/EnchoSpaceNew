@@ -374,7 +374,7 @@ test('W4-D canonical cancellation refund authorization verification', async () =
     // Helper: Insert synthetic decision evidence
     const insertSyntheticDecisionEvidence = async (fields) => {
       const id = fields.id || randomUUID();
-      const decisionRef = fields.decisionRef || 'DEC-REF-' + randomUUID();
+      const decisionRef = fields.decisionRef !== undefined ? fields.decisionRef : ('DEC-REF-' + randomUUID());
       const version = fields.version || 1;
       const classification = fields.evidenceClassification || 'LOCAL_SYNTHETIC_TEST_FIXTURE';
       const responsibility = fields.approverResponsibility || 'ACCOMMODATION_FINANCE_APPROVER';
@@ -438,6 +438,63 @@ test('W4-D canonical cancellation refund authorization verification', async () =
     function repeatHex(ch, len) {
       return ch.repeat(len);
     }
+
+    // Helper: Snapshot all 16 scoped domain tables
+    const takeScopedDomainSnapshot = async (paidRes) => {
+      const [
+        resRow,
+        nightsRows,
+        eventsRows,
+        releasesRows,
+        relNightsRows,
+        attemptsRow,
+        bridgeRow,
+        provEventsRows,
+        payableAuthRow,
+        reconciliationsRows,
+        commandsRows,
+        inventoryDaysRows,
+        holdsRow,
+        holdNightsRows,
+        quotesRow,
+        bookingsRows,
+      ] = await Promise.all([
+        fixture.owner.query(`SELECT * FROM canonical_reservations WHERE id = $1`, [paidRes.reservationId]),
+        fixture.owner.query(`SELECT * FROM canonical_reservation_nights WHERE reservation_id = $1 ORDER BY stay_date`, [paidRes.reservationId]),
+        fixture.owner.query(`SELECT * FROM canonical_reservation_events WHERE reservation_id = $1 ORDER BY sequence_number`, [paidRes.reservationId]),
+        fixture.owner.query(`SELECT * FROM canonical_reservation_cancellation_inventory_releases WHERE reservation_id = $1`, [paidRes.reservationId]),
+        fixture.owner.query(`SELECT * FROM canonical_reservation_cancellation_release_nights WHERE reservation_id = $1 ORDER BY stay_date`, [paidRes.reservationId]),
+        fixture.owner.query(`SELECT * FROM canonical_payment_attempts WHERE id = $1`, [paidRes.paymentAttemptId]),
+        fixture.owner.query(`SELECT * FROM canonical_payment_reservations WHERE reservation_id = $1`, [paidRes.reservationId]),
+        fixture.owner.query(`SELECT * FROM canonical_provider_events WHERE payment_attempt_id = $1 ORDER BY id`, [paidRes.paymentAttemptId]),
+        fixture.owner.query(`SELECT * FROM canonical_payable_authorities WHERE id = $1`, [paidRes.payableAuthorityId]),
+        fixture.owner.query(`SELECT * FROM canonical_payment_reconciliations WHERE payment_attempt_id = $1 ORDER BY id`, [paidRes.paymentAttemptId]),
+        fixture.owner.query(`SELECT * FROM canonical_reservation_commands WHERE reservation_id = $1 ORDER BY command_id`, [paidRes.reservationId]),
+        fixture.owner.query(`SELECT * FROM inventory_days WHERE room_type_id = 101 ORDER BY calendar_date`),
+        fixture.owner.query(`SELECT * FROM booking_holds WHERE id = $1`, [paidRes.holdId]),
+        fixture.owner.query(`SELECT * FROM booking_hold_nights WHERE hold_id = $1 ORDER BY stay_date`, [paidRes.holdId]),
+        fixture.owner.query(`SELECT * FROM stays_quotes WHERE id = $1`, [paidRes.quoteId]),
+        fixture.owner.query(`SELECT * FROM bookings ORDER BY id`),
+      ]);
+      return {
+        resRow: resRow.rows[0],
+        nightsRows: nightsRows.rows,
+        eventsRows: eventsRows.rows,
+        releasesRows: releasesRows.rows,
+        relNightsRows: relNightsRows.rows,
+        attemptsRow: attemptsRow.rows[0],
+        bridgeRow: bridgeRow.rows[0],
+        provEventsRows: provEventsRows.rows,
+        payableAuthRow: payableAuthRow.rows[0],
+        reconciliationsRows: reconciliationsRows.rows,
+        commandsRows: commandsRows.rows,
+        inventoryDaysRows: inventoryDaysRows.rows,
+        holdsRow: holdsRow.rows[0],
+        holdNightsRows: holdNightsRows.rows,
+        quotesRow: quotesRow.rows[0],
+        bookingsRows: bookingsRows.rows,
+      };
+    };
 
     // =========================================================================
     // T01: VALID PAID V1 CANCELLATION PLUS ADMITTED SYNTHETIC DECISION
@@ -586,25 +643,61 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         }
       );
 
-      // 3c. Issuer role direct table DML denial (INSERT/UPDATE/DELETE)
+      // 3c. Issuer role direct table DML denial (SELECT/INSERT/UPDATE/DELETE on both tables)
       await assert.rejects(
-        () => refundIssuer.query(`DELETE FROM canonical_cancellation_refund_decision_evidence`),
+        () => refundIssuer.query(`SELECT * FROM canonical_cancellation_refund_decision_evidence`),
         (err) => {
-          assert.equal(err.code, '42501', 'Must fail with permission denied (42501)');
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on evidence SELECT');
           return true;
         }
       );
       await assert.rejects(
-        () => refundIssuer.query(`DELETE FROM canonical_cancellation_refund_authorizations`),
+        () => refundIssuer.query(`INSERT INTO canonical_cancellation_refund_decision_evidence (decision_ref) VALUES ('x')`),
         (err) => {
-          assert.equal(err.code, '42501', 'Must fail with permission denied (42501)');
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on evidence INSERT');
+          return true;
+        }
+      );
+      await assert.rejects(
+        () => refundIssuer.query(`UPDATE canonical_cancellation_refund_decision_evidence SET reason_text = 'hack'`),
+        (err) => {
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on evidence UPDATE');
+          return true;
+        }
+      );
+      await assert.rejects(
+        () => refundIssuer.query(`DELETE FROM canonical_cancellation_refund_decision_evidence`),
+        (err) => {
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on evidence DELETE');
+          return true;
+        }
+      );
+
+      await assert.rejects(
+        () => refundIssuer.query(`SELECT * FROM canonical_cancellation_refund_authorizations`),
+        (err) => {
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on authorizations SELECT');
           return true;
         }
       );
       await assert.rejects(
         () => refundIssuer.query(`INSERT INTO canonical_cancellation_refund_authorizations (command_id) VALUES ($1)`, [randomUUID()]),
         (err) => {
-          assert.equal(err.code, '42501', 'Must fail with permission denied (42501)');
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on authorizations INSERT');
+          return true;
+        }
+      );
+      await assert.rejects(
+        () => refundIssuer.query(`UPDATE canonical_cancellation_refund_authorizations SET issuing_principal = 'hack'`),
+        (err) => {
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on authorizations UPDATE');
+          return true;
+        }
+      );
+      await assert.rejects(
+        () => refundIssuer.query(`DELETE FROM canonical_cancellation_refund_authorizations`),
+        (err) => {
+          assert.equal(err.code, '42501', 'Must fail with permission denied (42501) on authorizations DELETE');
           return true;
         }
       );
@@ -640,6 +733,48 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           return true;
         }
       );
+
+      // 3e. Inner domain role guard: role granted EXECUTE but session_user is not member of encho_refund_issuer
+      await fixture.owner.query(`GRANT EXECUTE ON FUNCTION issue_cancellation_refund_authorization TO encho_reservation_worker`);
+      try {
+        await assert.rejects(
+          () => reservationWorker.query(
+            `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+            [randomUUID(), paidResT3.reservationId, randomUUID()]
+          ),
+          (err) => {
+            assert.match(err.message, /REFUND_ISSUER_UNAUTHORIZED/);
+            return true;
+          }
+        );
+      } finally {
+        await fixture.owner.query(`REVOKE EXECUTE ON FUNCTION issue_cancellation_refund_authorization FROM encho_reservation_worker`);
+      }
+
+      // 3f. W4D-01 Negative admission test: empty string or whitespace-only decision_ref rejected by check constraint
+      for (const invalidDecisionRef of ['', '   ']) {
+        await assert.rejects(
+          () => insertSyntheticDecisionEvidence({
+            decisionRef: invalidDecisionRef,
+            reservationId: paidResT3.reservationId,
+            cancellationEventId: cancelInfoT3.cancellationEventId,
+            cancellationReleaseId: cancelInfoT3.cancellationReleaseId,
+            paidBridgeId: paidResT3.paidBridgeId,
+            paymentAttemptId: paidResT3.paymentAttemptId,
+            quoteId: paidResT3.quoteId,
+            payableAuthorityId: paidResT3.payableAuthorityId,
+            providerOriginKind: 'RAZORPAY',
+            providerPaymentRef: paidResT3.providerPaymentRef,
+            supportingProviderEventId: paidResT3.supportingProviderEventId,
+            supportingEvidenceHash: paidResT3.supportingEvidenceHash,
+            approvedAmountPaise: paidResT3.capturedAmountPaise,
+          }),
+          (err) => {
+            assert.equal(err.code, '23514', 'Must fail with PostgreSQL check constraint violation (23514)');
+            return true;
+          }
+        );
+      }
     }
 
     // =========================================================================
@@ -743,14 +878,23 @@ test('W4-D canonical cancellation refund authorization verification', async () =
     {
       // 5a. ACTIVE reservation (not cancelled)
       const activeRes = await createPaidReservation({nights: 2});
-      const dummyEvidenceId = randomUUID();
       await assert.rejects(
-        () => refundIssuer.query(
-          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [randomUUID(), activeRes.reservationId, dummyEvidenceId]
-        ),
+        () => insertSyntheticDecisionEvidence({
+          reservationId: activeRes.reservationId,
+          cancellationEventId: randomUUID(),
+          cancellationReleaseId: randomUUID(),
+          paidBridgeId: activeRes.paidBridgeId,
+          paymentAttemptId: activeRes.paymentAttemptId,
+          quoteId: activeRes.quoteId,
+          payableAuthorityId: activeRes.payableAuthorityId,
+          providerOriginKind: 'RAZORPAY',
+          providerPaymentRef: activeRes.providerPaymentRef,
+          supportingProviderEventId: activeRes.supportingProviderEventId,
+          supportingEvidenceHash: activeRes.supportingEvidenceHash,
+          approvedAmountPaise: activeRes.capturedAmountPaise,
+        }),
         (err) => {
-          assert.match(err.message, /DECISION_EVIDENCE_NOT_FOUND/);
+          assert.match(err.message, /DECISION_EVIDENCE_CROSS_BINDING_MISMATCH: CANCELLATION_RELEASE_NOT_FOUND/);
           return true;
         }
       );
@@ -774,17 +918,20 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       });
       assert.equal(reqRes.lifecycleState, 'CANCELLATION_REQUESTED');
 
-      // Create dummy release record pointing to another completed release to test function check
-      const completedRes = await createPaidReservation({nights: 2});
-      const completedCancel = await cancelReservationV1(completedRes.reservationId);
+      // Assert no completed release row exists for reqOnlyRes
+      const reqReleaseCount = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_reservation_cancellation_inventory_releases WHERE reservation_id = $1`,
+          [reqOnlyRes.reservationId]
+        )
+      ).rows[0].count;
+      assert.equal(Number(reqReleaseCount), 0);
 
-      // Try issuance on reqOnlyRes (with completedCancel release passed in synthetic evidence to bypass trigger)
-      // Trigger on evidence insert will reject release reservation mismatch
       await assert.rejects(
         () => insertSyntheticDecisionEvidence({
           reservationId: reqOnlyRes.reservationId,
           cancellationEventId: reqRes.eventId,
-          cancellationReleaseId: completedCancel.cancellationReleaseId,
+          cancellationReleaseId: randomUUID(),
           paidBridgeId: reqOnlyRes.paidBridgeId,
           paymentAttemptId: reqOnlyRes.paymentAttemptId,
           quoteId: reqOnlyRes.quoteId,
@@ -796,28 +943,151 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           approvedAmountPaise: reqOnlyRes.capturedAmountPaise,
         }),
         (err) => {
-          assert.match(err.message, /DECISION_EVIDENCE_CROSS_BINDING_MISMATCH: RELEASE_RESERVATION_MISMATCH/);
+          assert.match(err.message, /DECISION_EVIDENCE_CROSS_BINDING_MISMATCH: CANCELLATION_RELEASE_NOT_FOUND/);
           return true;
         }
       );
 
-      // 5c. V2 Cancellation release excluded
+      // 5c. Direct-finalizer-only reservation (no paid bridge in canonical_payment_reservations)
+      const dirCheckIn = addDays(fixture.today, dayOffset);
+      const dirCheckOut = addDays(fixture.today, dayOffset + 2);
+      dayOffset += 5;
+      const dirQuote = await createItineraryQuote(
+        stays,
+        {
+          offerId,
+          revision: 1,
+          checkIn: dirCheckIn,
+          checkOut: dirCheckOut,
+          guestCount: 2,
+          requestId: randomUUID(),
+        },
+        'user:10'
+      );
+      const dirHold = await acquireHold(stays, {
+        roomTypeId: 101,
+        checkIn: dirCheckIn,
+        checkOut: dirCheckOut,
+        quantity: 1,
+        idempotencyKey: randomUUID(),
+        quoteId: dirQuote.id,
+        holderPrincipal: 'user:10',
+        userId: 10,
+      });
+      assert.equal(dirHold.success, true);
+      const dirClient = await reservationWorker.connect();
+      let directResId;
+      try {
+        await dirClient.query('BEGIN');
+        await dirClient.query("SELECT set_config('app.stays_principal', $1, true)", ['user:10']);
+        const dirFinRes = await dirClient.query(
+          `SELECT * FROM canonical_finalize_direct_hold($1, $2, $3)`,
+          [dirHold.hold.id, dirQuote.id, randomUUID()]
+        );
+        directResId = dirFinRes.rows[0].reservation_id;
+        await dirClient.query('COMMIT');
+      } finally {
+        dirClient.release();
+      }
+      const dirCancel = await cancelReservationV1(directResId);
+
+      const dirBridgeCount = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_payment_reservations WHERE reservation_id = $1`,
+          [directResId]
+        )
+      ).rows[0].count;
+      assert.equal(Number(dirBridgeCount), 0);
+
+      await assert.rejects(
+        () => insertSyntheticDecisionEvidence({
+          reservationId: directResId,
+          cancellationEventId: dirCancel.cancellationEventId,
+          cancellationReleaseId: dirCancel.cancellationReleaseId,
+          paidBridgeId: randomUUID(),
+          paymentAttemptId: randomUUID(),
+          quoteId: dirQuote.id,
+          payableAuthorityId: randomUUID(),
+          providerOriginKind: 'RAZORPAY',
+          providerPaymentRef: 'dummy_ref',
+          supportingProviderEventId: randomUUID(),
+          supportingEvidenceHash: repeatHex('a', 64),
+          approvedAmountPaise: 100000,
+        }),
+        (err) => {
+          assert.match(err.message, /DECISION_EVIDENCE_CROSS_BINDING_MISMATCH: PAID_BRIDGE_NOT_FOUND/);
+          return true;
+        }
+      );
+
+      // 5d. External reservation (lifecycle origin not ENCHO_DIRECT)
+      const extResId = randomUUID();
+      const extCmd = randomUUID();
+      const extCheckIn = addDays(fixture.today, dayOffset);
+      const extCheckOut = addDays(fixture.today, dayOffset + 2);
+      dayOffset += 5;
+      await fixture.owner.query(
+        `INSERT INTO canonical_reservations (
+          id, command_id, command_fingerprint, hold_id, quote_id,
+          listing_id, room_type_id, origin_kind, check_in_date, check_out_date,
+          nights, guest_count, room_subtotal_paise, currency, status
+        ) VALUES (
+          $1, $2, repeat('c', 64), NULL, NULL,
+          1, 101, 'EXTERNAL_CHANNEL', $3, $4,
+          2, 2, 1000000, 'INR', 'INVENTORY_COMMITTED'
+        )`,
+        [extResId, extCmd, extCheckIn, extCheckOut]
+      );
+      await assert.rejects(
+        () => issueCancellationAuthorization(lifecycleIssuer, {
+          reservationId: extResId,
+          commandId: randomUUID(),
+          reasonCode: 'GUEST_CANCEL_REQUEST',
+          reasonText: 'Guest cancel',
+          authenticatedPrincipal: 'user:10',
+        }),
+        (err) => {
+          assert.match(err.message, /LIFECYCLE_ORIGIN_NOT_SUPPORTED/);
+          return true;
+        }
+      );
+
+      // 5e. V2 Cancellation release excluded via natural V2 assembly and seal
       const v2Res = await createPaidReservation({nights: 2});
+      const resRowV2 = (
+        await fixture.owner.query(`SELECT * FROM canonical_reservations WHERE id = $1`, [v2Res.reservationId])
+      ).rows[0];
+      const v2RevId = randomUUID();
+      await fixture.owner.query(
+        `INSERT INTO canonical_reservation_revisions (
+          id, reservation_id, version, room_type_id, offer_id, offer_revision,
+          check_in_date, check_out_date, nights, guest_count, room_subtotal_paise, currency
+        ) VALUES ($1, $2, 2, 101, $6, $7, $3, $4, $5, 2, 1100000, 'INR')`,
+        [v2RevId, v2Res.reservationId, resRowV2.check_in_date, resRowV2.check_out_date, resRowV2.nights, resRowV2.offer_id, resRowV2.offer_revision]
+      );
+      await fixture.owner.query(
+        `INSERT INTO canonical_reservation_revision_nights (
+          revision_id, reservation_id, inventory_day_id, stay_date, room_type_id, units
+        ) SELECT $1, $2, d.id, d.calendar_date, 101, 1
+          FROM inventory_days d
+          WHERE d.room_type_id = 101 AND d.calendar_date >= $3 AND d.calendar_date < $4`,
+        [v2RevId, v2Res.reservationId, resRowV2.check_in_date, resRowV2.check_out_date]
+      );
+      await fixture.owner.query(
+        `INSERT INTO canonical_reservation_revision_seals (revision_id, reservation_id) VALUES ($1, $2)`,
+        [v2RevId, v2Res.reservationId]
+      );
+
+      // Normal cancellation releases effective version 2
       const cancelInfoV2 = await cancelReservationV1(v2Res.reservationId);
-      // Temporarily mark release as V2
-      await fixture.owner.query(
-        `ALTER TABLE canonical_reservation_cancellation_inventory_releases DROP CONSTRAINT fk_cancellation_release_revision;`
-      );
-      await fixture.owner.query(
-        `ALTER TABLE canonical_reservation_cancellation_inventory_releases DISABLE TRIGGER canonical_reservation_cancellation_inventory_releases_immutable;`
-      );
-      await fixture.owner.query(
-        `UPDATE canonical_reservation_cancellation_inventory_releases SET released_effective_version = 2, released_revision_id = $2 WHERE release_id = $1;`,
-        [cancelInfoV2.cancellationReleaseId, randomUUID()]
-      );
-      await fixture.owner.query(
-        `ALTER TABLE canonical_reservation_cancellation_inventory_releases ENABLE TRIGGER canonical_reservation_cancellation_inventory_releases_immutable;`
-      );
+      const relRowV2 = (
+        await fixture.owner.query(
+          `SELECT * FROM canonical_reservation_cancellation_inventory_releases WHERE release_id = $1`,
+          [cancelInfoV2.cancellationReleaseId]
+        )
+      ).rows[0];
+      assert.equal(relRowV2.released_effective_version, 2);
+      assert.equal(relRowV2.released_revision_id, v2RevId);
 
       const evidenceV2 = await insertSyntheticDecisionEvidence({
         reservationId: v2Res.reservationId,
@@ -843,21 +1113,6 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           assert.match(err.message, /V2_CANCELLATION_RELEASE_EXCLUDED/);
           return true;
         }
-      );
-
-      // Revert back
-      await fixture.owner.query(
-        `ALTER TABLE canonical_reservation_cancellation_inventory_releases DISABLE TRIGGER canonical_reservation_cancellation_inventory_releases_immutable;`
-      );
-      await fixture.owner.query(
-        `UPDATE canonical_reservation_cancellation_inventory_releases SET released_effective_version = 1, released_revision_id = NULL WHERE release_id = $1;`,
-        [cancelInfoV2.cancellationReleaseId]
-      );
-      await fixture.owner.query(
-        `ALTER TABLE canonical_reservation_cancellation_inventory_releases ENABLE TRIGGER canonical_reservation_cancellation_inventory_releases_immutable;`
-      );
-      await fixture.owner.query(
-        `ALTER TABLE canonical_reservation_cancellation_inventory_releases ADD CONSTRAINT fk_cancellation_release_revision FOREIGN KEY (released_revision_id, reservation_id) REFERENCES canonical_reservation_revisions(id, reservation_id) ON DELETE RESTRICT;`
       );
     }
 
@@ -895,16 +1150,21 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         }
       );
 
-      // 6b. Unresolved reconciliation on attempt
+      // 6b-1. Natural conflicting capture transitions attempt to RECONCILIATION_REQUIRED
       const paidResT6b = await createPaidReservation({nights: 2});
       const cancelInfoT6b = await cancelReservationV1(paidResT6b.reservationId);
 
-      await fixture.owner.query(
-        `INSERT INTO canonical_payment_reconciliations (
-          payment_attempt_id, reason, details, resolved
-        ) VALUES ($1, 'AMOUNT_MISMATCH', '{}'::jsonb, false)`,
-        [paidResT6b.paymentAttemptId]
-      );
+      await ingestProviderEvent(paymentWorker, {
+        attemptId: paidResT6b.paymentAttemptId,
+        originKind: 'RAZORPAY',
+        providerEventId: 'evt_conflict_' + randomUUID(),
+        normalizedEventType: 'PAYMENT_CAPTURED',
+        reportedAmountPaise: paidResT6b.capturedAmountPaise + 50000,
+        reportedCurrency: 'INR',
+        providerPaymentRef: 'pay_conflict_' + randomUUID(),
+        providerOrderRef: paidResT6b.providerOrderRef,
+        evidencePayload: { conflicting: true },
+      });
 
       const validEvidenceT6 = await insertSyntheticDecisionEvidence({
         decisionRef: 'DEC-REF-VALID-' + randomUUID(),
@@ -928,6 +1188,44 @@ test('W4-D canonical cancellation refund authorization verification', async () =
           [randomUUID(), paidResT6b.reservationId, validEvidenceT6.id]
         ),
         (err) => {
+          assert.match(err.message, /PAYMENT_STATE_NOT_MATCHED_CAPTURE/);
+          return true;
+        }
+      );
+
+      // 6b-2. Unresolved reconciliation on matched attempt
+      const paidResT6b2 = await createPaidReservation({nights: 2});
+      const cancelInfoT6b2 = await cancelReservationV1(paidResT6b2.reservationId);
+
+      await fixture.owner.query(
+        `INSERT INTO canonical_payment_reconciliations (
+          payment_attempt_id, reason, details, resolved
+        ) VALUES ($1, 'AMOUNT_MISMATCH', '{}'::jsonb, false)`,
+        [paidResT6b2.paymentAttemptId]
+      );
+
+      const validEvidenceT6b2 = await insertSyntheticDecisionEvidence({
+        decisionRef: 'DEC-REF-VALID2-' + randomUUID(),
+        reservationId: paidResT6b2.reservationId,
+        cancellationEventId: cancelInfoT6b2.cancellationEventId,
+        cancellationReleaseId: cancelInfoT6b2.cancellationReleaseId,
+        paidBridgeId: paidResT6b2.paidBridgeId,
+        paymentAttemptId: paidResT6b2.paymentAttemptId,
+        quoteId: paidResT6b2.quoteId,
+        payableAuthorityId: paidResT6b2.payableAuthorityId,
+        providerOriginKind: 'RAZORPAY',
+        providerPaymentRef: paidResT6b2.providerPaymentRef,
+        supportingProviderEventId: paidResT6b2.supportingProviderEventId,
+        supportingEvidenceHash: paidResT6b2.supportingEvidenceHash,
+        approvedAmountPaise: paidResT6b2.capturedAmountPaise,
+      });
+
+      await assert.rejects(
+        () => refundIssuer.query(
+          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+          [randomUUID(), paidResT6b2.reservationId, validEvidenceT6b2.id]
+        ),
+        (err) => {
           assert.match(err.message, /PAYMENT_RECONCILIATION_UNRESOLVED/);
           return true;
         }
@@ -936,49 +1234,32 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       // Resolve reconciliation
       await fixture.owner.query(
         `UPDATE canonical_payment_reconciliations SET resolved = true WHERE payment_attempt_id = $1`,
-        [paidResT6b.paymentAttemptId]
+        [paidResT6b2.paymentAttemptId]
       );
 
       // 6c. Visible cross-attempt alias of same capture reference
       const resOther = await createPaidReservation({nights: 2});
-      await fixture.owner.query(
-        `ALTER TABLE canonical_provider_events DISABLE TRIGGER canonical_provider_events_immutable;`
-      );
-      await fixture.owner.query(
-        `INSERT INTO canonical_provider_events (
-           origin_kind, provider_event_id, payment_attempt_id, provider_payment_ref, provider_order_ref,
-           normalized_event_type, reported_amount_paise, reported_currency, evidence_hash, evidence_payload, status
-         ) VALUES (
-           'RAZORPAY', $1, $2, $3, 'order_dummy',
-           'PAYMENT_CAPTURED', 550000, 'INR', repeat('e', 64), '{}'::jsonb, 'PROCESSED'
-         )`,
-        ['evt_alias_' + randomUUID(), resOther.paymentAttemptId, paidResT6b.providerPaymentRef]
-      );
-      await fixture.owner.query(
-        `ALTER TABLE canonical_provider_events ENABLE TRIGGER canonical_provider_events_immutable;`
-      );
+      await ingestProviderEvent(paymentWorker, {
+        attemptId: resOther.paymentAttemptId,
+        originKind: 'RAZORPAY',
+        providerEventId: 'evt_alias_' + randomUUID(),
+        normalizedEventType: 'PAYMENT_CAPTURED',
+        reportedAmountPaise: resOther.capturedAmountPaise,
+        reportedCurrency: 'INR',
+        providerPaymentRef: paidResT6b2.providerPaymentRef,
+        providerOrderRef: resOther.providerOrderRef,
+        evidencePayload: { alias: true },
+      });
 
       await assert.rejects(
         () => refundIssuer.query(
           `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
-          [randomUUID(), paidResT6b.reservationId, validEvidenceT6.id]
+          [randomUUID(), paidResT6b2.reservationId, validEvidenceT6b2.id]
         ),
         (err) => {
           assert.match(err.message, /CAPTURE_CROSS_ATTEMPT_ALIAS_AMBIGUOUS/);
           return true;
         }
-      );
-
-      // Clean up alias event
-      await fixture.owner.query(
-        `ALTER TABLE canonical_provider_events DISABLE TRIGGER canonical_provider_events_immutable;`
-      );
-      await fixture.owner.query(
-        `DELETE FROM canonical_provider_events WHERE provider_payment_ref = $1 AND payment_attempt_id = $2;`,
-        [paidResT6b.providerPaymentRef, resOther.paymentAttemptId]
-      );
-      await fixture.owner.query(
-        `ALTER TABLE canonical_provider_events ENABLE TRIGGER canonical_provider_events_immutable;`
       );
     }
 
@@ -1111,21 +1392,26 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       ).rows[0];
       assert.equal(firstAuth.replayed, false);
 
-      // Add a later observation (e.g. unrelated provider event on another attempt)
-      const unrelatedRes = await createPaidReservation({nights: 2});
+      // Add a later conflicting observation on the SAME payment attempt
       await ingestProviderEvent(paymentWorker, {
-        attemptId: unrelatedRes.paymentAttemptId,
+        attemptId: paidResT8.paymentAttemptId,
         originKind: 'RAZORPAY',
-        providerEventId: 'evt_later_' + randomUUID(),
-        normalizedEventType: 'PAYMENT_UNKNOWN',
-        reportedAmountPaise: 0,
+        providerEventId: 'evt_conflict_later_' + randomUUID(),
+        normalizedEventType: 'PAYMENT_CAPTURED',
+        reportedAmountPaise: paidResT8.capturedAmountPaise + 10000,
         reportedCurrency: 'INR',
-        providerPaymentRef: 'unrelated_ref',
-        providerOrderRef: unrelatedRes.providerOrderRef,
-        evidencePayload: {},
+        providerPaymentRef: 'pay_conflict_later_' + randomUUID(),
+        providerOrderRef: paidResT8.providerOrderRef,
+        evidencePayload: { conflicting_later: true },
       });
 
-      // 8a. Replay with identical command: succeeds with replayed = true
+      // Verify attempt is now in RECONCILIATION_REQUIRED
+      const attemptRowT8 = (
+        await fixture.owner.query(`SELECT * FROM canonical_payment_attempts WHERE id = $1`, [paidResT8.paymentAttemptId])
+      ).rows[0];
+      assert.equal(attemptRowT8.payment_state, 'RECONCILIATION_REQUIRED');
+
+      // 8a. Replay with identical command: succeeds with replayed = true despite later conflicting event on attempt
       const replayedAuth = (
         await refundIssuer.query(
           `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
@@ -1137,7 +1423,17 @@ test('W4-D canonical cancellation refund authorization verification', async () =
       assert.equal(replayedAuth.command_id, firstAuth.command_id);
       assert.equal(replayedAuth.approved_amount_paise, firstAuth.approved_amount_paise);
 
+      // Verify exactly 1 authorization row exists (0 new rows added)
+      const authCountT8 = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+          [paidResT8.reservationId]
+        )
+      ).rows[0].count;
+      assert.equal(Number(authCountT8), 1, 'Replay must not insert new authorization row');
+
       // 8b. Replay with changed semantics (different reservationId under same commandId)
+      const unrelatedRes = await createPaidReservation({nights: 2});
       const cancelInfoUnrelated = await cancelReservationV1(unrelatedRes.reservationId);
       const evidenceUnrelated = await insertSyntheticDecisionEvidence({
         reservationId: unrelatedRes.reservationId,
@@ -1200,22 +1496,68 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         approvedAmountPaise: paidResT9.capturedAmountPaise,
       });
 
-      // 9a. Two real connections with IDENTICAL command converge
+      // 9a. Two real connections with IDENTICAL command converge with active lock contention observation
       const conn1 = await refundIssuer.connect();
       const conn2 = await refundIssuer.connect();
       const identicalCmd = randomUUID();
 
       try {
-        const [res1, res2] = await Promise.all([
-          conn1.query(`SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`, [identicalCmd, paidResT9.reservationId, evidenceT9.id]),
-          conn2.query(`SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`, [identicalCmd, paidResT9.reservationId, evidenceT9.id]),
-        ]);
+        const pid1 = (await conn1.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        const pid2 = (await conn2.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
 
-        const auth1 = res1.rows[0];
-        const auth2 = res2.rows[0];
-        assert.equal(auth1.authorization_id, auth2.authorization_id);
-        const replays = [auth1.replayed, auth2.replayed].sort();
+        // Conn1 begins and executes issuance but holds transaction open (holding row locks)
+        await conn1.query('BEGIN');
+        const res1 = (
+          await conn1.query(
+            `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+            [identicalCmd, paidResT9.reservationId, evidenceT9.id]
+          )
+        ).rows[0];
+
+        // Conn2 attempts identical command concurrently in transaction
+        await conn2.query('BEGIN');
+        const conn2Promise = conn2.query(
+          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+          [identicalCmd, paidResT9.reservationId, evidenceT9.id]
+        );
+
+        // Actively observe lock contention on Connection B (pid2)
+        let observedLockWait = false;
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const contention = (await fixture.owner.query(
+            `SELECT l.locktype, l.mode, l.granted, a.wait_event_type, a.wait_event
+             FROM pg_locks l
+             JOIN pg_stat_activity a ON l.pid = a.pid
+             WHERE l.pid = $1 AND l.granted = false`,
+            [pid2]
+          )).rows;
+
+          if (contention.length > 0) {
+            observedLockWait = true;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.equal(observedLockWait, true, 'Connection B must be observed actively waiting on lock held by Connection A');
+
+        // Conn1 commits, releasing lock
+        await conn1.query('COMMIT');
+
+        // Conn2 unblocks and completes
+        const res2 = (await conn2Promise).rows[0];
+        await conn2.query('COMMIT');
+
+        assert.equal(res1.authorization_id, res2.authorization_id);
+        const replays = [res1.replayed, res2.replayed].sort();
         assert.deepEqual(replays, [false, true], 'One insertion, one recovery replay');
+
+        const countAuthT9 = (
+          await fixture.owner.query(
+            `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE reservation_id = $1`,
+            [paidResT9.reservationId]
+          )
+        ).rows[0].count;
+        assert.equal(Number(countAuthT9), 1, 'Exactly one authorization must exist');
       } finally {
         conn1.release();
         conn2.release();
@@ -1236,7 +1578,7 @@ test('W4-D canonical cancellation refund authorization verification', async () =
     }
 
     // =========================================================================
-    // T10: IMMUTABILITY, INJECTED FAILURE ROLLBACK, AND ZERO DOMAIN ROW MUTATION
+    // T10: IMMUTABILITY, STRUCTURED INJECTED ROLLBACKS, AND ZERO DOMAIN MUTATION
     // =========================================================================
     {
       const paidResT10 = await createPaidReservation({nights: 2});
@@ -1257,7 +1599,100 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         approvedAmountPaise: paidResT10.capturedAmountPaise,
       });
 
-      // 10a. Immutability: UPDATE or DELETE on decision evidence
+      // Snapshot all 16 scoped domain tables before any operations
+      const snapshotInitial = await takeScopedDomainSnapshot(paidResT10);
+
+      // -----------------------------------------------------------------------
+      // T10A: Outer transaction failure: verify rollback, SQLSTATE, and 16 tables unchanged
+      // -----------------------------------------------------------------------
+      const failCmdA = randomUUID();
+      const clientA = await refundIssuer.connect();
+      let outerErr = null;
+      try {
+        await clientA.query('BEGIN');
+        await clientA.query(
+          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+          [failCmdA, paidResT10.reservationId, evidenceT10.id]
+        );
+        // Inject failure via invalid cast
+        await clientA.query(`SELECT 'intentional_abort'::int`);
+        await clientA.query('COMMIT');
+      } catch (err) {
+        outerErr = err;
+        await clientA.query('ROLLBACK');
+      } finally {
+        clientA.release();
+      }
+
+      assert.ok(outerErr, 'Outer transaction intentional abort must throw');
+      assert.equal(outerErr.code, '22P02', 'SQLSTATE must be 22P02 (invalid_text_representation)');
+
+      const failedAuthCountA = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [failCmdA]
+        )
+      ).rows[0].count;
+      assert.equal(Number(failedAuthCountA), 0, 'Rolled back transaction must leave 0 authorization rows');
+
+      const snapshotAfterA = await takeScopedDomainSnapshot(paidResT10);
+      assert.deepEqual(snapshotInitial, snapshotAfterA, 'T10A rollback must leave all 16 domain tables unchanged');
+
+      // -----------------------------------------------------------------------
+      // T10B: Fixture-only trigger failure injected on authorizations table
+      // -----------------------------------------------------------------------
+      await fixture.owner.query(`
+        CREATE OR REPLACE FUNCTION trg_fixture_review_fail_fn()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          RAISE EXCEPTION 'REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE' USING ERRCODE = 'P7777';
+        END;
+        $$;
+        CREATE TRIGGER trg_fixture_review_fail
+        BEFORE INSERT ON canonical_cancellation_refund_authorizations
+        FOR EACH ROW EXECUTE FUNCTION trg_fixture_review_fail_fn();
+      `);
+
+      const failCmdB = randomUUID();
+      const clientB = await refundIssuer.connect();
+      let injectedErr = null;
+      try {
+        await clientB.query('BEGIN');
+        await clientB.query(
+          `SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`,
+          [failCmdB, paidResT10.reservationId, evidenceT10.id]
+        );
+        await clientB.query('COMMIT');
+      } catch (err) {
+        injectedErr = err;
+        await clientB.query('ROLLBACK');
+      } finally {
+        clientB.release();
+        await fixture.owner.query(`
+          DROP TRIGGER IF EXISTS trg_fixture_review_fail ON canonical_cancellation_refund_authorizations;
+          DROP FUNCTION IF EXISTS trg_fixture_review_fail_fn();
+        `);
+      }
+
+      assert.ok(injectedErr, 'Injected trigger failure must throw');
+      assert.equal(injectedErr.code, 'P7777', 'Injected trigger must produce SQLSTATE P7777');
+      assert.match(injectedErr.message, /REVIEW_REFUND_AUTHORIZATION_INSERT_FAILURE/);
+
+      const failedAuthCountB = (
+        await fixture.owner.query(
+          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
+          [failCmdB]
+        )
+      ).rows[0].count;
+      assert.equal(Number(failedAuthCountB), 0, 'Injected trigger rollback must leave 0 authorization rows');
+
+      const snapshotAfterB = await takeScopedDomainSnapshot(paidResT10);
+      assert.deepEqual(snapshotInitial, snapshotAfterB, 'T10B rollback must leave all 16 domain tables unchanged');
+
+      // -----------------------------------------------------------------------
+      // T10C: Immutability, successful issuance, and zero domain row mutations
+      // -----------------------------------------------------------------------
+      // Immutability on decision evidence
       await assert.rejects(
         () => fixture.owner.query(
           `UPDATE canonical_cancellation_refund_decision_evidence SET reason_text = 'mutated' WHERE id = $1`,
@@ -1279,65 +1714,7 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         }
       );
 
-      // Snapshot scoped domain tables before issuance
-      const takeDomainSnapshot = async () => {
-        const [
-          resRow,
-          nightsRows,
-          eventsRows,
-          releasesRows,
-          relNightsRows,
-          attemptsRow,
-          bridgeRow,
-          provEventsRows,
-        ] = await Promise.all([
-          fixture.owner.query(`SELECT * FROM canonical_reservations WHERE id = $1`, [paidResT10.reservationId]),
-          fixture.owner.query(`SELECT * FROM canonical_reservation_nights WHERE reservation_id = $1 ORDER BY stay_date`, [paidResT10.reservationId]),
-          fixture.owner.query(`SELECT * FROM canonical_reservation_events WHERE reservation_id = $1 ORDER BY sequence_number`, [paidResT10.reservationId]),
-          fixture.owner.query(`SELECT * FROM canonical_reservation_cancellation_inventory_releases WHERE reservation_id = $1`, [paidResT10.reservationId]),
-          fixture.owner.query(`SELECT * FROM canonical_reservation_cancellation_release_nights WHERE reservation_id = $1 ORDER BY stay_date`, [paidResT10.reservationId]),
-          fixture.owner.query(`SELECT * FROM canonical_payment_attempts WHERE id = $1`, [paidResT10.paymentAttemptId]),
-          fixture.owner.query(`SELECT * FROM canonical_payment_reservations WHERE reservation_id = $1`, [paidResT10.reservationId]),
-          fixture.owner.query(`SELECT * FROM canonical_provider_events WHERE payment_attempt_id = $1 ORDER BY id`, [paidResT10.paymentAttemptId]),
-        ]);
-        return {
-          resRow: resRow.rows[0],
-          nightsRows: nightsRows.rows,
-          eventsRows: eventsRows.rows,
-          releasesRows: releasesRows.rows,
-          relNightsRows: relNightsRows.rows,
-          attemptsRow: attemptsRow.rows[0],
-          bridgeRow: bridgeRow.rows[0],
-          provEventsRows: provEventsRows.rows,
-        };
-      };
-
-      const snapshotBefore = await takeDomainSnapshot();
-
-      // 10b. Injected failure in transaction: rolls back completely
-      const client = await refundIssuer.connect();
-      const failCmd = randomUUID();
-      try {
-        await client.query('BEGIN');
-        await client.query(`SELECT * FROM issue_cancellation_refund_authorization($1, $2, $3)`, [failCmd, paidResT10.reservationId, evidenceT10.id]);
-        // Inject failure
-        await client.query(`SELECT 'intentional_abort'::int`);
-      } catch (err) {
-        await client.query('ROLLBACK');
-      } finally {
-        client.release();
-      }
-
-      // Assert 0 authorizations persist for failCmd
-      const failedAuthCount = (
-        await fixture.owner.query(
-          `SELECT count(*) FROM canonical_cancellation_refund_authorizations WHERE command_id = $1`,
-          [failCmd]
-        )
-      ).rows[0].count;
-      assert.equal(Number(failedAuthCount), 0, 'Rolled back transaction must leave 0 authorization rows');
-
-      // 10c. Successful issuance
+      // Clean successful issuance
       const successCmd = randomUUID();
       const successAuth = (
         await refundIssuer.query(
@@ -1370,9 +1747,9 @@ test('W4-D canonical cancellation refund authorization verification', async () =
         }
       );
 
-      // Verify ZERO domain rows mutated
-      const snapshotAfter = await takeDomainSnapshot();
-      assert.deepEqual(snapshotBefore, snapshotAfter, 'Successful issuance must mutate ZERO existing domain rows');
+      // Verify ZERO domain rows mutated across all 16 tables
+      const snapshotFinal = await takeScopedDomainSnapshot(paidResT10);
+      assert.deepEqual(snapshotInitial, snapshotFinal, 'Clean issuance must mutate ZERO existing domain rows across all 16 tables');
     }
   } finally {
     await Promise.allSettled([

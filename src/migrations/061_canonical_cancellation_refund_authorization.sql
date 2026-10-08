@@ -25,7 +25,7 @@
 -- 1. Create Decision Evidence Ledger Table
 CREATE TABLE IF NOT EXISTS canonical_cancellation_refund_decision_evidence (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  decision_ref TEXT NOT NULL,
+  decision_ref TEXT NOT NULL CHECK (length(trim(decision_ref)) > 0),
   version INT NOT NULL CHECK (version > 0),
   evidence_classification TEXT NOT NULL CHECK (evidence_classification = 'LOCAL_SYNTHETIC_TEST_FIXTURE'),
   approver_responsibility TEXT NOT NULL CHECK (approver_responsibility = 'ACCOMMODATION_FINANCE_APPROVER'),
