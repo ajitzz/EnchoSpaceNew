@@ -959,6 +959,9 @@ BEGIN
     RAISE EXCEPTION 'COMMAND_FINGERPRINT_MISMATCH';
   END IF;
 
+  -- Protect current-role pointers and permission versions before selecting qualifying appointment (R3)
+  LOCK TABLE internal_role_current_versions, internal_role_permissions IN SHARE MODE;
+
   -- Select deterministic actual dedicated grant for checker
   SELECT g.id, g.role_version_id INTO checker_grant_row
   FROM internal_membership_grants g
@@ -1171,15 +1174,20 @@ BEGIN
 
   current_admission_time := clock_timestamp();
 
-  -- Revalidate selected appointment validity and checker membership status post-lock wait immediately before domain insertion (R3)
+  -- Revalidate selected appointment validity, current role version, and checker membership status post-lock wait immediately before domain insertion (R3)
   IF NOT EXISTS (
     SELECT 1
     FROM internal_membership_grants g
     JOIN internal_organization_memberships m ON m.id = g.membership_id AND m.organization_id = g.organization_id
+    JOIN internal_role_versions v ON v.id = g.role_version_id AND v.organization_id = g.organization_id
+    JOIN internal_role_definitions r ON r.id = v.role_id AND r.organization_id = g.organization_id
+    JOIN internal_role_current_versions rcv ON rcv.role_id = r.id AND rcv.version_id = v.id
+    JOIN internal_role_permissions rp ON rp.role_version_id = v.id AND rp.permission_code = 'accommodation.refund_decision.admit'
     LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
     WHERE g.id = checker_grant_row.id
       AND g.organization_id = current_org
       AND g.membership_id = app_row.checker_membership_id
+      AND r.role_key = 'accommodation_finance_approver'
       AND g.environment = current_env
       AND m.status = 'ACTIVE'
       AND (m.expires_at IS NULL OR m.expires_at > current_admission_time)

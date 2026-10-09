@@ -23,15 +23,15 @@
     }
   },
   "affectedFiles": {
-    "src/migrations/062_canonical_cancellation_refund_approval_admission.sql": "5d109f85a468c46cda98b63fcecc4c2b5e0fd79b8b56ea5e16a0ee6d144a1967",
+    "src/migrations/062_canonical_cancellation_refund_approval_admission.sql": "dc122d6be813d0ee0fa210b8a96f149e04afa738efe04a24c3f93bbf34a5f30f",
     "src/services/canonicalRefundDecisionAdmissionService.ts": "8aa347e85a0a3bf423e17d906a004dd6766f255a4095411ca913d1ad7cdc8c64",
     "src/server/deployment/iamReadiness.ts": "45fc4524895719a36f604142fe177d41bebaba97c5d66491e2c1d56f02096a18",
-    "scripts/testing/w4d-refund-decision-admission.mjs": "a6794e6186cd45847c05d5d04bf31063a0acb3a7f9ce3ed861e3e07e05aa3402",
+    "scripts/testing/w4d-refund-decision-admission.mjs": "c09515476a47199e0073e6b51f70b014ab027122048d7a1856406a691d5c0592",
     "src/shared/iam/contracts.ts": "23a2fbe1e1a5ee2fe0f61cb3f10140936ed91808e4733a5864e80b0cd6b4c392"
   },
   "migration": {
     "file": "src/migrations/062_canonical_cancellation_refund_approval_admission.sql",
-    "sha256": "5d109f85a468c46cda98b63fcecc4c2b5e0fd79b8b56ea5e16a0ee6d144a1967",
+    "sha256": "dc122d6be813d0ee0fa210b8a96f149e04afa738efe04a24c3f93bbf34a5f30f",
     "strategy": "Additive schema migration introducing workforce permission accommodation.refund_decision.admit, roles accommodation_finance_approver and accommodation_refund_preparer, tables canonical_cancellation_refund_decision_preparations and canonical_cancellation_refund_decision_admissions, check constraint expansion on canonical_cancellation_refund_decision_evidence allowing AUTHENTICATED_HUMAN_APPROVAL, routines get_cancellation_refund_decision_preview, prepare_cancellation_refund_decision, get_cancellation_refund_decision_preparation, admit_cancellation_refund_decision, get_admitted_cancellation_refund_decision, and updated issue_cancellation_refund_authorization requiring durable admission provenance for AUTHENTICATED_HUMAN_APPROVAL"
   },
   "tables": {
@@ -116,7 +116,7 @@
         {
           "parameters": [
             "target_reservation_id UUID",
-            "target_approved_amount_paise BIGINT"
+            "target_approved_amount_paise BIGINT DEFAULT NULL"
           ],
           "returns": "TABLE (reservation_id UUID, cancellation_event_id UUID, cancellation_release_id UUID, paid_bridge_id UUID, payment_attempt_id UUID, quote_id UUID, payable_authority_id UUID, provider_origin_kind TEXT, provider_payment_ref TEXT, supporting_provider_event_id UUID, supporting_evidence_hash TEXT, captured_ceiling_paise BIGINT, currency TEXT)",
           "security": "VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on"
@@ -126,7 +126,7 @@
             "target_reservation_id UUID"
           ],
           "returns": "TABLE (reservation_id UUID, cancellation_event_id UUID, cancellation_release_id UUID, paid_bridge_id UUID, payment_attempt_id UUID, quote_id UUID, payable_authority_id UUID, provider_origin_kind TEXT, provider_payment_ref TEXT, supporting_provider_event_id UUID, supporting_evidence_hash TEXT, captured_ceiling_paise BIGINT, currency TEXT)",
-          "security": "STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on (delegates to 2-arg overload with NULL amount)"
+          "security": "VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp SET row_security = on (delegates to 2-arg overload with NULL amount)"
         }
       ]
     },
@@ -187,7 +187,7 @@
   ],
   "focusedTestResults": {
     "script": "scripts/testing/w4d-refund-decision-admission.mjs",
-    "sha256": "a6794e6186cd45847c05d5d04bf31063a0acb3a7f9ce3ed861e3e07e05aa3402",
+    "sha256": "c09515476a47199e0073e6b51f70b014ab027122048d7a1856406a691d5c0592",
     "testRunner": "node --import tsx --test scripts/testing/w4d-refund-decision-admission.mjs",
     "status": "PASS",
     "passedTests": 1,
@@ -196,17 +196,17 @@
       "ADM-01": {
         "title": "Protected Packet and Access: raw SELECT denied (42501); scoped preparation and replay interfaces; replay bindings (maker, org, env, fingerprint); revoked capability denied; factors retained without re-prompting; changed-semantic replay rejected",
         "result": "PASS",
-        "evidence": "Raw SELECT on canonical_cancellation_refund_decision_preparations denied with SQLSTATE 42501; narrow get_cancellation_refund_decision_preparation succeeds; exact replay succeeds after factor expiry; revoked maker capability denied with PERMISSION_DENIED; changed-semantic replay and out-of-scope read access rejected with COMMAND_CONFLICT and PERMISSION_DENIED"
+        "evidence": "Raw SELECT on canonical_cancellation_refund_decision_preparations denied with SQLSTATE 42501; narrow get_cancellation_refund_decision_preparation succeeds; exact replay succeeds with unknown/dummy factor ID without re-prompting (actual factor expiry demonstrated in separately identified frozen controls); revoked maker capability denied with PERMISSION_DENIED; changed-semantic replay and out-of-scope read access rejected with COMMAND_CONFLICT and PERMISSION_DENIED"
       },
       "ADM-02": {
         "title": "Financial Authority Blocker Reproduction: transaction isolation with pg_blocking_pids, event conflict rejection, and duplicate prevention",
         "result": "PASS",
-        "evidence": "Transaction A mutates provider event state and holds open lock; Transaction B blocks on pg_blocking_pids behind Transaction A; conflicting capture ingested into attempt; Transaction A commits; Transaction B rejected deterministically with CAPTURE_AMOUNT_CONFLICT / AMOUNT_EXCEEDS_CAPTURED_CEILING rather than creating duplicate authorization"
+        "evidence": "Transaction A (fixture owner) inserts conflicting provider event state and holds attempt lock; Transaction B blocks on pg_blocking_pids behind Transaction A; Transaction A commits; Transaction B rejected deterministically with CAPTURE_AMOUNT_CONFLICT / PAYMENT_STATE_NOT_MATCHED_CAPTURE / PAYMENT_RECONCILIATION_UNRESOLVED rather than creating duplicate authorization"
       },
       "ADM-03": {
         "title": "Dedicated Appointment Bindings & Negative Controls: FINANCIAL_CONTRACT scope enforcement and dedicated checker appointment verification in PostgreSQL",
         "result": "PASS",
-        "evidence": "Appointment checks enforce FINANCIAL_CONTRACT scope in PostgreSQL; broad preparer grant alone cannot approve; expired/revoked checker grant rejected; approver exceeding max amount cap rejected; checker from foreign org rejected; self-checking maker rejected; valid dedicated checker succeeds; repeating prepare returns existing authorization with replayed = true (idempotent retention)"
+        "evidence": "Appointment checks enforce FINANCIAL_CONTRACT scope in PostgreSQL; broad preparer grant alone cannot approve; expired/revoked checker grant rejected; approver exceeding max amount cap rejected; same-organization checker with wrong-reservation scope rejected; self-checking maker rejected; valid dedicated checker succeeds; repeating prepare returns existing authorization with replayed = true (idempotent retention)"
       },
       "ADM-04": {
         "title": "Step-Up Ceremonies and Factor Audit Witnesses: dual WebAuthn ceremonies and audit trail",
@@ -236,7 +236,7 @@
       "A03": {
         "title": "Session & Step-Up negative controls",
         "result": "PASS",
-        "evidence": "Preparation or approval without active staff session rejected with STAFF_SESSION_REQUIRED; missing WebAuthn factor rejected with STEP_UP_REQUIRED; expired or forged assertion rejected with STEP_UP_INVALID / FACTOR_INVALID"
+        "evidence": "Preparation or approval without active staff session rejected with STAFF_SESSION_REQUIRED; missing WebAuthn factor rejected with STEP_UP_REQUIRED; unknown step-up receipt ID rejected with generic error (separately executed frozen controls test missing, expired, and wrong-command factors)"
       },
       "A04": {
         "title": "Material packet tampering after approval rejected",
@@ -246,7 +246,7 @@
       "A05": {
         "title": "Canonical domain exclusions enforced at preparation preview",
         "result": "PASS",
-        "evidence": "Active uncancelled reservation rejected with RESERVATION_NOT_CANCELLED; sealed V2 reservation rejected with SEALED_V2_REVISION_EXCLUDED; approved amount exceeding captured ceiling or non-positive rejected with APPROVED_AMOUNT_INVALID; non-INR currency rejected with CURRENCY_NOT_SUPPORTED"
+        "evidence": "Active uncancelled reservation rejected with RESERVATION_NOT_CANCELLED; sealed V2 reservation rejected with SEALED_V2_REVISION_EXCLUDED; approved amount exceeding captured ceiling rejected with AMOUNT_EXCEEDS_CAPTURED_CEILING; non-positive approved amount rejected at preview/schema boundary; non-INR currency rejected with CURRENCY_NOT_SUPPORTED in preview/schema constraints"
       },
       "A06": {
         "title": "Guarded Replay and cross-maker execution denial",
@@ -274,9 +274,9 @@
         "evidence": "Calling issue_cancellation_refund_authorization with evidence_classification = 'AUTHENTICATED_HUMAN_APPROVAL' succeeds and verifies admission provenance; forged evidence without admission provenance rejected with ADMISSION_PROVENANCE_NOT_FOUND"
       },
       "A11": {
-        "title": "Immutability triggers and 16-table deep equality snapshot verification",
+        "title": "Immutability triggers, 16-table count equality, and identified row/counter verification",
         "result": "PASS",
-        "evidence": "Direct UPDATE or DELETE on preparations and admissions tables rejected by SQLSTATE P0001 immutability triggers; snapshot of all 16 canonical commerce tables immediately before and after admitRefundDecision verifies deep strict equality and zero mutations across unrelated canonical domain tables, with specific identified row assertions on canonical_reservations, canonical_payment_attempts, canonical_payable_authorities, and inventory_days"
+        "evidence": "Direct UPDATE or DELETE on preparations and admissions tables rejected by SQLSTATE P0001 immutability triggers; count equality verified across 16 canonical commerce tables before and after admitRefundDecision, with specific identified row/counter value equality verified on canonical_reservations, canonical_payment_attempts, canonical_payable_authorities, and selected inventory counters"
       }
     }
   },
@@ -299,7 +299,7 @@
     {
       "invariant": "Step-up WebAuthn passkey assertion required for both Maker and Checker",
       "attribution": "TEST",
-      "evidence": "Internal workforce step-up flow verifies valid user-presence WebAuthn assertion recorded in internal_workforce_passkey_ceremonies with fresh monotonic signature counter; missing, unverified, or expired ceremony rejected; verified in focused test A03 and ADM-04"
+      "evidence": "Internal workforce step-up flow performs positive begin/complete ceremonies recorded in internal_workforce_passkey_ceremonies with monotonic signature counters (verified in ADM-04); unknown step-up receipt rejected in focused test A03; missing, expired, and wrong-command controls exercised in separately identified frozen controls"
     },
     {
       "invariant": "Permission accommodation.refund_decision.admit required for approval and execution",
@@ -309,12 +309,12 @@
     {
       "invariant": "Material packet tampering after approval rejected by command fingerprint mismatch",
       "attribution": "TEST",
-      "evidence": "Canonical packet serialization includes decisionRef, decisionVersion, approvedAmountPaise, currency, and reasonCode; altering fields after approval produces mismatched SHA-256 fingerprint rejected with COMMAND_FINGERPRINT_MISMATCH or COMMAND_CONFLICT; verified in focused test A04 and probe R1"
+      "evidence": "Canonical packet serialization includes decisionRef, decisionVersion, approvedAmountMinor, currency, and reasonCode; altering fields after approval produces mismatched SHA-256 fingerprint rejected with COMMAND_FINGERPRINT_MISMATCH or COMMAND_CONFLICT; verified in focused test A04 and probe R1"
     },
     {
       "invariant": "Natural canonical domain exclusions: uncancelled, sealed V2, excess amount, non-INR",
       "attribution": "TEST",
-      "evidence": "CanonicalRefundDecisionAdmissionService.deriveCanonicalPreview validates reservation state, cancellation release version, captured ceiling, and currency; verified in focused test A05"
+      "evidence": "CanonicalRefundDecisionAdmissionService.deriveCanonicalPreview validates reservation state, cancellation release version, and captured ceiling (verified in focused test A05); non-INR currency and non-positive amounts enforced at preview and schema validation boundaries"
     },
     {
       "invariant": "Guarded idempotent replay returns existing admitted record with replayed = true",

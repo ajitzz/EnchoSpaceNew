@@ -1484,84 +1484,119 @@ test('W4-D canonical cancellation refund decision admission verification', async
       const chkStepUpA07_2 = await performStepUp(checkerToken, checkerPasskey, prepA07_2.actionReceipt.commandHash);
       await admissionService.approveRefundDecisionAdmission(checkerBearer, {authorizationId: prepA07_2.actionReceipt.id, expectedCommandHash: prepA07_2.actionReceipt.commandHash, checkerStepUpReceiptId: chkStepUpA07_2, reason: 'Approved distinct A07_2 by checker'});
 
-      // Caller 1 begins admission and pauses inside postAdmissionHook holding open its transaction and reservation lock
+      // Dedicated 1-connection pools to pre-identify exact backend PIDs before execution
+      const a07Caller1Pool = new pg.Pool({ ...fixture.owner.options, user: 'w1_offer_staff', max: 1 });
+      const a07Caller2Pool = new pg.Pool({ ...fixture.owner.options, user: 'w1_offer_staff', max: 1 });
+      const a07Caller1Service = new CanonicalRefundDecisionAdmissionService(a07Caller1Pool, 'LOCAL');
+      const a07Caller2Service = new CanonicalRefundDecisionAdmissionService(a07Caller2Pool, 'LOCAL');
+
+      const caller1Pid = (await a07Caller1Pool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+      const caller2Pid = (await a07Caller2Pool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+      assert.ok(caller1Pid, 'Caller 1 PID must be pre-identified');
+      assert.ok(caller2Pid, 'Caller 2 PID must be pre-identified');
+
       let releaseCaller1;
-      const caller1HoldPromise = new Promise(resolve => { releaseCaller1 = resolve; });
+      let caller1Released = false;
+      const caller1HoldPromise = new Promise(resolve => {
+        releaseCaller1 = () => {
+          if (!caller1Released) {
+            caller1Released = true;
+            resolve();
+          }
+        };
+      });
+
       let caller1AtHook;
-      const caller1EnteredPromise = new Promise(resolve => { caller1AtHook = resolve; });
-      let caller1Pid;
-      let caller2Pid;
+      let caller1AtHookReject;
+      const caller1EnteredPromise = new Promise((resolve, reject) => {
+        caller1AtHook = resolve;
+        caller1AtHookReject = reject;
+      });
 
-      const caller1Promise = (async () => {
-        try {
-          return await admissionService.admitRefundDecision(makerBearer, {
-            packet: packetA07,
-            actionAuthorizationId: prepA07.actionReceipt.id,
-            makerStepUpReceiptId: stepUpA07,
-            postAdmissionHook: async (client, result) => {
-              caller1Pid = (await client.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
-              caller1AtHook();
-              await caller1HoldPromise;
-            },
+      let caller1Promise;
+      let caller2Promise;
+      let raceResult1;
+      let caller2Error;
+
+      try {
+        caller1Promise = (async () => {
+          try {
+            return await a07Caller1Service.admitRefundDecision(makerBearer, {
+              packet: packetA07,
+              actionAuthorizationId: prepA07.actionReceipt.id,
+              makerStepUpReceiptId: stepUpA07,
+              postAdmissionHook: async (client, result) => {
+                caller1AtHook();
+                await caller1HoldPromise;
+              },
+            });
+          } catch (err) {
+            caller1AtHookReject(err);
+            throw err;
+          }
+        })();
+
+        // Wait boundedly for Caller 1 to execute admit_cancellation_refund_decision and reach hook
+        await Promise.race([
+          caller1EnteredPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('CALLER1_HOOK_TIMEOUT')), 5000)),
+        ]);
+
+        // Caller 2 concurrently attempts admission on the same reservation
+        caller2Promise = (async () => {
+          return await a07Caller2Service.admitRefundDecision(makerBearer, {
+            packet: packetA07_2,
+            actionAuthorizationId: prepA07_2.actionReceipt.id,
+            makerStepUpReceiptId: stepUpA07_2,
           });
-        } finally {
-          releaseCaller1();
-        }
-      })();
+        })();
 
-      // Wait for Caller 1 to execute admit_cancellation_refund_decision and reach hook
-      await caller1EnteredPromise;
-
-      // Caller 2 concurrently attempts admission on the same reservation
-      const caller2Promise = (async () => {
-        return await admissionService.admitRefundDecision(makerBearer, {
-          packet: packetA07_2,
-          actionAuthorizationId: prepA07_2.actionReceipt.id,
-          makerStepUpReceiptId: stepUpA07_2,
-        });
-      })();
-
-      // Observe in pg_blocking_pids that Caller 2 is blocked on the reservation row lock by Caller 1
-      let observedA07Blocker = false;
-      for (let i = 0; i < 50; i++) {
-        await new Promise(r => setTimeout(r, 40));
-        const blockingRows = (await fixture.owner.query(`
-          SELECT pid, pg_blocking_pids(pid) as blockers
-          FROM pg_stat_activity
-          WHERE cardinality(pg_blocking_pids(pid)) > 0
-        `)).rows;
-        if (blockingRows.length > 0) {
-          const matching = blockingRows.find(row => row.blockers.includes(caller1Pid));
-          if (matching) {
-            caller2Pid = matching.pid;
+        // Observe in pg_blocking_pids that exact Caller 2 is blocked on the reservation row lock by exact Caller 1
+        let observedA07Blocker = false;
+        const a07Deadline = Date.now() + 4000;
+        while (Date.now() < a07Deadline) {
+          const row = (await fixture.owner.query(`
+            SELECT pid, pg_blocking_pids(pid) as blockers, wait_event_type, wait_event
+            FROM pg_stat_activity
+            WHERE pid = $1
+          `, [caller2Pid])).rows[0];
+          if (row && Array.isArray(row.blockers) && row.blockers.includes(caller1Pid)) {
             observedA07Blocker = true;
             break;
           }
+          await new Promise(r => setTimeout(r, 40));
         }
-      }
-      assert.ok(observedA07Blocker, 'Caller 2 must be observed blocked on reservation lock by Caller 1 in pg_blocking_pids');
-      assert.ok(caller1Pid, 'Caller 1 PID must be known');
-      assert.ok(caller2Pid, 'Caller 2 PID must be known and blocked by Caller 1');
+        assert.ok(observedA07Blocker, 'Caller 2 must be observed blocked on reservation lock by Caller 1 in pg_blocking_pids');
 
-      // Release Caller 1 to commit
-      releaseCaller1();
-      const raceResult1 = await caller1Promise;
-      assert.ok(raceResult1.evidenceId);
-      assert.ok(raceResult1.admissionId);
-      assert.equal(raceResult1.replayed, false);
+        // Release Caller 1 to commit
+        releaseCaller1();
+        raceResult1 = await caller1Promise;
+        assert.ok(raceResult1.evidenceId);
+        assert.ok(raceResult1.admissionId);
+        assert.equal(raceResult1.replayed, false);
 
-      // Caller 2 unblocks and is rejected with REFUND_DECISION_ALREADY_ADMITTED
-      let caller2Error;
-      try {
-        await caller2Promise;
-      } catch (err) {
-        caller2Error = err;
+        // Caller 2 unblocks and is rejected with REFUND_DECISION_ALREADY_ADMITTED
+        try {
+          await caller2Promise;
+        } catch (err) {
+          caller2Error = err;
+        }
+        assert.ok(caller2Error, 'Caller 2 must be rejected with REFUND_DECISION_ALREADY_ADMITTED');
+        assert.ok(
+          caller2Error.message.includes('REFUND_DECISION_ALREADY_ADMITTED'),
+          'Caller 2 must fail with REFUND_DECISION_ALREADY_ADMITTED'
+        );
+      } finally {
+        releaseCaller1();
+        if (caller1Promise) {
+          await Promise.race([caller1Promise, new Promise(r => setTimeout(r, 3000))]).catch(() => {});
+        }
+        if (caller2Promise) {
+          await Promise.race([caller2Promise, new Promise(r => setTimeout(r, 3000))]).catch(() => {});
+        }
+        await a07Caller1Pool.end().catch(() => {});
+        await a07Caller2Pool.end().catch(() => {});
       }
-      assert.ok(caller2Error, 'Caller 2 must be rejected with REFUND_DECISION_ALREADY_ADMITTED');
-      assert.ok(
-        caller2Error.message.includes('REFUND_DECISION_ALREADY_ADMITTED'),
-        'Caller 2 must fail with REFUND_DECISION_ALREADY_ADMITTED'
-      );
 
       // Assert losing action state: action was not consumed (remains APPROVED after rollback)
       const caller2AuthStatus = (await fixture.owner.query(
@@ -1614,64 +1649,105 @@ test('W4-D canonical cancellation refund decision admission verification', async
         reason: 'Approved identical A07 by checker',
       });
 
-      let releaseIden1;
-      const iden1HoldPromise = new Promise(resolve => { releaseIden1 = resolve; });
-      let iden1AtHook;
-      const iden1EnteredPromise = new Promise(resolve => { iden1AtHook = resolve; });
-      let iden1Pid;
-      let iden2Pid;
+      // Dedicated 1-connection pools to pre-identify exact backend PIDs before execution
+      const a07Iden1Pool = new pg.Pool({ ...fixture.owner.options, user: 'w1_offer_staff', max: 1 });
+      const a07Iden2Pool = new pg.Pool({ ...fixture.owner.options, user: 'w1_offer_staff', max: 1 });
+      const a07Iden1Service = new CanonicalRefundDecisionAdmissionService(a07Iden1Pool, 'LOCAL');
+      const a07Iden2Service = new CanonicalRefundDecisionAdmissionService(a07Iden2Pool, 'LOCAL');
 
-      const iden1Promise = (async () => {
-        try {
-          return await admissionService.admitRefundDecision(makerBearer, {
+      const iden1Pid = (await a07Iden1Pool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+      const iden2Pid = (await a07Iden2Pool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+      assert.ok(iden1Pid, 'Identical entrant 1 PID must be pre-identified');
+      assert.ok(iden2Pid, 'Identical entrant 2 PID must be pre-identified');
+
+      let releaseIden1;
+      let iden1Released = false;
+      const iden1HoldPromise = new Promise(resolve => {
+        releaseIden1 = () => {
+          if (!iden1Released) {
+            iden1Released = true;
+            resolve();
+          }
+        };
+      });
+
+      let iden1AtHook;
+      let iden1AtHookReject;
+      const iden1EnteredPromise = new Promise((resolve, reject) => {
+        iden1AtHook = resolve;
+        iden1AtHookReject = reject;
+      });
+
+      let iden1Promise;
+      let iden2Promise;
+      let idenResult1;
+      let idenResult2;
+
+      try {
+        iden1Promise = (async () => {
+          try {
+            return await a07Iden1Service.admitRefundDecision(makerBearer, {
+              packet: packetA07Iden,
+              actionAuthorizationId: prepA07Iden.actionReceipt.id,
+              makerStepUpReceiptId: stepUpA07Iden,
+              postAdmissionHook: async (client, result) => {
+                iden1AtHook();
+                await iden1HoldPromise;
+              },
+            });
+          } catch (err) {
+            iden1AtHookReject(err);
+            throw err;
+          }
+        })();
+
+        // Wait boundedly for entrant 1 to reach hook
+        await Promise.race([
+          iden1EnteredPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('IDEN1_HOOK_TIMEOUT')), 5000)),
+        ]);
+
+        // Entrant 2 concurrently attempts identical admission
+        iden2Promise = (async () => {
+          return await a07Iden2Service.admitRefundDecision(makerBearer, {
             packet: packetA07Iden,
             actionAuthorizationId: prepA07Iden.actionReceipt.id,
             makerStepUpReceiptId: stepUpA07Iden,
-            postAdmissionHook: async (client, result) => {
-              iden1Pid = (await client.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
-              iden1AtHook();
-              await iden1HoldPromise;
-            },
           });
-        } finally {
-          releaseIden1();
-        }
-      })();
+        })();
 
-      await iden1EnteredPromise;
-
-      const iden2Promise = (async () => {
-        return await admissionService.admitRefundDecision(makerBearer, {
-          packet: packetA07Iden,
-          actionAuthorizationId: prepA07Iden.actionReceipt.id,
-          makerStepUpReceiptId: stepUpA07Iden,
-        });
-      })();
-
-      let observedIdenBlocker = false;
-      for (let i = 0; i < 50; i++) {
-        await new Promise(r => setTimeout(r, 40));
-        const blockingRows = (await fixture.owner.query(`
-          SELECT pid, pg_blocking_pids(pid) as blockers
-          FROM pg_stat_activity
-          WHERE cardinality(pg_blocking_pids(pid)) > 0
-        `)).rows;
-        if (blockingRows.length > 0) {
-          const matching = blockingRows.find(row => row.blockers.includes(iden1Pid));
-          if (matching) {
-            iden2Pid = matching.pid;
+        // Observe in pg_blocking_pids that exact iden2Pid is blocked on reservation lock by exact iden1Pid
+        let observedIdenBlocker = false;
+        const idenDeadline = Date.now() + 4000;
+        while (Date.now() < idenDeadline) {
+          const row = (await fixture.owner.query(`
+            SELECT pid, pg_blocking_pids(pid) as blockers, wait_event_type, wait_event
+            FROM pg_stat_activity
+            WHERE pid = $1
+          `, [iden2Pid])).rows[0];
+          if (row && Array.isArray(row.blockers) && row.blockers.includes(iden1Pid)) {
             observedIdenBlocker = true;
             break;
           }
+          await new Promise(r => setTimeout(r, 40));
         }
-      }
-      assert.ok(observedIdenBlocker, 'Concurrent identical caller must be observed blocked on reservation lock by winner');
-      assert.ok(iden1Pid, 'Identical entrant 1 PID must be known');
-      assert.ok(iden2Pid, 'Identical entrant 2 PID must be known and blocked by entrant 1');
+        assert.ok(observedIdenBlocker, 'Concurrent identical caller must be observed blocked on reservation lock by winner');
 
-      releaseIden1();
-      const idenResult1 = await iden1Promise;
-      const idenResult2 = await iden2Promise;
+        // Release entrant 1 to commit
+        releaseIden1();
+        idenResult1 = await iden1Promise;
+        idenResult2 = await iden2Promise;
+      } finally {
+        releaseIden1();
+        if (iden1Promise) {
+          await Promise.race([iden1Promise, new Promise(r => setTimeout(r, 3000))]).catch(() => {});
+        }
+        if (iden2Promise) {
+          await Promise.race([iden2Promise, new Promise(r => setTimeout(r, 3000))]).catch(() => {});
+        }
+        await a07Iden1Pool.end().catch(() => {});
+        await a07Iden2Pool.end().catch(() => {});
+      }
 
       assert.equal(idenResult1.replayed, false);
       assert.equal(idenResult2.replayed, true);
@@ -2307,23 +2383,58 @@ test('W4-D canonical cancellation refund decision admission verification', async
         reason: 'Approved R3 while grant valid',
       });
 
+      // Snapshot before appointment expiry attempt to prove complete restoration
+      const snapR3 = async () => ({
+        action: (await fixture.owner.query('SELECT id, status, version, consumed_transaction_id FROM internal_action_authorizations WHERE id = $1', [prepR3.actionReceipt.id])).rows,
+        factors: (await fixture.owner.query('SELECT id, status, consumed_at FROM internal_step_up_challenges WHERE id = ANY($1::uuid[]) ORDER BY id', [[stepUpR3, chkStepUpR3]])).rows,
+        audit: (await fixture.owner.query("SELECT sequence, event_type, entity_id, request_hash FROM internal_iam_events WHERE entity_id = $1 AND event_type = 'AUTHORIZED_COMMAND' ORDER BY sequence", [resR3.reservationId])).rows,
+      });
+      const beforeR3 = await snapR3();
+
+      // Dedicated 1-connection pool for R3 worker
+      const r3Pool = new pg.Pool({ ...fixture.owner.options, user: 'w1_offer_staff', max: 1 });
+      const r3Service = new CanonicalRefundDecisionAdmissionService(r3Pool, 'LOCAL');
+      const r3CallerPid = (await r3Pool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+
       // Hold reservation lock with blocker
       const r3Blocker = await fixture.owner.connect();
+      let r3BlockerPid;
+      let r3BlockerReleased = false;
+      let r3WorkerPromise;
+
       try {
         await r3Blocker.query('BEGIN');
+        r3BlockerPid = (await r3Blocker.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
         await r3Blocker.query('SELECT id FROM canonical_reservations WHERE id = $1 FOR UPDATE', [resR3.reservationId]);
 
-        const r3WorkerPromise = (async () => {
+        r3WorkerPromise = (async () => {
           try {
-            return await admissionService.admitRefundDecision(makerBearer, {
+            return { ok: true, value: await r3Service.admitRefundDecision(makerBearer, {
               packet: packetR3,
               actionAuthorizationId: prepR3.actionReceipt.id,
               makerStepUpReceiptId: stepUpR3,
-            });
+            }) };
           } catch (err) {
-            return { error: err };
+            return { ok: false, error: err };
           }
         })();
+
+        // Witness in pg_stat_activity that r3CallerPid is blocked by r3BlockerPid on reservation lock
+        let observedR3Blocker = false;
+        const r3WitnessDeadline = Date.now() + 4000;
+        while (Date.now() < r3WitnessDeadline) {
+          const row = (await fixture.owner.query(`
+            SELECT pid, pg_blocking_pids(pid) as blockers, wait_event_type, wait_event
+            FROM pg_stat_activity
+            WHERE pid = $1
+          `, [r3CallerPid])).rows[0];
+          if (row && Array.isArray(row.blockers) && row.blockers.includes(r3BlockerPid)) {
+            observedR3Blocker = true;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 40));
+        }
+        assert.ok(observedR3Blocker, 'Caller PID must be witnessed blocked by blocker PID on reservation lock');
 
         // Wait until appointment expires
         let r3Expired = false;
@@ -2337,8 +2448,10 @@ test('W4-D canonical cancellation refund decision admission verification', async
 
         // Rollback blocker so waiter can proceed to post-wait appointment check
         await r3Blocker.query('ROLLBACK');
+        r3BlockerReleased = true;
+
         const r3Result = await r3WorkerPromise;
-        assert.ok(r3Result.error, 'Admission must fail due to expired appointment');
+        assert.equal(r3Result.ok, false, 'Admission must fail due to expired appointment');
         assert.ok(
           r3Result.error.message.includes('CHECKER_APPOINTMENT_EXPIRED'),
           'Must fail with CHECKER_APPOINTMENT_EXPIRED'
@@ -2350,8 +2463,222 @@ test('W4-D canonical cancellation refund decision admission verification', async
           [cmdR3]
         )).rows[0].c;
         assert.equal(r3Admissions, 0, 'Zero admissions after post-wait appointment expiry');
+
+        // Verify scoped action/factor/audit restoration on rejection
+        const afterR3 = await snapR3();
+        assert.deepEqual(afterR3, beforeR3, 'Rejected post-wait admission must restore prior action/factor/audit state');
       } finally {
+        if (!r3BlockerReleased) {
+          await r3Blocker.query('ROLLBACK').catch(() => {});
+        }
         r3Blocker.release();
+        if (r3WorkerPromise) {
+          await Promise.race([r3WorkerPromise, new Promise(r => setTimeout(r, 3000))]).catch(() => {});
+        }
+        await r3Pool.end().catch(() => {});
+      }
+
+      // =======================================================================
+      // SCENARIO R3-SERIALIZATION: CONCURRENT ROLE VERSION UPDATE SAFELY SERIALIZES
+      // BEHIND PROTECTED ADMISSION SELECTION ACROSS RESERVATION WAIT
+      // =======================================================================
+      const resR3Ser = await createPaidReservation(50000);
+      await cancelReservationV1(resR3Ser.reservationId);
+      const cmdR3Ser = randomUUID();
+      const packetR3Ser = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdR3Ser,
+        decisionRef: 'DEC-R3-SER-' + randomUUID(),
+        reservationId: resR3Ser.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_R3_SERIALIZATION',
+        organizationId: organizationId,
+      });
+      const envR3Ser = admissionService.buildRequestEnvelope(
+        fixture.principal(90, 'STAFF'),
+        packetR3Ser,
+        randomUUID(),
+        'Prepare R3 serialization witness'
+      );
+      const fpR3Ser = admissionService.fingerprint(envR3Ser);
+      const stepUpR3Ser = await performStepUp(makerToken, makerPasskey, fpR3Ser);
+      const prepR3Ser = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetR3Ser,
+        makerStepUpReceiptId: stepUpR3Ser,
+        reason: 'Prepare R3 serialization witness',
+      });
+
+      // Ensure foreign membership has a valid appointment grant for the current approver role version
+      const existingR3SerGrants = (await fixture.owner.query(
+        'SELECT g.id FROM internal_membership_grants g LEFT JOIN internal_membership_grant_revocations x ON x.grant_id = g.id WHERE g.membership_id = $1 AND x.grant_id IS NULL',
+        [foreignMembershipId]
+      )).rows;
+      for (const g of existingR3SerGrants) {
+        await fixture.owner.query("INSERT INTO internal_membership_grant_revocations(grant_id, revoked_by, reason) VALUES($1, 90, 'Revoke for R3Ser isolation')", [g.id]);
+      }
+
+      const serGrant = (await fixture.owner.query(`
+        INSERT INTO internal_membership_grants(
+          organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
+          max_amount_minor, grant_hash, granted_by, reason, valid_until
+        ) VALUES (
+          '${organizationId}', '${foreignMembershipId}', '${approverRoleVersionId}', 'FINANCIAL_CONTRACT', '${resR3Ser.reservationId}', 'LOCAL',
+          50000, '${createHash('sha256').update(randomUUID()).digest('hex')}', 90, 'Valid 1-hour appointment for current role version',
+          clock_timestamp() + interval '1 hour'
+        ) RETURNING id, valid_until
+      `)).rows[0];
+
+      const chkStepUpR3Ser = await performStepUp(checkerToken, checkerPasskey, prepR3Ser.actionReceipt.commandHash);
+      await admissionService.approveRefundDecisionAdmission(checkerBearer, {
+        authorizationId: prepR3Ser.actionReceipt.id,
+        expectedCommandHash: prepR3Ser.actionReceipt.commandHash,
+        checkerStepUpReceiptId: chkStepUpR3Ser,
+        reason: 'Approved R3Ser while grant and role version valid',
+      });
+
+      // Insert next role version into internal_role_versions
+      const nextRoleVersion = (await fixture.owner.query(`
+        INSERT INTO internal_role_versions(role_id, organization_id, version, config_hash, reason, created_by)
+        SELECT role_id, organization_id, version + 1, $2, 'Next approver role version', 90
+        FROM internal_role_versions WHERE id = $1 RETURNING id, role_id
+      `, [approverRoleVersionId, createHash('sha256').update(randomUUID()).digest('hex')])).rows[0];
+      await fixture.owner.query(
+        'INSERT INTO internal_role_permissions(role_version_id, permission_code) SELECT $2, permission_code FROM internal_role_permissions WHERE role_version_id = $1',
+        [approverRoleVersionId, nextRoleVersion.id]
+      );
+
+      // Dedicated 1-connection pool for admission caller
+      const serAdmissionPool = new pg.Pool({ ...fixture.owner.options, user: 'w1_offer_staff', max: 1 });
+      const serAdmissionService = new CanonicalRefundDecisionAdmissionService(serAdmissionPool, 'LOCAL');
+      const serCallerPid = (await serAdmissionPool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+
+      // Connect blocker holding reservation lock
+      const serBlocker = await fixture.owner.connect();
+      let serBlockerPid;
+      let serBlockerReleased = false;
+      const serUpdaterClient = await fixture.owner.connect();
+      let serUpdaterPid;
+      let serAdmissionPromise;
+      let serUpdaterPromise;
+
+      try {
+        await serBlocker.query('BEGIN');
+        serBlockerPid = (await serBlocker.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+        await serBlocker.query('SELECT id FROM canonical_reservations WHERE id = $1 FOR UPDATE', [resR3Ser.reservationId]);
+
+        serUpdaterPid = (await serUpdaterClient.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+
+        // Start admission caller
+        serAdmissionPromise = (async () => {
+          try {
+            return { ok: true, value: await serAdmissionService.admitRefundDecision(makerBearer, {
+              packet: packetR3Ser,
+              actionAuthorizationId: prepR3Ser.actionReceipt.id,
+              makerStepUpReceiptId: stepUpR3Ser,
+            }) };
+          } catch (err) {
+            return { ok: false, error: err };
+          }
+        })();
+
+        // Witness admission caller blocked on reservation lock behind blocker
+        let observedSerAdmissionBlocked = false;
+        const serWitnessDeadline = Date.now() + 4000;
+        while (Date.now() < serWitnessDeadline) {
+          const row = (await fixture.owner.query(`
+            SELECT pid, pg_blocking_pids(pid) as blockers, wait_event_type, wait_event
+            FROM pg_stat_activity
+            WHERE pid = $1
+          `, [serCallerPid])).rows[0];
+          if (row && Array.isArray(row.blockers) && row.blockers.includes(serBlockerPid)) {
+            observedSerAdmissionBlocked = true;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 40));
+        }
+        assert.ok(observedSerAdmissionBlocked, 'Admission caller must be witnessed blocked on reservation lock by blocker');
+
+        // Now start the catalog updater asynchronously: attempts UPDATE internal_role_current_versions
+        serUpdaterPromise = (async () => {
+          try {
+            return { ok: true, value: await serUpdaterClient.query(
+              'UPDATE internal_role_current_versions SET version_id = $2, updated_by = 90 WHERE role_id = $1',
+              [nextRoleVersion.role_id, nextRoleVersion.id]
+            ) };
+          } catch (err) {
+            return { ok: false, error: err };
+          }
+        })();
+
+        // Witness that the catalog updater is blocked behind admission caller on internal_role_current_versions SHARE lock
+        let observedUpdaterBlocked = false;
+        const updaterDeadline = Date.now() + 4000;
+        while (Date.now() < updaterDeadline) {
+          const row = (await fixture.owner.query(`
+            SELECT pid, pg_blocking_pids(pid) as blockers, wait_event_type, wait_event
+            FROM pg_stat_activity
+            WHERE pid = $1
+          `, [serUpdaterPid])).rows[0];
+          if (row && Array.isArray(row.blockers) && row.blockers.includes(serCallerPid)) {
+            observedUpdaterBlocked = true;
+            break;
+          }
+          await new Promise(r => setTimeout(r, 40));
+        }
+        assert.ok(observedUpdaterBlocked, 'Catalog updater must be observed blocked behind admission caller PID on table SHARE lock');
+
+        // Release reservation blocker
+        await serBlocker.query('ROLLBACK');
+        serBlockerReleased = true;
+
+        // Admission caller completes first
+        const admissionResult = await serAdmissionPromise;
+        assert.equal(admissionResult.ok, true, 'Admission caller must complete successfully');
+        assert.ok(admissionResult.value.admissionId);
+        assert.equal(admissionResult.value.replayed, false);
+
+        // Catalog updater unblocks and completes after admission commits
+        const updaterResult = await serUpdaterPromise;
+        assert.equal(updaterResult.ok, true, 'Catalog updater must unblock and succeed after admission finishes');
+
+        // Verify durable admission record with the selected role version
+        const durableAdmissions = (await fixture.owner.query(
+          'SELECT a.command_id, a.checker_appointment_grant_id, g.role_version_id FROM canonical_cancellation_refund_decision_admissions a JOIN internal_membership_grants g ON g.id = a.checker_appointment_grant_id WHERE a.command_id = $1',
+          [cmdR3Ser]
+        )).rows;
+        assert.equal(durableAdmissions.length, 1);
+        assert.equal(durableAdmissions[0].role_version_id, approverRoleVersionId);
+
+        // Verify current role version pointer was updated
+        const updatedPointer = (await fixture.owner.query(
+          'SELECT version_id FROM internal_role_current_versions WHERE role_id = $1',
+          [nextRoleVersion.role_id]
+        )).rows[0].version_id;
+        assert.equal(updatedPointer, nextRoleVersion.id);
+
+        // Verify negative control: old grant no longer qualifies once role version is superseded
+        const qualifyingGrant = (await fixture.owner.query(`
+          SELECT g.id
+          FROM internal_membership_grants g
+          JOIN internal_role_versions v ON v.id = g.role_version_id AND v.organization_id = g.organization_id
+          JOIN internal_role_definitions r ON r.id = v.role_id AND r.organization_id = g.organization_id
+          JOIN internal_role_current_versions rcv ON rcv.role_id = r.id AND rcv.version_id = v.id
+          JOIN internal_role_permissions rp ON rp.role_version_id = v.id AND rp.permission_code = 'accommodation.refund_decision.admit'
+          WHERE g.id = $1
+        `, [serGrant.id])).rows;
+        assert.equal(qualifyingGrant.length, 0, 'Old grant must no longer qualify once role version is superseded');
+      } finally {
+        if (!serBlockerReleased) {
+          await serBlocker.query('ROLLBACK').catch(() => {});
+        }
+        serBlocker.release();
+        if (serAdmissionPromise) {
+          await Promise.race([serAdmissionPromise, new Promise(r => setTimeout(r, 3000))]).catch(() => {});
+        }
+        if (serUpdaterPromise) {
+          await Promise.race([serUpdaterPromise, new Promise(r => setTimeout(r, 3000))]).catch(() => {});
+        }
+        serUpdaterClient.release();
+        await serAdmissionPool.end().catch(() => {});
       }
 
       console.log('ALL W4-D STAGE B ACCEPTANCE SCENARIOS (A01 - A11) AND NEGATIVE CONTROLS PASSED CLEANLY');
