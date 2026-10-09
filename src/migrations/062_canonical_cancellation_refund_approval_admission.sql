@@ -521,7 +521,7 @@ BEGIN
      OR (normalized_packet->>'environment') IS DISTINCT FROM auth_row.environment
      OR (normalized_packet->>'currency') IS DISTINCT FROM 'INR'
      OR (normalized_packet->>'admissionCommandId') IS DISTINCT FROM target_command_id::text THEN
-    RAISE EXCEPTION 'PREPARATION_INPUT_INVALID';
+    RAISE EXCEPTION 'COMMAND_CONFLICT';
   END IF;
 
   -- Cryptographically recompute envelope hash from normalized_packet and auth_row

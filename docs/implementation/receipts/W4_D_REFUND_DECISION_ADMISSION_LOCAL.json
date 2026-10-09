@@ -23,7 +23,7 @@
     }
   },
   "affectedFiles": {
-    "src/migrations/062_canonical_cancellation_refund_approval_admission.sql": "7f493af37d454edb48486cb5c52045d5d85534cd8b637ee9f5a3ee671d9030f7",
+    "src/migrations/062_canonical_cancellation_refund_approval_admission.sql": "5d109f85a468c46cda98b63fcecc4c2b5e0fd79b8b56ea5e16a0ee6d144a1967",
     "src/services/canonicalRefundDecisionAdmissionService.ts": "8aa347e85a0a3bf423e17d906a004dd6766f255a4095411ca913d1ad7cdc8c64",
     "src/server/deployment/iamReadiness.ts": "45fc4524895719a36f604142fe177d41bebaba97c5d66491e2c1d56f02096a18",
     "scripts/testing/w4d-refund-decision-admission.mjs": "0ff8409ff61789193842a1142546bf94840f72f84b0307ab4aac4055e09fc37e",
@@ -31,7 +31,7 @@
   },
   "migration": {
     "file": "src/migrations/062_canonical_cancellation_refund_approval_admission.sql",
-    "sha256": "7f493af37d454edb48486cb5c52045d5d85534cd8b637ee9f5a3ee671d9030f7",
+    "sha256": "5d109f85a468c46cda98b63fcecc4c2b5e0fd79b8b56ea5e16a0ee6d144a1967",
     "strategy": "Additive schema migration introducing workforce permission accommodation.refund_decision.admit, roles accommodation_finance_approver and accommodation_refund_preparer, tables canonical_cancellation_refund_decision_preparations and canonical_cancellation_refund_decision_admissions, check constraint expansion on canonical_cancellation_refund_decision_evidence allowing AUTHENTICATED_HUMAN_APPROVAL, routines get_cancellation_refund_decision_preview, prepare_cancellation_refund_decision, get_cancellation_refund_decision_preparation, admit_cancellation_refund_decision, get_admitted_cancellation_refund_decision, and updated issue_cancellation_refund_authorization requiring durable admission provenance for AUTHENTICATED_HUMAN_APPROVAL"
   },
   "tables": {
