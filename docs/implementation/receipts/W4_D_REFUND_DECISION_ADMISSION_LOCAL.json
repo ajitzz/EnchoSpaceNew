@@ -26,7 +26,7 @@
     "src/migrations/062_canonical_cancellation_refund_approval_admission.sql": "5d109f85a468c46cda98b63fcecc4c2b5e0fd79b8b56ea5e16a0ee6d144a1967",
     "src/services/canonicalRefundDecisionAdmissionService.ts": "8aa347e85a0a3bf423e17d906a004dd6766f255a4095411ca913d1ad7cdc8c64",
     "src/server/deployment/iamReadiness.ts": "45fc4524895719a36f604142fe177d41bebaba97c5d66491e2c1d56f02096a18",
-    "scripts/testing/w4d-refund-decision-admission.mjs": "0ff8409ff61789193842a1142546bf94840f72f84b0307ab4aac4055e09fc37e",
+    "scripts/testing/w4d-refund-decision-admission.mjs": "a6794e6186cd45847c05d5d04bf31063a0acb3a7f9ce3ed861e3e07e05aa3402",
     "src/shared/iam/contracts.ts": "23a2fbe1e1a5ee2fe0f61cb3f10140936ed91808e4733a5864e80b0cd6b4c392"
   },
   "migration": {
@@ -187,7 +187,7 @@
   ],
   "focusedTestResults": {
     "script": "scripts/testing/w4d-refund-decision-admission.mjs",
-    "sha256": "7e8d08b93ba34c084cfbbfa308b7599b77ef1e23e70da4d5cada8a6a9bb654dd",
+    "sha256": "a6794e6186cd45847c05d5d04bf31063a0acb3a7f9ce3ed861e3e07e05aa3402",
     "testRunner": "node --import tsx --test scripts/testing/w4d-refund-decision-admission.mjs",
     "status": "PASS",
     "passedTests": 1,

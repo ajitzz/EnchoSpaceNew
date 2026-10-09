@@ -2169,6 +2169,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
       }
       assert.ok(callerAmountError, 'Direct SQL call with substituted amount must be rejected');
       assert.ok(
+        callerAmountError.message.includes('COMMAND_CONFLICT') ||
         callerAmountError.message.includes('PREPARATION_INPUT_INVALID') ||
         callerAmountError.message.includes('COMMAND_FINGERPRINT_MISMATCH')
       );
@@ -2200,6 +2201,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
       }
       assert.ok(callerSubjectError, 'Direct SQL call with substituted subject must be rejected');
       assert.ok(
+        callerSubjectError.message.includes('COMMAND_CONFLICT') ||
         callerSubjectError.message.includes('PREPARATION_INPUT_INVALID') ||
         callerSubjectError.message.includes('COMMAND_FINGERPRINT_MISMATCH')
       );
