@@ -140,6 +140,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
     let cancellationExecutor;
     let refundIssuer;
     let factorPool;
+    let suiteError = null;
 
     try {
       await fixture.owner.query(`CREATE TABLE IF NOT EXISTS bookings (
@@ -1474,8 +1475,12 @@ test('W4-D canonical cancellation refund decision admission verification', async
           try {
             await promiseB;
           } catch (err) {
-            // Expected rejection of promiseB when unblocked; if try completed, already verified in blockerResultError
-            if (!adm02Error && !clientACommitted) {
+            const isExpectedLoser = clientACommitted && (
+              err?.message?.includes('CAPTURE_AMOUNT_CONFLICT') ||
+              err?.message?.includes('PAYMENT_STATE_NOT_MATCHED_CAPTURE') ||
+              err?.message?.includes('PAYMENT_RECONCILIATION_UNRESOLVED')
+            );
+            if (!isExpectedLoser) {
               adm02CleanupErrors.push(err);
             }
           }
@@ -1642,16 +1647,17 @@ test('W4-D canonical cancellation refund decision admission verification', async
           try {
             await caller1Promise;
           } catch (err) {
-            if (!a07DistinctError) {
-              a07DistinctCleanupErrors.push(err);
-            }
+            a07DistinctCleanupErrors.push(err);
           }
         }
         if (caller2Promise) {
           try {
             await caller2Promise;
           } catch (err) {
-            // Expected rejection of losing entrant
+            // Expected rejection of losing entrant is REFUND_DECISION_ALREADY_ADMITTED; preserve any other unexpected error
+            if (!err?.message?.includes('REFUND_DECISION_ALREADY_ADMITTED')) {
+              a07DistinctCleanupErrors.push(err);
+            }
           }
         }
         try {
@@ -1818,18 +1824,14 @@ test('W4-D canonical cancellation refund decision admission verification', async
           try {
             await iden1Promise;
           } catch (err) {
-            if (!a07IdenError) {
-              a07IdenCleanupErrors.push(err);
-            }
+            a07IdenCleanupErrors.push(err);
           }
         }
         if (iden2Promise) {
           try {
             await iden2Promise;
           } catch (err) {
-            if (!a07IdenError) {
-              a07IdenCleanupErrors.push(err);
-            }
+            a07IdenCleanupErrors.push(err);
           }
         }
         try {
@@ -2587,9 +2589,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
           try {
             await r3WorkerPromise;
           } catch (err) {
-            if (!r3WaitError) {
-              r3WaitCleanupErrors.push(err);
-            }
+            r3WaitCleanupErrors.push(err);
           }
         }
         try {
@@ -2688,9 +2688,11 @@ test('W4-D canonical cancellation refund decision admission verification', async
 
       try {
         await serBlocker.query('BEGIN');
+        await serBlocker.query("SET LOCAL statement_timeout='10s'; SET LOCAL lock_timeout='8s'");
         serBlockerPid = (await serBlocker.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
         await serBlocker.query('SELECT id FROM canonical_reservations WHERE id = $1 FOR UPDATE', [resR3Ser.reservationId]);
 
+        await serUpdaterClient.query("SET statement_timeout='10s'; SET lock_timeout='8s'");
         serUpdaterPid = (await serUpdaterClient.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
 
         // Start admission caller
@@ -2811,18 +2813,14 @@ test('W4-D canonical cancellation refund decision admission verification', async
           try {
             await serAdmissionPromise;
           } catch (err) {
-            if (!serError) {
-              serCleanupErrors.push(err);
-            }
+            serCleanupErrors.push(err);
           }
         }
         if (serUpdaterPromise) {
           try {
             await serUpdaterPromise;
           } catch (err) {
-            if (!serError) {
-              serCleanupErrors.push(err);
-            }
+            serCleanupErrors.push(err);
           }
         }
         try {
@@ -2900,7 +2898,14 @@ test('W4-D canonical cancellation refund decision admission verification', async
         reason: 'Approved E1 witness by checker',
       });
 
-      const e1WitnessPool = new pg.Pool({ ...fixture.owner.options, user: 'w1_offer_staff', max: 1 });
+      const e1WitnessPool = new pg.Pool({
+        ...fixture.owner.options,
+        user: 'w1_offer_staff',
+        max: 1,
+        connectionTimeoutMillis: 5000,
+        statement_timeout: 10000,
+        query_timeout: 10000,
+      });
       const e1WitnessService = new CanonicalRefundDecisionAdmissionService(e1WitnessPool, 'LOCAL');
       const e1WitnessPid = (await e1WitnessPool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
       assert.ok(e1WitnessPid, 'E1 witness PID must be identified');
@@ -2917,8 +2922,10 @@ test('W4-D canonical cancellation refund decision admission verification', async
       });
 
       let e1AtHook;
-      const e1HookReachedPromise = new Promise(resolve => {
+      let e1AtHookReject;
+      const e1HookReachedPromise = new Promise((resolve, reject) => {
         e1AtHook = resolve;
+        e1AtHookReject = reject;
       });
 
       let e1DelayedSqlStarted = false;
@@ -2932,23 +2939,31 @@ test('W4-D canonical cancellation refund decision admission verification', async
       try {
         try {
           e1EntrantPromise = (async () => {
-            return await e1WitnessService.admitRefundDecision(makerBearer, {
-              packet: packetE1,
-              actionAuthorizationId: prepE1.actionReceipt.id,
-              makerStepUpReceiptId: stepUpE1,
-              postAdmissionHook: async (client, result) => {
-                e1AtHook();
-                await e1GatePromise;
-                e1DelayedSqlStarted = true;
-                // Real delayed SQL work in transaction
-                await client.query('SELECT pg_sleep(0.5) /* E1_WITNESS_DELAY */');
-                e1DelayedSqlSettled = true;
-              },
-            });
+            try {
+              return await e1WitnessService.admitRefundDecision(makerBearer, {
+                packet: packetE1,
+                actionAuthorizationId: prepE1.actionReceipt.id,
+                makerStepUpReceiptId: stepUpE1,
+                postAdmissionHook: async (client, result) => {
+                  e1AtHook();
+                  await e1GatePromise;
+                  e1DelayedSqlStarted = true;
+                  // Real delayed SQL work in transaction
+                  await client.query('SELECT pg_sleep(0.5) /* E1_WITNESS_DELAY */');
+                  e1DelayedSqlSettled = true;
+                },
+              });
+            } catch (err) {
+              e1AtHookReject(err);
+              throw err;
+            }
           })();
 
-          // Wait until entrant reaches hook
-          await e1HookReachedPromise;
+          // Wait boundedly until entrant reaches hook with failure propagation
+          await Promise.race([
+            e1HookReachedPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('E1_HOOK_TIMEOUT')), 5000)),
+          ]);
 
           // Observer performs verification on pg_stat_activity
           const entrantActivity = (await fixture.owner.query(
@@ -2970,9 +2985,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
             try {
               await e1EntrantPromise;
             } catch (err) {
-              if (!e1OriginalError) {
-                e1CleanupErrors.push(err);
-              }
+              e1CleanupErrors.push(err);
             }
           }
 
@@ -3017,7 +3030,230 @@ test('W4-D canonical cancellation refund decision admission verification', async
       )).rows;
       assert.equal(survivingBackends.length, 0, 'Zero database backends or transactions may survive on the server');
 
+      // =======================================================================
+      // SCENARIO E1-WITNESS-ENTRANT-SQL-ERROR: OBSERVER FAILURE + POSTGRESQL 22012 ENTRANT FAILURE PRESERVES BOTH
+      // Demonstrates:
+      // When observer fails and entrant experiences an unexpected PostgreSQL 22012 (division by zero)
+      // failure during joined work, BOTH the primary observer error AND the entrant SQL failure
+      // are preserved in an AggregateError.
+      // =======================================================================
+      const resE1Sql = await createPaidReservation(50000);
+      await cancelReservationV1(resE1Sql.reservationId);
+
+      const cmdE1Sql = randomUUID();
+      const packetE1Sql = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdE1Sql,
+        decisionRef: 'DEC-E1-SQL-' + randomUUID(),
+        reservationId: resE1Sql.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_E1_SQL_ERROR',
+        organizationId: organizationId,
+      });
+
+      const envE1Sql = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetE1Sql, randomUUID(), 'Prepare E1 SQL witness');
+      const fpE1Sql = admissionService.fingerprint(envE1Sql);
+      const stepUpE1Sql = await performStepUp(makerToken, makerPasskey, fpE1Sql);
+      const prepE1Sql = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetE1Sql,
+        makerStepUpReceiptId: stepUpE1Sql,
+        reason: 'Prepare E1 SQL witness',
+      });
+
+      const roleVersionIdForSql = (await fixture.owner.query(
+        'SELECT rcv.version_id FROM internal_role_current_versions rcv JOIN internal_role_versions rv ON rv.role_id = rcv.role_id WHERE rv.id = $1',
+        [approverRoleVersionId]
+      )).rows[0].version_id;
+
+      await fixture.owner.query(`
+        INSERT INTO internal_membership_grants(
+          organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
+          max_amount_minor, grant_hash, granted_by, reason, valid_until
+        ) VALUES (
+          $1, $2, $3, 'FINANCIAL_CONTRACT', $4, 'LOCAL',
+          50000, $5, 90, 'Valid appointment for E1 SQL witness',
+          clock_timestamp() + interval '1 hour'
+        )
+      `, [
+        organizationId,
+        foreignMembershipId,
+        roleVersionIdForSql,
+        resE1Sql.reservationId,
+        createHash('sha256').update(randomUUID()).digest('hex'),
+      ]);
+
+      const chkStepUpE1Sql = await performStepUp(checkerToken, checkerPasskey, prepE1Sql.actionReceipt.commandHash);
+      await admissionService.approveRefundDecisionAdmission(checkerBearer, {
+        authorizationId: prepE1Sql.actionReceipt.id,
+        expectedCommandHash: prepE1Sql.actionReceipt.commandHash,
+        checkerStepUpReceiptId: chkStepUpE1Sql,
+        reason: 'Approved E1 SQL witness by checker',
+      });
+
+      const e1SqlPool = new pg.Pool({
+        ...fixture.owner.options,
+        user: 'w1_offer_staff',
+        max: 1,
+        connectionTimeoutMillis: 5000,
+        statement_timeout: 10000,
+        query_timeout: 10000,
+      });
+      const e1SqlService = new CanonicalRefundDecisionAdmissionService(e1SqlPool, 'LOCAL');
+      const e1SqlPid = (await e1SqlPool.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+      assert.ok(e1SqlPid, 'E1 SQL witness PID must be identified');
+
+      let releaseE1SqlGate;
+      let e1SqlGateReleased = false;
+      const e1SqlGatePromise = new Promise(resolve => {
+        releaseE1SqlGate = () => {
+          if (!e1SqlGateReleased) {
+            e1SqlGateReleased = true;
+            resolve();
+          }
+        };
+      });
+
+      let e1SqlAtHook;
+      let e1SqlAtHookReject;
+      const e1SqlHookReachedPromise = new Promise((resolve, reject) => {
+        e1SqlAtHook = resolve;
+        e1SqlAtHookReject = reject;
+      });
+
+      let e1SqlEntrantPromise;
+      let e1SqlCaughtError = null;
+      let e1SqlOriginalError = null;
+      const e1SqlCleanupErrors = [];
+      let e1SqlErrorReached = false;
+
+      try {
+        try {
+          e1SqlEntrantPromise = (async () => {
+            try {
+              return await e1SqlService.admitRefundDecision(makerBearer, {
+                packet: packetE1Sql,
+                actionAuthorizationId: prepE1Sql.actionReceipt.id,
+                makerStepUpReceiptId: stepUpE1Sql,
+                postAdmissionHook: async (client, _result) => {
+                  e1SqlAtHook();
+                  await e1SqlGatePromise;
+                  e1SqlErrorReached = true;
+                  // Deliberate PostgreSQL 22012 division by zero error during entrant transaction
+                  await client.query('SELECT 1/0 /* E1_WITNESS_DIVISION_BY_ZERO */');
+                },
+              });
+            } catch (err) {
+              e1SqlAtHookReject(err);
+              throw err;
+            }
+          })();
+
+          // Wait boundedly until entrant reaches hook with failure propagation
+          await Promise.race([
+            e1SqlHookReachedPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('E1_SQL_HOOK_TIMEOUT')), 5000)),
+          ]);
+
+          // Observer performs verification on pg_stat_activity
+          const entrantActivity = (await fixture.owner.query(
+            `SELECT pid, state, xact_start IS NOT NULL as in_transaction FROM pg_stat_activity WHERE pid = $1`,
+            [e1SqlPid]
+          )).rows[0];
+          assert.ok(entrantActivity, 'Entrant activity must be visible to observer');
+
+          // Observer encounters a failure while database work is pending behind gate
+          throw new Error('E1_OBSERVER_FAILURE_WHILE_SQL_PENDING');
+        } catch (err) {
+          e1SqlOriginalError = err;
+        } finally {
+          // Release gate so entrant executes the SQL query (which triggers PostgreSQL 22012)
+          releaseE1SqlGate();
+
+          // Join entrant promise cleanly and preserve unexpected entrant error
+          if (e1SqlEntrantPromise) {
+            try {
+              await e1SqlEntrantPromise;
+            } catch (err) {
+              e1SqlCleanupErrors.push(err);
+            }
+          }
+
+          try {
+            await e1SqlPool.end();
+          } catch (err) {
+            e1SqlCleanupErrors.push(err);
+          }
+
+          const combined = combineErrors(e1SqlOriginalError, e1SqlCleanupErrors, 'E1_SQL_OPERATION_AND_CLEANUP_FAILED');
+          if (combined) throw combined;
+        }
+      } catch (err) {
+        e1SqlCaughtError = err;
+      }
+
+      assert.ok(e1SqlCaughtError, 'E1 SQL witness must throw aggregated error');
+      assert.ok(e1SqlCaughtError instanceof AggregateError, 'E1 SQL witness error must be an AggregateError preserving both failures');
+      const observedSqlErrorMessages = unpackErrors(e1SqlCaughtError);
+      assert.ok(
+        observedSqlErrorMessages.includes('E1_OBSERVER_FAILURE_WHILE_SQL_PENDING'),
+        'Original observer failure must remain observable'
+      );
+      assert.ok(
+        observedSqlErrorMessages.some(m => m.includes('division by zero')),
+        'PostgreSQL 22012 entrant division by zero error must be preserved alongside observer error'
+      );
+      assert.equal(e1SqlErrorReached, true, 'Entrant SQL error hook must have been reached');
+
+      const survivingSqlBackends = (await fixture.owner.query(
+        `SELECT pid, state FROM pg_stat_activity WHERE pid = $1`,
+        [e1SqlPid]
+      )).rows;
+      assert.equal(survivingSqlBackends.length, 0, 'Zero database backends may survive on the server');
+
+      // =======================================================================
+      // SCENARIO E1-WITNESS-SUITE-CLEANUP: ORIGINAL TEST ERROR + OUTER SUITE CLEANUP FAILURE PRESERVES BOTH
+      // Demonstrates:
+      // When primary test execution encounters a failure AND subsequent suite cleanup also encounters
+      // an error (e.g., closing a connection pool fails), combineErrors preserves BOTH the primary test
+      // failure and the suite cleanup error in an AggregateError, instead of replacing or masking the test error.
+      // =======================================================================
+      {
+        let simulatedTestError = null;
+        let caughtCombinedSuiteError = null;
+        try {
+          try {
+            throw new Error('E1_PRIMARY_TEST_CASE_FAILURE');
+          } catch (err) {
+            simulatedTestError = err;
+          } finally {
+            const simulatedCleanupErrors = [];
+            try {
+              throw new Error('E1_SUITE_CLEANUP_POOL_TERMINATION_FAILURE');
+            } catch (err) {
+              simulatedCleanupErrors.push(err);
+            }
+            const combined = combineErrors(simulatedTestError, simulatedCleanupErrors, 'SUITE_AND_CLEANUP_FAILED');
+            if (combined) throw combined;
+          }
+        } catch (err) {
+          caughtCombinedSuiteError = err;
+        }
+
+        assert.ok(caughtCombinedSuiteError, 'Combined suite error must be thrown');
+        assert.ok(caughtCombinedSuiteError instanceof AggregateError, 'Combined error must be an AggregateError');
+        const suiteMsgs = unpackErrors(caughtCombinedSuiteError);
+        assert.ok(
+          suiteMsgs.includes('E1_PRIMARY_TEST_CASE_FAILURE'),
+          'Primary test case failure must be preserved'
+        );
+        assert.ok(
+          suiteMsgs.includes('E1_SUITE_CLEANUP_POOL_TERMINATION_FAILURE'),
+          'Suite cleanup failure must be preserved alongside primary test error'
+        );
+      }
+
       console.log('ALL W4-D STAGE B ACCEPTANCE SCENARIOS (A01 - A11) AND NEGATIVE CONTROLS PASSED CLEANLY');
+    } catch (err) {
+      suiteError = err;
     } finally {
       const suiteCleanupErrors = [];
       const poolsToClose = [
@@ -3041,8 +3277,9 @@ test('W4-D canonical cancellation refund decision admission verification', async
           suiteCleanupErrors.push(err);
         }
       }
-      if (suiteCleanupErrors.length > 0) {
-        throw new AggregateError(suiteCleanupErrors, 'SUITE_CLEANUP_FAILED');
+      const finalSuiteErr = combineErrors(suiteError, suiteCleanupErrors, 'SUITE_AND_CLEANUP_FAILED');
+      if (finalSuiteErr) {
+        throw finalSuiteErr;
       }
     }
   });
