@@ -444,6 +444,7 @@ DECLARE
   auth_env TEXT;
   new_prep RECORD;
   computed_hash TEXT;
+  normalized_packet JSONB;
 BEGIN
   -- Read session RLS context
   current_user_str := nullif(current_setting('app.current_user_id', true), '');
@@ -467,6 +468,96 @@ BEGIN
     RAISE EXCEPTION 'PREPARATION_INPUT_INVALID';
   END IF;
 
+  -- Validate and normalize target_packet_payload
+  IF target_packet_payload IS NULL
+     OR jsonb_typeof(target_packet_payload->'decisionVersion') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(target_packet_payload->'schemaVersion') IS DISTINCT FROM 'number'
+     OR (target_packet_payload->>'decisionVersion')::numeric IS DISTINCT FROM trunc((target_packet_payload->>'decisionVersion')::numeric)
+     OR (target_packet_payload->>'decisionVersion')::numeric < 1
+     OR (target_packet_payload->>'decisionVersion')::numeric > 2147483647
+     OR (target_packet_payload->>'schemaVersion')::numeric IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'PREPARATION_INPUT_INVALID';
+  END IF;
+
+  normalized_packet := target_packet_payload || jsonb_build_object(
+    'decisionVersion', (target_packet_payload->>'decisionVersion')::numeric::integer,
+    'schemaVersion', (target_packet_payload->>'schemaVersion')::numeric::integer
+  );
+
+  -- Verify action authorization exists in DB and lock it FOR UPDATE
+  SELECT * INTO auth_row
+  FROM internal_action_authorizations a
+  WHERE a.id = target_action_authorization_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ACTION_AUTHORIZATION_NOT_FOUND';
+  END IF;
+
+  IF auth_row.maker_membership_id IS DISTINCT FROM current_membership THEN
+    RAISE EXCEPTION 'MAKER_PRINCIPAL_MISMATCH';
+  END IF;
+
+  IF auth_row.environment IS DISTINCT FROM current_env THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
+  IF auth_row.organization_id IS DISTINCT FROM current_org THEN
+    RAISE EXCEPTION 'ORGANIZATION_MISMATCH';
+  END IF;
+
+  -- Validate all operative duplicate scalar arguments against authoritative auth_row and normalized_packet
+  IF target_reservation_id::text IS DISTINCT FROM auth_row.resource_id
+     OR target_approved_amount_paise IS DISTINCT FROM auth_row.amount_minor
+     OR target_currency IS DISTINCT FROM 'INR'
+     OR target_decision_ref IS DISTINCT FROM (normalized_packet->>'decisionRef')
+     OR target_version::text IS DISTINCT FROM (normalized_packet->>'decisionVersion')
+     OR target_approved_amount_paise::text IS DISTINCT FROM (normalized_packet->>'approvedAmountMinor')
+     OR target_reservation_id::text IS DISTINCT FROM (normalized_packet->>'reservationId')
+     OR target_reservation_id::text IS DISTINCT FROM (normalized_packet->'resource'->>'id')
+     OR (normalized_packet->'resource'->>'type') IS DISTINCT FROM 'FINANCIAL_CONTRACT'
+     OR (normalized_packet->>'organizationId') IS DISTINCT FROM current_org::text
+     OR (normalized_packet->>'environment') IS DISTINCT FROM current_env
+     OR (normalized_packet->>'environment') IS DISTINCT FROM auth_row.environment
+     OR (normalized_packet->>'currency') IS DISTINCT FROM 'INR'
+     OR (normalized_packet->>'admissionCommandId') IS DISTINCT FROM target_command_id::text THEN
+    RAISE EXCEPTION 'PREPARATION_INPUT_INVALID';
+  END IF;
+
+  -- Cryptographically recompute envelope hash from normalized_packet and auth_row
+  WITH envelope AS (
+    SELECT jsonb_build_object(
+      'contract', 'encho:privileged-command:v1',
+      'kind', 'accommodation.cancellation_refund_decision.admit',
+      'organizationId', auth_row.organization_id::text,
+      'permission', 'accommodation.refund_decision.admit',
+      'resource', jsonb_build_object(
+        'target', jsonb_build_object('type', 'FINANCIAL_CONTRACT', 'id', auth_row.resource_id),
+        'ancestors', '[]'::jsonb
+      ),
+      'provider', NULL,
+      'environment', auth_row.environment::text,
+      'amountMinor', auth_row.amount_minor::text,
+      'reason', auth_row.reason::text,
+      'command', normalized_packet
+    ) AS value
+  )
+  SELECT encode(sha256(convert_to(internal_iam_canonical_json(value),'UTF8')),'hex')
+  INTO computed_hash
+  FROM envelope;
+
+  IF computed_hash IS NULL OR computed_hash IS DISTINCT FROM target_command_fingerprint OR computed_hash IS DISTINCT FROM auth_row.command_hash THEN
+    RAISE EXCEPTION 'COMMAND_FINGERPRINT_MISMATCH';
+  END IF;
+
+  -- Verify Maker has current active capability covering authoritative reservation and amount
+  IF NOT (
+    internal_iam_membership_has_permission(current_membership, current_org, 'accommodation.refund_decision.prepare', 'FINANCIAL_CONTRACT', auth_row.resource_id, NULL, current_env, auth_row.amount_minor)
+    OR internal_iam_membership_has_permission(current_membership, current_org, 'accommodation.refund_decision.admit', 'FINANCIAL_CONTRACT', auth_row.resource_id, NULL, current_env, auth_row.amount_minor)
+  ) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
   -- 1. Idempotent Retention Check
   SELECT * INTO existing_prep
   FROM canonical_cancellation_refund_decision_preparations p
@@ -476,26 +567,10 @@ BEGIN
   IF FOUND THEN
     -- Check if identical packet by same maker
     IF existing_prep.maker_membership_id IS NOT DISTINCT FROM current_membership
+       AND existing_prep.action_authorization_id IS NOT DISTINCT FROM target_action_authorization_id
        AND existing_prep.reservation_id IS NOT DISTINCT FROM target_reservation_id
        AND existing_prep.command_fingerprint IS NOT DISTINCT FROM target_command_fingerprint
-       AND existing_prep.action_authorization_id IS NOT DISTINCT FROM target_action_authorization_id THEN
-
-      -- Verify stored action authorization environment matches current environment
-      SELECT a.environment INTO auth_env
-      FROM internal_action_authorizations a
-      WHERE a.id = existing_prep.action_authorization_id;
-
-      IF auth_env IS DISTINCT FROM current_env THEN
-        RAISE EXCEPTION 'PERMISSION_DENIED';
-      END IF;
-
-      -- Verify current capability on reservation covering amount
-      IF NOT (
-        internal_iam_membership_has_permission(current_membership, current_org, 'accommodation.refund_decision.prepare', 'FINANCIAL_CONTRACT', existing_prep.reservation_id::text, NULL, current_env, target_approved_amount_paise)
-        OR internal_iam_membership_has_permission(current_membership, current_org, 'accommodation.refund_decision.admit', 'FINANCIAL_CONTRACT', existing_prep.reservation_id::text, NULL, current_env, target_approved_amount_paise)
-      ) THEN
-        RAISE EXCEPTION 'PERMISSION_DENIED';
-      END IF;
+       AND existing_prep.packet_payload = normalized_packet THEN
 
       RETURN QUERY SELECT
         existing_prep.id,
@@ -514,14 +589,6 @@ BEGIN
     END IF;
   END IF;
 
-  -- 2. Verify Maker has current active capability covering this reservation and amount
-  IF NOT (
-    internal_iam_membership_has_permission(current_membership, current_org, 'accommodation.refund_decision.prepare', 'FINANCIAL_CONTRACT', target_reservation_id::text, NULL, current_env, target_approved_amount_paise)
-    OR internal_iam_membership_has_permission(current_membership, current_org, 'accommodation.refund_decision.admit', 'FINANCIAL_CONTRACT', target_reservation_id::text, NULL, current_env, target_approved_amount_paise)
-  ) THEN
-    RAISE EXCEPTION 'PERMISSION_DENIED';
-  END IF;
-
   -- Check if action_authorization_id is already bound to another command
   IF EXISTS (
     SELECT 1 FROM canonical_cancellation_refund_decision_preparations p
@@ -530,66 +597,7 @@ BEGIN
     RAISE EXCEPTION 'COMMAND_CONFLICT';
   END IF;
 
-  -- Verify action authorization exists in DB and belongs to current_membership
-  SELECT * INTO auth_row
-  FROM internal_action_authorizations a
-  WHERE a.id = target_action_authorization_id;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'ACTION_AUTHORIZATION_NOT_FOUND';
-  END IF;
-
-  IF auth_row.maker_membership_id IS DISTINCT FROM current_membership THEN
-    RAISE EXCEPTION 'MAKER_PRINCIPAL_MISMATCH';
-  END IF;
-
-  IF auth_row.environment IS DISTINCT FROM current_env THEN
-    RAISE EXCEPTION 'PERMISSION_DENIED';
-  END IF;
-
-  IF auth_row.organization_id IS DISTINCT FROM current_org THEN
-    RAISE EXCEPTION 'ORGANIZATION_MISMATCH';
-  END IF;
-
-  -- Cryptographically recompute envelope hash from target_packet_payload and auth_row
-  WITH validated AS (
-    SELECT target_packet_payload AS packet
-    WHERE jsonb_typeof(target_packet_payload->'decisionVersion') = 'number'
-      AND jsonb_typeof(target_packet_payload->'schemaVersion') = 'number'
-      AND (target_packet_payload->>'decisionVersion')::numeric = trunc((target_packet_payload->>'decisionVersion')::numeric)
-      AND (target_packet_payload->>'decisionVersion')::numeric BETWEEN 1 AND 2147483647
-      AND (target_packet_payload->>'schemaVersion')::numeric = 1
-  ), normalized AS (
-    SELECT packet || jsonb_build_object(
-      'decisionVersion', (packet->>'decisionVersion')::numeric::integer,
-      'schemaVersion', (packet->>'schemaVersion')::numeric::integer
-    ) AS packet FROM validated
-  ), envelope AS (
-    SELECT jsonb_build_object(
-      'contract', 'encho:privileged-command:v1',
-      'kind', 'accommodation.cancellation_refund_decision.admit',
-      'organizationId', auth_row.organization_id::text,
-      'permission', 'accommodation.refund_decision.admit',
-      'resource', jsonb_build_object(
-        'target', jsonb_build_object('type', 'FINANCIAL_CONTRACT', 'id', auth_row.resource_id::text),
-        'ancestors', '[]'::jsonb
-      ),
-      'provider', NULL,
-      'environment', auth_row.environment::text,
-      'amountMinor', auth_row.amount_minor::text,
-      'reason', auth_row.reason::text,
-      'command', packet
-    ) AS value FROM normalized
-  )
-  SELECT encode(sha256(convert_to(internal_iam_canonical_json(value),'UTF8')),'hex')
-  INTO computed_hash
-  FROM envelope;
-
-  IF computed_hash IS NULL OR computed_hash IS DISTINCT FROM target_command_fingerprint OR computed_hash IS DISTINCT FROM auth_row.command_hash THEN
-    RAISE EXCEPTION 'COMMAND_FINGERPRINT_MISMATCH';
-  END IF;
-
-  -- Insert preparation row
+  -- Insert preparation row with normalized_packet
   INSERT INTO canonical_cancellation_refund_decision_preparations (
     command_id,
     action_authorization_id,
@@ -600,10 +608,10 @@ BEGIN
   ) VALUES (
     target_command_id,
     target_action_authorization_id,
-    target_reservation_id,
+    auth_row.resource_id::uuid,
     target_command_fingerprint,
     current_membership,
-    target_packet_payload
+    normalized_packet
   ) RETURNING * INTO new_prep;
 
   RETURN QUERY SELECT
@@ -776,6 +784,7 @@ DECLARE
   new_evidence RECORD;
   new_admission RECORD;
   approved_minor BIGINT;
+  current_admission_time TIMESTAMPTZ;
 BEGIN
   -- 1. Read session RLS context
   current_user_str := nullif(current_setting('app.current_user_id', true), '');
@@ -857,7 +866,11 @@ BEGIN
      OR auth_row.amount_minor::text IS DISTINCT FROM (prep_row.packet_payload->>'approvedAmountMinor')
      OR (prep_row.packet_payload->>'admissionCommandId') IS DISTINCT FROM prep_row.command_id::text
      OR (prep_row.packet_payload->>'reservationId') IS DISTINCT FROM prep_row.reservation_id::text
+     OR (prep_row.packet_payload->'resource'->>'id') IS DISTINCT FROM prep_row.reservation_id::text
+     OR (prep_row.packet_payload->'resource'->>'type') IS DISTINCT FROM 'FINANCIAL_CONTRACT'
      OR (prep_row.packet_payload->>'organizationId') IS DISTINCT FROM current_org::text
+     OR (prep_row.packet_payload->>'environment') IS DISTINCT FROM current_env
+     OR (prep_row.packet_payload->>'environment') IS DISTINCT FROM auth_row.environment
      OR (prep_row.packet_payload->>'currency') IS DISTINCT FROM 'INR' THEN
     RAISE EXCEPTION 'COMMAND_CONFLICT';
   END IF;
@@ -1063,6 +1076,11 @@ BEGIN
     RAISE EXCEPTION 'PAID_BRIDGE_NOT_COMMITTED';
   END IF;
 
+  -- Exact canonical quote binding (R2)
+  IF bridge_row.quote_id::text IS DISTINCT FROM (prep_row.packet_payload->>'quoteId') THEN
+    RAISE EXCEPTION 'QUOTE_MISMATCH';
+  END IF;
+
   -- Payment attempt
   SELECT * INTO attempt_row
   FROM canonical_payment_attempts cpa
@@ -1071,6 +1089,9 @@ BEGIN
 
   IF NOT FOUND OR attempt_row.id::text IS DISTINCT FROM (prep_row.packet_payload->>'paymentAttemptId') THEN
     RAISE EXCEPTION 'PAYMENT_ATTEMPT_MISMATCH';
+  END IF;
+  IF attempt_row.origin_kind::text IS DISTINCT FROM (prep_row.packet_payload->>'providerOriginKind') THEN
+    RAISE EXCEPTION 'PROVIDER_ORIGIN_KIND_MISMATCH';
   END IF;
   IF attempt_row.payment_state IS DISTINCT FROM 'MATCHED_CAPTURE' THEN
     RAISE EXCEPTION 'PAYMENT_STATE_NOT_MATCHED_CAPTURE';
@@ -1148,6 +1169,33 @@ BEGIN
     RAISE EXCEPTION 'AMOUNT_EXCEEDS_CAPTURED_CEILING';
   END IF;
 
+  current_admission_time := clock_timestamp();
+
+  -- Revalidate selected appointment validity and checker membership status post-lock wait immediately before domain insertion (R3)
+  IF NOT EXISTS (
+    SELECT 1
+    FROM internal_membership_grants g
+    JOIN internal_organization_memberships m ON m.id = g.membership_id AND m.organization_id = g.organization_id
+    LEFT JOIN internal_membership_grant_revocations rev ON rev.grant_id = g.id
+    WHERE g.id = checker_grant_row.id
+      AND g.organization_id = current_org
+      AND g.membership_id = app_row.checker_membership_id
+      AND g.environment = current_env
+      AND m.status = 'ACTIVE'
+      AND (m.expires_at IS NULL OR m.expires_at > current_admission_time)
+      AND g.valid_from <= current_admission_time
+      AND (g.valid_until IS NULL OR g.valid_until > current_admission_time)
+      AND (g.max_amount_minor IS NULL OR g.max_amount_minor >= approved_minor)
+      AND rev.grant_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'CHECKER_APPOINTMENT_EXPIRED';
+  END IF;
+
+  -- Revalidate Maker admit capability post-lock wait
+  IF NOT internal_iam_membership_has_permission(current_membership, current_org, 'accommodation.refund_decision.admit', 'FINANCIAL_CONTRACT', prep_row.reservation_id::text, NULL, current_env, approved_minor) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
+
   -- 9. Insert into canonical_cancellation_refund_decision_evidence
   INSERT INTO canonical_cancellation_refund_decision_evidence (
     decision_ref,
@@ -1187,7 +1235,7 @@ BEGIN
     prep_row.packet_payload->>'reasonText',
     auth_row.id::text,
     'CANONICAL_REFUND_DECISION_ADMISSION_SERVICE',
-    statement_timestamp(),
+    current_admission_time,
     prep_row.reservation_id,
     cancel_event.event_id,
     rel_row.release_id,
@@ -1228,7 +1276,7 @@ BEGIN
     app_row.checker_membership_id,
     checker_grant_row.id,
     checker_grant_row.role_version_id,
-    statement_timestamp(),
+    current_admission_time,
     session_user
   ) RETURNING * INTO new_admission;
 

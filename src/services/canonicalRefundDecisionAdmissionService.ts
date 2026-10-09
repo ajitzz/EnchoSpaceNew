@@ -288,10 +288,12 @@ export class CanonicalRefundDecisionAdmissionService {
     envelope: PrivilegedActionRequestInput<AdmissionCommandPacket>;
     replayed: boolean;
   }> {
+    const normalizedPacket = Object.freeze(this.admissionPacketSchema.parse(params.packet));
+
     const envelope = await this.reader.read(makerToken, async (_client, makerPrincipal) => {
       return this.buildRequestEnvelope(
         makerPrincipal,
-        params.packet,
+        normalizedPacket,
         params.makerStepUpReceiptId,
         params.reason
       );
@@ -319,17 +321,17 @@ export class CanonicalRefundDecisionAdmissionService {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
         )`,
         [
-          params.packet.admissionCommandId,
+          normalizedPacket.admissionCommandId,
           requested.receipt.id,
-          params.packet.reservationId,
-          params.packet.decisionRef,
-          params.packet.decisionVersion,
-          BigInt(params.packet.approvedAmountMinor),
-          params.packet.currency,
-          params.packet.reasonCode,
+          normalizedPacket.reservationId,
+          normalizedPacket.decisionRef,
+          normalizedPacket.decisionVersion,
+          BigInt(normalizedPacket.approvedAmountMinor),
+          normalizedPacket.currency,
+          normalizedPacket.reasonCode,
           params.reason,
           commandFingerprint,
-          JSON.stringify(params.packet),
+          JSON.stringify(normalizedPacket),
         ]
       );
       return res.rows[0];

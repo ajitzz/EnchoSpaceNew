@@ -515,7 +515,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
         `INSERT INTO internal_workforce_factor_policies(organization_id, environment, version, config, config_hash, approval_status, created_by, reason)
          VALUES ($1, 'LOCAL', 1, $2, repeat('0', 64), 'PENDING_FOUNDER_OPERATIONAL_APPROVAL', 90, 'Disposable factor policy.')
          RETURNING id`,
-        [organizationId, JSON.stringify({rpId: 'localhost', origin: 'http://localhost:3000', allowSyncedPasskeys: false, challengeTtlSeconds: 120, maximumStartsPerMinute: 10})]
+        [organizationId, JSON.stringify({rpId: 'localhost', origin: 'http://localhost:3000', allowSyncedPasskeys: false, challengeTtlSeconds: 120, maximumStartsPerMinute: 30})]
       )).rows[0];
 
       await fixture.owner.query(
@@ -778,8 +778,8 @@ test('W4-D canonical cancellation refund decision admission verification', async
       assert.ok(admRowA01, 'Admission provenance row must exist');
       assert.equal(admRowA01.action_authorization_id, prepA01.actionReceipt.id);
       assert.equal(admRowA01.decision_evidence_id, admittedA01.evidenceId);
-      assert.ok(admRowA01.checker_appointment_grant_id, 'Admission row must retain checker appointment grant id');
-      assert.ok(admRowA01.checker_appointment_role_version_id, 'Admission row must retain checker appointment role version id');
+      assert.equal(admRowA01.checker_appointment_grant_id, checkerGrantId, 'Admission row must retain exact checker appointment grant id');
+      assert.equal(admRowA01.checker_appointment_role_version_id, approverRoleVersionId, 'Admission row must retain exact checker appointment role version id');
 
       // Assert decision evidence row in DB
       const devRowA01 = (await fixture.owner.query(
@@ -1155,6 +1155,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
       const scopedCheckerMembershipId = randomUUID();
       const scopedCheckerSessionId = randomUUID();
 
+      const scopedGrantId = randomUUID();
       await fixture.owner.query(`
         INSERT INTO users (id, email, role, is_active, name)
         VALUES (95, 'scoped_checker@example.test', 'admin', true, 'Scoped Checker')
@@ -1167,10 +1168,10 @@ test('W4-D canonical cancellation refund decision admission verification', async
           '${createHash('sha256').update(scopedCheckerToken).digest('hex')}', 'ACTIVE', 'AAL2',
           clock_timestamp(), clock_timestamp() + interval '20 minutes', clock_timestamp() + interval '4 hours', 'LOCAL');
         INSERT INTO internal_membership_grants(
-          organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
+          id, organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
           grant_hash, granted_by, reason
         ) VALUES (
-          '${organizationId}', '${scopedCheckerMembershipId}', '${approverRoleVersionId}', 'FINANCIAL_CONTRACT', '${resScoped.reservationId}', 'LOCAL',
+          '${scopedGrantId}', '${organizationId}', '${scopedCheckerMembershipId}', '${approverRoleVersionId}', 'FINANCIAL_CONTRACT', '${resScoped.reservationId}', 'LOCAL',
           '${createHash('sha256').update(randomUUID()).digest('hex')}', 90, 'Legitimate scoped checker grant'
         );
       `);
@@ -1206,6 +1207,26 @@ test('W4-D canonical cancellation refund decision admission verification', async
         reason: 'Approved by Legitimate Scoped Approver',
       });
       assert.equal(approvedScoped.receipt.status, 'APPROVED');
+
+      // Maker admits using the scoped checker's approval
+      const admittedScoped = await admissionService.admitRefundDecision(makerBearer, {
+        packet: packetScoped,
+        actionAuthorizationId: prepScoped.actionReceipt.id,
+        makerStepUpReceiptId: stepUpScoped,
+      });
+      assert.equal(admittedScoped.replayed, false);
+      assert.equal(admittedScoped.commandId, cmdScoped);
+
+      // Verify exact checker appointment grant and role version recorded
+      const admScopedRow = (await fixture.owner.query(
+        `SELECT checker_appointment_grant_id, checker_appointment_role_version_id
+         FROM canonical_cancellation_refund_decision_admissions
+         WHERE command_id = $1`,
+        [cmdScoped]
+      )).rows[0];
+      assert.ok(admScopedRow, 'Scoped admission row must exist');
+      assert.equal(admScopedRow.checker_appointment_grant_id, scopedGrantId, 'Must record exact scoped checker appointment grant id');
+      assert.equal(admScopedRow.checker_appointment_role_version_id, approverRoleVersionId, 'Must record exact approver role version id');
 
       // 4. Wrong subject rejection: scoped checker cannot approve other reservation
       const resWrong = await createPaidReservation(50000);
@@ -1468,42 +1489,59 @@ test('W4-D canonical cancellation refund decision admission verification', async
       const caller1HoldPromise = new Promise(resolve => { releaseCaller1 = resolve; });
       let caller1AtHook;
       const caller1EnteredPromise = new Promise(resolve => { caller1AtHook = resolve; });
+      let caller1Pid;
+      let caller2Pid;
 
-      const caller1Promise = admissionService.admitRefundDecision(makerBearer, {
-        packet: packetA07,
-        actionAuthorizationId: prepA07.actionReceipt.id,
-        makerStepUpReceiptId: stepUpA07,
-        postAdmissionHook: async (client, result) => {
-          caller1AtHook();
-          await caller1HoldPromise;
-        },
-      });
+      const caller1Promise = (async () => {
+        try {
+          return await admissionService.admitRefundDecision(makerBearer, {
+            packet: packetA07,
+            actionAuthorizationId: prepA07.actionReceipt.id,
+            makerStepUpReceiptId: stepUpA07,
+            postAdmissionHook: async (client, result) => {
+              caller1Pid = (await client.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+              caller1AtHook();
+              await caller1HoldPromise;
+            },
+          });
+        } finally {
+          releaseCaller1();
+        }
+      })();
 
       // Wait for Caller 1 to execute admit_cancellation_refund_decision and reach hook
       await caller1EnteredPromise;
 
       // Caller 2 concurrently attempts admission on the same reservation
-      const caller2Promise = admissionService.admitRefundDecision(makerBearer, {
-        packet: packetA07_2,
-        actionAuthorizationId: prepA07_2.actionReceipt.id,
-        makerStepUpReceiptId: stepUpA07_2,
-      });
+      const caller2Promise = (async () => {
+        return await admissionService.admitRefundDecision(makerBearer, {
+          packet: packetA07_2,
+          actionAuthorizationId: prepA07_2.actionReceipt.id,
+          makerStepUpReceiptId: stepUpA07_2,
+        });
+      })();
 
       // Observe in pg_blocking_pids that Caller 2 is blocked on the reservation row lock by Caller 1
       let observedA07Blocker = false;
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 50));
+      for (let i = 0; i < 50; i++) {
+        await new Promise(r => setTimeout(r, 40));
         const blockingRows = (await fixture.owner.query(`
           SELECT pid, pg_blocking_pids(pid) as blockers
           FROM pg_stat_activity
           WHERE cardinality(pg_blocking_pids(pid)) > 0
         `)).rows;
         if (blockingRows.length > 0) {
-          observedA07Blocker = true;
-          break;
+          const matching = blockingRows.find(row => row.blockers.includes(caller1Pid));
+          if (matching) {
+            caller2Pid = matching.pid;
+            observedA07Blocker = true;
+            break;
+          }
         }
       }
       assert.ok(observedA07Blocker, 'Caller 2 must be observed blocked on reservation lock by Caller 1 in pg_blocking_pids');
+      assert.ok(caller1Pid, 'Caller 1 PID must be known');
+      assert.ok(caller2Pid, 'Caller 2 PID must be known and blocked by Caller 1');
 
       // Release Caller 1 to commit
       releaseCaller1();
@@ -1548,6 +1586,104 @@ test('W4-D canonical cancellation refund decision admission verification', async
       )).rows[0].c;
       assert.equal(a07EvidenceCount, 1, 'Exactly one evidence row must exist for reservation after race');
 
+      // Concurrent identical-command race demonstration
+      const resA07Iden = await createPaidReservation(50000);
+      await cancelReservationV1(resA07Iden.reservationId);
+      const cmdA07Iden = randomUUID();
+      const packetA07Iden = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdA07Iden,
+        decisionRef: 'DEC-A07-IDEN-' + randomUUID(),
+        reservationId: resA07Iden.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_A07_IDEN_RACE',
+        organizationId: organizationId,
+      });
+      const envA07Iden = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetA07Iden, randomUUID(), 'Prepare identical A07');
+      const fpA07Iden = admissionService.fingerprint(envA07Iden);
+      const stepUpA07Iden = await performStepUp(makerToken, makerPasskey, fpA07Iden);
+      const prepA07Iden = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetA07Iden,
+        makerStepUpReceiptId: stepUpA07Iden,
+        reason: 'Prepare identical A07',
+      });
+      const chkStepUpA07Iden = await performStepUp(checkerToken, checkerPasskey, prepA07Iden.actionReceipt.commandHash);
+      await admissionService.approveRefundDecisionAdmission(checkerBearer, {
+        authorizationId: prepA07Iden.actionReceipt.id,
+        expectedCommandHash: prepA07Iden.actionReceipt.commandHash,
+        checkerStepUpReceiptId: chkStepUpA07Iden,
+        reason: 'Approved identical A07 by checker',
+      });
+
+      let releaseIden1;
+      const iden1HoldPromise = new Promise(resolve => { releaseIden1 = resolve; });
+      let iden1AtHook;
+      const iden1EnteredPromise = new Promise(resolve => { iden1AtHook = resolve; });
+      let iden1Pid;
+      let iden2Pid;
+
+      const iden1Promise = (async () => {
+        try {
+          return await admissionService.admitRefundDecision(makerBearer, {
+            packet: packetA07Iden,
+            actionAuthorizationId: prepA07Iden.actionReceipt.id,
+            makerStepUpReceiptId: stepUpA07Iden,
+            postAdmissionHook: async (client, result) => {
+              iden1Pid = (await client.query('SELECT pg_backend_pid() as pid')).rows[0].pid;
+              iden1AtHook();
+              await iden1HoldPromise;
+            },
+          });
+        } finally {
+          releaseIden1();
+        }
+      })();
+
+      await iden1EnteredPromise;
+
+      const iden2Promise = (async () => {
+        return await admissionService.admitRefundDecision(makerBearer, {
+          packet: packetA07Iden,
+          actionAuthorizationId: prepA07Iden.actionReceipt.id,
+          makerStepUpReceiptId: stepUpA07Iden,
+        });
+      })();
+
+      let observedIdenBlocker = false;
+      for (let i = 0; i < 50; i++) {
+        await new Promise(r => setTimeout(r, 40));
+        const blockingRows = (await fixture.owner.query(`
+          SELECT pid, pg_blocking_pids(pid) as blockers
+          FROM pg_stat_activity
+          WHERE cardinality(pg_blocking_pids(pid)) > 0
+        `)).rows;
+        if (blockingRows.length > 0) {
+          const matching = blockingRows.find(row => row.blockers.includes(iden1Pid));
+          if (matching) {
+            iden2Pid = matching.pid;
+            observedIdenBlocker = true;
+            break;
+          }
+        }
+      }
+      assert.ok(observedIdenBlocker, 'Concurrent identical caller must be observed blocked on reservation lock by winner');
+      assert.ok(iden1Pid, 'Identical entrant 1 PID must be known');
+      assert.ok(iden2Pid, 'Identical entrant 2 PID must be known and blocked by entrant 1');
+
+      releaseIden1();
+      const idenResult1 = await iden1Promise;
+      const idenResult2 = await iden2Promise;
+
+      assert.equal(idenResult1.replayed, false);
+      assert.equal(idenResult2.replayed, true);
+      assert.equal(idenResult1.evidenceId, idenResult2.evidenceId);
+      assert.equal(idenResult1.admissionId, idenResult2.admissionId);
+
+      const idenAdmissionsCount = (await fixture.owner.query(
+        `SELECT count(*)::int as c FROM canonical_cancellation_refund_decision_admissions WHERE command_id = $1`,
+        [cmdA07Iden]
+      )).rows[0].c;
+      assert.equal(idenAdmissionsCount, 1, 'Exactly one admission row must exist after identical race convergence');
+
       // =======================================================================
       // SCENARIO A08: INJECTED FAILURE ROLLBACK AT AUDIT STAGE
       // Witness consumption and domain insertion in-flight, then rollback.
@@ -1571,6 +1707,22 @@ test('W4-D canonical cancellation refund decision admission verification', async
       const prepA08 = await admissionService.prepareRefundDecisionAdmission(makerBearer, {packet: packetA08, makerStepUpReceiptId: stepUpA08, reason: 'Prepare refund admission A08'});
       const chkStepUpA08 = await performStepUp(checkerToken, checkerPasskey, prepA08.actionReceipt.commandHash);
       await admissionService.approveRefundDecisionAdmission(checkerBearer, {authorizationId: prepA08.actionReceipt.id, expectedCommandHash: prepA08.actionReceipt.commandHash, checkerStepUpReceiptId: chkStepUpA08, reason: 'Approved A08 by checker'});
+
+      // Snapshot scoped state before failure injection
+      const beforeA08 = {
+        action: (await fixture.owner.query(
+          'SELECT id, status, version, consumed_transaction_id FROM internal_action_authorizations WHERE id = $1',
+          [prepA08.actionReceipt.id]
+        )).rows[0],
+        factors: (await fixture.owner.query(
+          'SELECT id, status, consumed_at FROM internal_step_up_challenges WHERE id = ANY($1::uuid[]) ORDER BY id',
+          [[stepUpA08, chkStepUpA08]]
+        )).rows,
+        audit: (await fixture.owner.query(
+          "SELECT sequence, event_type, entity_id FROM internal_iam_events WHERE entity_id = $1 ORDER BY sequence",
+          [resA08.reservationId]
+        )).rows,
+      };
 
       let witnessedInFlightWrite = false;
       let injectedAbortError;
@@ -1600,6 +1752,7 @@ test('W4-D canonical cancellation refund decision admission verification', async
         injectedAbortError = err;
       }
       assert.ok(injectedAbortError, 'Injected audit stage failure must cause rollback');
+      assert.equal(injectedAbortError.message, 'INJECTED_AUDIT_STAGE_FAILURE', 'Error message must strictly match injected cause');
       assert.ok(witnessedInFlightWrite, 'Must witness in-flight domain insertion and consumption before aborting');
 
       // Verify atomic rollback in DB
@@ -1615,12 +1768,25 @@ test('W4-D canonical cancellation refund decision admission verification', async
       )).rows[0].c;
       assert.equal(a08Evidence, 0, 'Decision evidence table must have 0 rows after rollback');
 
-      // Action authorization is restored to APPROVED (not CONSUMED)
-      const a08AuthStatus = (await fixture.owner.query(
-        `SELECT status FROM internal_action_authorizations WHERE id = $1`,
+      // Scoped action authorization, factor, and audit restoration
+      const afterA08Action = (await fixture.owner.query(
+        'SELECT id, status, version, consumed_transaction_id FROM internal_action_authorizations WHERE id = $1',
         [prepA08.actionReceipt.id]
-      )).rows[0].status;
-      assert.equal(a08AuthStatus, 'APPROVED', 'Action authorization must remain APPROVED after rollback');
+      )).rows[0];
+      assert.deepStrictEqual(afterA08Action, beforeA08.action, 'Action authorization must be restored to exact prior state');
+      assert.equal(afterA08Action.status, 'APPROVED', 'Action authorization must remain APPROVED after rollback');
+
+      const afterA08Factors = (await fixture.owner.query(
+        'SELECT id, status, consumed_at FROM internal_step_up_challenges WHERE id = ANY($1::uuid[]) ORDER BY id',
+        [[stepUpA08, chkStepUpA08]]
+      )).rows;
+      assert.deepStrictEqual(afterA08Factors, beforeA08.factors, 'Step-up challenges must remain unconsumed after rollback');
+
+      const afterA08Audit = (await fixture.owner.query(
+        "SELECT sequence, event_type, entity_id FROM internal_iam_events WHERE entity_id = $1 ORDER BY sequence",
+        [resA08.reservationId]
+      )).rows;
+      assert.deepStrictEqual(afterA08Audit, beforeA08.audit, 'Audit log events must remain restored after rollback');
 
       // Re-trying without failure hook succeeds cleanly
       const a08Recovered = await admissionService.admitRefundDecision(makerBearer, {
@@ -1853,6 +2019,28 @@ test('W4-D canonical cancellation refund decision admission verification', async
         reason: 'Approved admission A11 by checker',
       });
 
+      // Snapshot identified rows and counters before admitRefundDecision
+      const resRowBeforeA11 = (await fixture.owner.query(
+        'SELECT * FROM canonical_reservations WHERE id = $1',
+        [resA11.reservationId]
+      )).rows[0];
+      const attemptRowBeforeA11 = (await fixture.owner.query(
+        'SELECT * FROM canonical_payment_attempts WHERE id = $1',
+        [resA11.paymentAttemptId]
+      )).rows[0];
+      const payableRowBeforeA11 = (await fixture.owner.query(
+        'SELECT * FROM canonical_payable_authorities WHERE quote_id = $1',
+        [resA11.quoteId]
+      )).rows[0];
+      const inventoryBeforeA11 = (await fixture.owner.query(
+        `SELECT d.id, d.room_type_id, d.calendar_date, d.total_units, d.held_units, d.booked_units, d.blocked_units
+         FROM inventory_days d
+         JOIN canonical_reservation_nights n ON n.inventory_day_id = d.id
+         WHERE n.reservation_id = $1
+         ORDER BY d.calendar_date`,
+        [resA11.reservationId]
+      )).rows;
+
       // Snapshot all 16 canonical commerce tables immediately before admitRefundDecision
       const snapBeforeA11 = await snapshotCanonicalCommerce();
 
@@ -1867,9 +2055,302 @@ test('W4-D canonical cancellation refund decision admission verification', async
       const snapAfterA11 = await snapshotCanonicalCommerce();
       assert.deepStrictEqual(snapBeforeA11, snapAfterA11, 'Admission must produce zero side-effects on 16 canonical commerce tables');
 
+      // Verify zero mutation on specific identified rows and inventory counters
+      const resRowAfterA11 = (await fixture.owner.query(
+        'SELECT * FROM canonical_reservations WHERE id = $1',
+        [resA11.reservationId]
+      )).rows[0];
+      const attemptRowAfterA11 = (await fixture.owner.query(
+        'SELECT * FROM canonical_payment_attempts WHERE id = $1',
+        [resA11.paymentAttemptId]
+      )).rows[0];
+      const payableRowAfterA11 = (await fixture.owner.query(
+        'SELECT * FROM canonical_payable_authorities WHERE quote_id = $1',
+        [resA11.quoteId]
+      )).rows[0];
+      const inventoryAfterA11 = (await fixture.owner.query(
+        `SELECT d.id, d.room_type_id, d.calendar_date, d.total_units, d.held_units, d.booked_units, d.blocked_units
+         FROM inventory_days d
+         JOIN canonical_reservation_nights n ON n.inventory_day_id = d.id
+         WHERE n.reservation_id = $1
+         ORDER BY d.calendar_date`,
+        [resA11.reservationId]
+      )).rows;
+
+      assert.deepStrictEqual(resRowBeforeA11, resRowAfterA11, 'Zero mutation on canonical_reservations row');
+      assert.deepStrictEqual(attemptRowBeforeA11, attemptRowAfterA11, 'Zero mutation on canonical_payment_attempts row');
+      assert.deepStrictEqual(payableRowBeforeA11, payableRowAfterA11, 'Zero mutation on canonical_payable_authorities row');
+      assert.deepStrictEqual(inventoryBeforeA11, inventoryAfterA11, 'Zero mutation on inventory_days counters');
+
       // Verify zero mutation on bookings table
       const postBookingCounts = (await fixture.owner.query('SELECT count(*)::int as c FROM bookings')).rows[0].c;
       assert.equal(postBookingCounts, 0, 'Zero side-effect mutation on bookings');
+
+      // =======================================================================
+      // REGRESSION CONTROLS: R1, R2, R3 CONSOLIDATED FINDINGS
+      // =======================================================================
+      // R1: Normalized version retention and restricted preparation checks
+      const resR1 = await createPaidReservation(50000);
+      await cancelReservationV1(resR1.reservationId);
+      const cmdR1 = randomUUID();
+      const packetR1 = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdR1,
+        decisionRef: 'DEC-R1-' + randomUUID(),
+        decisionVersion: 1,
+        reservationId: resR1.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_R1_REGRESSION',
+        organizationId: organizationId,
+      });
+      // JSONB version 1.0 normalization check:
+      packetR1.decisionVersion = 1.0;
+      const envR1 = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetR1, randomUUID(), 'Prepare R1');
+      const fpR1 = admissionService.fingerprint(envR1);
+      const stepUpR1 = await performStepUp(makerToken, makerPasskey, fpR1);
+      const prepR1 = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetR1,
+        makerStepUpReceiptId: stepUpR1,
+        reason: 'Prepare R1',
+      });
+      const storedPrepR1 = (await fixture.owner.query(
+        'SELECT packet_payload FROM canonical_cancellation_refund_decision_preparations WHERE action_authorization_id = $1',
+        [prepR1.actionReceipt.id]
+      )).rows[0];
+      assert.equal(storedPrepR1.packet_payload.decisionVersion, 1, 'decisionVersion must normalize to integer 1');
+
+      // Replay preparation with altered packet payload must be rejected
+      const alteredPacketR1 = { ...packetR1, reasonText: 'Tampered reason on replay' };
+      let replayAlteredError;
+      try {
+        await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+          packet: alteredPacketR1,
+          makerStepUpReceiptId: stepUpR1,
+          reason: 'Prepare R1 tampered replay',
+        });
+      } catch (err) {
+        replayAlteredError = err;
+      }
+      if (replayAlteredError) {
+        console.log('REPLAY ALTERED ERROR:', replayAlteredError.message);
+      }
+      assert.ok(replayAlteredError, 'Replaying preparation with altered packet must be rejected');
+      assert.ok(
+        replayAlteredError.message.includes('IDEMPOTENCY_CONFLICT') ||
+        replayAlteredError.message.includes('COMMAND_CONFLICT') ||
+        replayAlteredError.message.includes('COMMAND_FINGERPRINT_MISMATCH') ||
+        replayAlteredError.message.includes('PREPARATION_INPUT_INVALID'),
+        `Must reject altered packet on replay: got ${replayAlteredError?.message}`
+      );
+
+      // Caller cannot substitute different amount in direct SQL call to lower permission scope
+      let callerAmountError;
+      try {
+        await admissionService.executeWithStaffSessionWrite(makerBearer, async client => {
+          await client.query(`
+            SELECT * FROM prepare_cancellation_refund_decision(
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+            )
+          `, [
+            randomUUID(),
+            prepR1.actionReceipt.id,
+            resR1.reservationId,
+            'DEC-R1-SUB',
+            1,
+            1,
+            'INR',
+            'TEST_R1_SUB',
+            'Substituted amount',
+            fpR1,
+            JSON.stringify(packetR1),
+          ]);
+        });
+      } catch (err) {
+        callerAmountError = err;
+      }
+      assert.ok(callerAmountError, 'Direct SQL call with substituted amount must be rejected');
+      assert.ok(
+        callerAmountError.message.includes('PREPARATION_INPUT_INVALID') ||
+        callerAmountError.message.includes('COMMAND_FINGERPRINT_MISMATCH')
+      );
+
+      // Caller cannot substitute different reservationId/subject in direct SQL call
+      let callerSubjectError;
+      try {
+        await admissionService.executeWithStaffSessionWrite(makerBearer, async client => {
+          await client.query(`
+            SELECT * FROM prepare_cancellation_refund_decision(
+              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb
+            )
+          `, [
+            randomUUID(),
+            prepR1.actionReceipt.id,
+            randomUUID(),
+            'DEC-R1-SUB2',
+            1,
+            50000,
+            'INR',
+            'TEST_R1_SUB2',
+            'Substituted subject',
+            fpR1,
+            JSON.stringify(packetR1),
+          ]);
+        });
+      } catch (err) {
+        callerSubjectError = err;
+      }
+      assert.ok(callerSubjectError, 'Direct SQL call with substituted subject must be rejected');
+      assert.ok(
+        callerSubjectError.message.includes('PREPARATION_INPUT_INVALID') ||
+        callerSubjectError.message.includes('COMMAND_FINGERPRINT_MISMATCH')
+      );
+
+      // R2: Canonical integrity - Discrepant quote, resource, or environment rejected before admission
+      for (const field of ['quoteId', 'resource', 'environment']) {
+        const resR2 = await createPaidReservation(50000);
+        await cancelReservationV1(resR2.reservationId);
+        const originalR2 = await admissionService.deriveCanonicalPreview(makerBearer, {
+          admissionCommandId: randomUUID(),
+          decisionRef: 'CANON-' + field + '-' + randomUUID(),
+          reservationId: resR2.reservationId,
+          approvedAmountMinor: '50000',
+          reasonCode: 'TEST_R2_' + field.toUpperCase(),
+          organizationId: organizationId,
+        });
+        const packetR2 = {
+          ...originalR2,
+          [field]: field === 'quoteId' ? randomUUID() : field === 'resource' ? { type: 'FINANCIAL_CONTRACT', id: randomUUID() } : 'STAGING',
+        };
+        let r2Result;
+        let r2Error;
+        try {
+          const reason = 'Prepare exact canonical coupling ' + field;
+          const env = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetR2, randomUUID(), reason);
+          const hash = admissionService.fingerprint(env);
+          const factor = await performStepUp(makerToken, makerPasskey, hash);
+          const prep = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+            packet: packetR2,
+            makerStepUpReceiptId: factor,
+            reason,
+          });
+          const cf = await performStepUp(checkerToken, checkerPasskey, hash);
+          await admissionService.approveRefundDecisionAdmission(checkerBearer, {
+            authorizationId: prep.actionReceipt.id,
+            expectedCommandHash: hash,
+            checkerStepUpReceiptId: cf,
+            reason: 'Checker approves ' + field,
+          });
+          r2Result = await admissionService.admitRefundDecision(makerBearer, {
+            packet: packetR2,
+            actionAuthorizationId: prep.actionReceipt.id,
+            makerStepUpReceiptId: factor,
+          });
+        } catch (err) {
+          r2Error = err;
+        }
+        assert.ok(!r2Result, `Discrepant ${field} must not be admitted`);
+        assert.ok(r2Error, `Discrepant ${field} must be rejected before durable admission`);
+        const durableR2 = (await fixture.owner.query(
+          'SELECT * FROM canonical_cancellation_refund_decision_admissions WHERE command_id = $1',
+          [packetR2.admissionCommandId]
+        )).rows;
+        assert.equal(durableR2.length, 0, `Discrepant ${field} must produce zero durable admissions`);
+      }
+
+      // R3: Appointment expiry during reservation lock wait
+      const resR3 = await createPaidReservation(50000);
+      await cancelReservationV1(resR3.reservationId);
+      const cmdR3 = randomUUID();
+      const packetR3 = await admissionService.deriveCanonicalPreview(makerBearer, {
+        admissionCommandId: cmdR3,
+        decisionRef: 'DEC-R3-' + randomUUID(),
+        reservationId: resR3.reservationId,
+        approvedAmountMinor: '50000',
+        reasonCode: 'TEST_R3_WAIT_EXPIRY',
+        organizationId: organizationId,
+      });
+      const envR3 = admissionService.buildRequestEnvelope(fixture.principal(90, 'STAFF'), packetR3, randomUUID(), 'Prepare R3');
+      const fpR3 = admissionService.fingerprint(envR3);
+      const stepUpR3 = await performStepUp(makerToken, makerPasskey, fpR3);
+      const prepR3 = await admissionService.prepareRefundDecisionAdmission(makerBearer, {
+        packet: packetR3,
+        makerStepUpReceiptId: stepUpR3,
+        reason: 'Prepare R3',
+      });
+
+      // Revoke existing grants for foreign membership to isolate short appointment
+      const existingR3Grants = (await fixture.owner.query(
+        'SELECT g.id FROM internal_membership_grants g LEFT JOIN internal_membership_grant_revocations x ON x.grant_id = g.id WHERE g.membership_id = $1 AND x.grant_id IS NULL',
+        [foreignMembershipId]
+      )).rows;
+      for (const g of existingR3Grants) {
+        await fixture.owner.query("INSERT INTO internal_membership_grant_revocations(grant_id, revoked_by, reason) VALUES($1, 90, 'Revoke for R3 isolation')", [g.id]);
+      }
+      // Insert short 3-second grant
+      const shortGrant = (await fixture.owner.query(`
+        INSERT INTO internal_membership_grants(
+          organization_id, membership_id, role_version_id, scope_type, scope_id, environment,
+          max_amount_minor, grant_hash, granted_by, reason, valid_until
+        ) VALUES (
+          '${organizationId}', '${foreignMembershipId}', '${approverRoleVersionId}', 'FINANCIAL_CONTRACT', '${resR3.reservationId}', 'LOCAL',
+          50000, '${createHash('sha256').update(randomUUID()).digest('hex')}', 90, 'Short 3-second appointment',
+          clock_timestamp() + interval '3 seconds'
+        ) RETURNING id, valid_until
+      `)).rows[0];
+
+      const chkStepUpR3 = await performStepUp(checkerToken, checkerPasskey, prepR3.actionReceipt.commandHash);
+      await admissionService.approveRefundDecisionAdmission(checkerBearer, {
+        authorizationId: prepR3.actionReceipt.id,
+        expectedCommandHash: prepR3.actionReceipt.commandHash,
+        checkerStepUpReceiptId: chkStepUpR3,
+        reason: 'Approved R3 while grant valid',
+      });
+
+      // Hold reservation lock with blocker
+      const r3Blocker = await fixture.owner.connect();
+      try {
+        await r3Blocker.query('BEGIN');
+        await r3Blocker.query('SELECT id FROM canonical_reservations WHERE id = $1 FOR UPDATE', [resR3.reservationId]);
+
+        const r3WorkerPromise = (async () => {
+          try {
+            return await admissionService.admitRefundDecision(makerBearer, {
+              packet: packetR3,
+              actionAuthorizationId: prepR3.actionReceipt.id,
+              makerStepUpReceiptId: stepUpR3,
+            });
+          } catch (err) {
+            return { error: err };
+          }
+        })();
+
+        // Wait until appointment expires
+        let r3Expired = false;
+        const r3Deadline = Date.now() + 6000;
+        while (Date.now() < r3Deadline) {
+          r3Expired = (await fixture.owner.query('SELECT clock_timestamp() > valid_until as expired FROM internal_membership_grants WHERE id = $1', [shortGrant.id])).rows[0].expired;
+          if (r3Expired) break;
+          await new Promise(r => setTimeout(r, 40));
+        }
+        assert.ok(r3Expired, 'Short grant must expire during reservation lock wait');
+
+        // Rollback blocker so waiter can proceed to post-wait appointment check
+        await r3Blocker.query('ROLLBACK');
+        const r3Result = await r3WorkerPromise;
+        assert.ok(r3Result.error, 'Admission must fail due to expired appointment');
+        assert.ok(
+          r3Result.error.message.includes('CHECKER_APPOINTMENT_EXPIRED'),
+          'Must fail with CHECKER_APPOINTMENT_EXPIRED'
+        );
+
+        // Verify zero admissions persisted
+        const r3Admissions = (await fixture.owner.query(
+          'SELECT count(*)::int as c FROM canonical_cancellation_refund_decision_admissions WHERE command_id = $1',
+          [cmdR3]
+        )).rows[0].c;
+        assert.equal(r3Admissions, 0, 'Zero admissions after post-wait appointment expiry');
+      } finally {
+        r3Blocker.release();
+      }
 
       console.log('ALL W4-D STAGE B ACCEPTANCE SCENARIOS (A01 - A11) AND NEGATIVE CONTROLS PASSED CLEANLY');
     } finally {
