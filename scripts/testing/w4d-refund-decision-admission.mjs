@@ -128,6 +128,33 @@ test('W4-D canonical cancellation refund decision admission verification', async
     // 2. SETUP ISOLATED POSTGRES FIXTURE & BASE MIGRATIONS
     // =========================================================================
     const fixture = await createW1AcceptedOfferFixture({serverCompatible: true});
+    const originalOwner = fixture.owner;
+    const originalStaff = fixture.staffPool;
+    await originalOwner.query(`
+      ALTER DATABASE postgres SET statement_timeout = '8000ms';
+      ALTER DATABASE postgres SET lock_timeout = '5000ms';
+      ALTER ROLE harvo_test SET statement_timeout = '8000ms';
+      ALTER ROLE harvo_test SET lock_timeout = '5000ms';
+      ALTER ROLE w1_offer_staff SET statement_timeout = '8000ms';
+      ALTER ROLE w1_offer_staff SET lock_timeout = '5000ms';
+    `);
+    fixture.owner = new pg.Pool({
+      ...originalOwner.options,
+      options: '-c statement_timeout=8000 -c lock_timeout=5000',
+      statement_timeout: 8000,
+      lock_timeout: 5000,
+      query_timeout: 8000,
+      connectionTimeoutMillis: 5000,
+    });
+    fixture.staffPool = new pg.Pool({
+      ...originalOwner.options,
+      user: 'w1_offer_staff',
+      options: '-c statement_timeout=8000 -c lock_timeout=5000',
+      statement_timeout: 8000,
+      lock_timeout: 5000,
+      query_timeout: 8000,
+      connectionTimeoutMillis: 5000,
+    });
     const organizationId = '00000000-0000-4000-8000-000000000001';
 
     let stays;
@@ -143,6 +170,37 @@ test('W4-D canonical cancellation refund decision admission verification', async
     let suiteError = null;
 
     try {
+      // Independently query PostgreSQL for effective statement_timeout and lock_timeout
+      const ownerEffectiveLimits = (await fixture.owner.query(
+        "SELECT current_setting('statement_timeout') as statement_timeout, current_setting('lock_timeout') as lock_timeout"
+      )).rows[0];
+      assert.notEqual(ownerEffectiveLimits.statement_timeout, '0', 'Observer owner connection statement_timeout must be finite');
+      assert.notEqual(ownerEffectiveLimits.lock_timeout, '0', 'Observer owner connection lock_timeout must be finite');
+      assert.equal(fixture.owner.options.query_timeout, 8000, 'Observer owner pool client-side query_timeout must be configured');
+      assert.equal(fixture.owner.options.connectionTimeoutMillis, 5000, 'Observer owner pool connectionTimeoutMillis must be configured');
+
+      // Harmless delayed SQL statement demonstrating timeout cancellation and clean disposal
+      const timeoutDemoClient = await fixture.owner.connect();
+      try {
+        await timeoutDemoClient.query('BEGIN');
+        await timeoutDemoClient.query("SET LOCAL statement_timeout = '150ms'");
+        const timeoutDemoStart = Date.now();
+        let timeoutDemoError = null;
+        try {
+          await timeoutDemoClient.query('SELECT pg_sleep(1.0)');
+        } catch (err) {
+          timeoutDemoError = err;
+        }
+        const timeoutDemoElapsed = Date.now() - timeoutDemoStart;
+        assert.ok(timeoutDemoError, 'Delayed SQL statement must be terminated by statement timeout');
+        assert.equal(timeoutDemoError.code, '57014', 'PostgreSQL error code must be 57014 (query_canceled)');
+        assert.ok(timeoutDemoElapsed < 1000, 'Delayed query must terminate within budget before sleep completes');
+        try {
+          await timeoutDemoClient.query('ROLLBACK');
+        } catch {}
+      } finally {
+        timeoutDemoClient.release(true);
+      }
       await fixture.owner.query(`CREATE TABLE IF NOT EXISTS bookings (
         id SERIAL PRIMARY KEY,
         user_id INT,
@@ -3270,7 +3328,23 @@ test('W4-D canonical cancellation refund decision admission verification', async
           }
         }
       }
+      if (fixture?.staffPool && fixture.staffPool !== originalStaff) {
+        try {
+          await fixture.staffPool.end();
+        } catch (err) {
+          suiteCleanupErrors.push(err);
+        }
+      }
+      if (fixture?.owner && fixture.owner !== originalOwner) {
+        try {
+          await fixture.owner.end();
+        } catch (err) {
+          suiteCleanupErrors.push(err);
+        }
+      }
       if (fixture) {
+        fixture.owner = originalOwner;
+        fixture.staffPool = originalStaff;
         try {
           await fixture.close();
         } catch (err) {
