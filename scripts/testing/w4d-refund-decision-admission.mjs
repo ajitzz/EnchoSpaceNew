@@ -130,31 +130,6 @@ test('W4-D canonical cancellation refund decision admission verification', async
     const fixture = await createW1AcceptedOfferFixture({serverCompatible: true});
     const originalOwner = fixture.owner;
     const originalStaff = fixture.staffPool;
-    await originalOwner.query(`
-      ALTER DATABASE postgres SET statement_timeout = '8000ms';
-      ALTER DATABASE postgres SET lock_timeout = '5000ms';
-      ALTER ROLE harvo_test SET statement_timeout = '8000ms';
-      ALTER ROLE harvo_test SET lock_timeout = '5000ms';
-      ALTER ROLE w1_offer_staff SET statement_timeout = '8000ms';
-      ALTER ROLE w1_offer_staff SET lock_timeout = '5000ms';
-    `);
-    fixture.owner = new pg.Pool({
-      ...originalOwner.options,
-      options: '-c statement_timeout=8000 -c lock_timeout=5000',
-      statement_timeout: 8000,
-      lock_timeout: 5000,
-      query_timeout: 8000,
-      connectionTimeoutMillis: 5000,
-    });
-    fixture.staffPool = new pg.Pool({
-      ...originalOwner.options,
-      user: 'w1_offer_staff',
-      options: '-c statement_timeout=8000 -c lock_timeout=5000',
-      statement_timeout: 8000,
-      lock_timeout: 5000,
-      query_timeout: 8000,
-      connectionTimeoutMillis: 5000,
-    });
     const organizationId = '00000000-0000-4000-8000-000000000001';
 
     let stays;
@@ -170,6 +145,32 @@ test('W4-D canonical cancellation refund decision admission verification', async
     let suiteError = null;
 
     try {
+      await originalOwner.query(`
+        ALTER DATABASE postgres SET statement_timeout = '8000ms';
+        ALTER DATABASE postgres SET lock_timeout = '5000ms';
+        ALTER ROLE harvo_test SET statement_timeout = '8000ms';
+        ALTER ROLE harvo_test SET lock_timeout = '5000ms';
+        ALTER ROLE w1_offer_staff SET statement_timeout = '8000ms';
+        ALTER ROLE w1_offer_staff SET lock_timeout = '5000ms';
+      `);
+      fixture.owner = new pg.Pool({
+        ...originalOwner.options,
+        options: '-c statement_timeout=8000 -c lock_timeout=5000',
+        statement_timeout: 8000,
+        lock_timeout: 5000,
+        query_timeout: 8000,
+        connectionTimeoutMillis: 5000,
+      });
+      fixture.staffPool = new pg.Pool({
+        ...originalOwner.options,
+        user: 'w1_offer_staff',
+        options: '-c statement_timeout=8000 -c lock_timeout=5000',
+        statement_timeout: 8000,
+        lock_timeout: 5000,
+        query_timeout: 8000,
+        connectionTimeoutMillis: 5000,
+      });
+
       // Independently query PostgreSQL for effective statement_timeout and lock_timeout
       const ownerEffectiveLimits = (await fixture.owner.query(
         "SELECT current_setting('statement_timeout') as statement_timeout, current_setting('lock_timeout') as lock_timeout"
