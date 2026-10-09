@@ -26,7 +26,7 @@
     "src/migrations/062_canonical_cancellation_refund_approval_admission.sql": "dc122d6be813d0ee0fa210b8a96f149e04afa738efe04a24c3f93bbf34a5f30f",
     "src/services/canonicalRefundDecisionAdmissionService.ts": "8aa347e85a0a3bf423e17d906a004dd6766f255a4095411ca913d1ad7cdc8c64",
     "src/server/deployment/iamReadiness.ts": "45fc4524895719a36f604142fe177d41bebaba97c5d66491e2c1d56f02096a18",
-    "scripts/testing/w4d-refund-decision-admission.mjs": "c09515476a47199e0073e6b51f70b014ab027122048d7a1856406a691d5c0592",
+    "scripts/testing/w4d-refund-decision-admission.mjs": "a605ed47a43b36d3761ab8745888befa81d637b23aabc2c6923aa4674251964d",
     "src/shared/iam/contracts.ts": "23a2fbe1e1a5ee2fe0f61cb3f10140936ed91808e4733a5864e80b0cd6b4c392"
   },
   "migration": {
@@ -187,7 +187,7 @@
   ],
   "focusedTestResults": {
     "script": "scripts/testing/w4d-refund-decision-admission.mjs",
-    "sha256": "c09515476a47199e0073e6b51f70b014ab027122048d7a1856406a691d5c0592",
+    "sha256": "a605ed47a43b36d3761ab8745888befa81d637b23aabc2c6923aa4674251964d",
     "testRunner": "node --import tsx --test scripts/testing/w4d-refund-decision-admission.mjs",
     "status": "PASS",
     "passedTests": 1,
@@ -236,7 +236,7 @@
       "A03": {
         "title": "Session & Step-Up negative controls",
         "result": "PASS",
-        "evidence": "Preparation or approval without active staff session rejected with STAFF_SESSION_REQUIRED; missing WebAuthn factor rejected with STEP_UP_REQUIRED; unknown step-up receipt ID rejected with generic error (separately executed frozen controls test missing, expired, and wrong-command factors)"
+        "evidence": "Preparation, approval, or admission without active staff session rejected with STAFF_SESSION_REQUIRED; unknown step-up receipt UUID produces rejection on prepare; missing, expired, and wrong-command factor tests are attributed only to independent reviewer controls"
       },
       "A04": {
         "title": "Material packet tampering after approval rejected",
@@ -246,7 +246,7 @@
       "A05": {
         "title": "Canonical domain exclusions enforced at preparation preview",
         "result": "PASS",
-        "evidence": "Active uncancelled reservation rejected with RESERVATION_NOT_CANCELLED; sealed V2 reservation rejected with SEALED_V2_REVISION_EXCLUDED; approved amount exceeding captured ceiling rejected with AMOUNT_EXCEEDS_CAPTURED_CEILING; non-positive approved amount rejected at preview/schema boundary; non-INR currency rejected with CURRENCY_NOT_SUPPORTED in preview/schema constraints"
+        "evidence": "Active uncancelled reservation rejected with RESERVATION_NOT_CANCELLED; approved amount exceeding captured ceiling rejected with APPROVED_AMOUNT_INVALID; sealed V2 reservation rejected with SEALED_V2_REVISION_EXCLUDED; nonpositive amounts and non-INR currency are schema/source boundaries not executed in focused test"
       },
       "A06": {
         "title": "Guarded Replay and cross-maker execution denial",
@@ -299,7 +299,7 @@
     {
       "invariant": "Step-up WebAuthn passkey assertion required for both Maker and Checker",
       "attribution": "TEST",
-      "evidence": "Internal workforce step-up flow performs positive begin/complete ceremonies recorded in internal_workforce_passkey_ceremonies with monotonic signature counters (verified in ADM-04); unknown step-up receipt rejected in focused test A03; missing, expired, and wrong-command controls exercised in separately identified frozen controls"
+      "evidence": "Internal workforce step-up flow performs positive begin/complete ceremonies recorded in internal_workforce_passkey_ceremonies with monotonic signature counters (verified in ADM-04); unknown step-up receipt UUID produces rejection on prepare in focused test A03; missing, expired, and wrong-command factor tests attributed only to independent reviewer controls"
     },
     {
       "invariant": "Permission accommodation.refund_decision.admit required for approval and execution",
@@ -314,7 +314,7 @@
     {
       "invariant": "Natural canonical domain exclusions: uncancelled, sealed V2, excess amount, non-INR",
       "attribution": "TEST",
-      "evidence": "CanonicalRefundDecisionAdmissionService.deriveCanonicalPreview validates reservation state, cancellation release version, and captured ceiling (verified in focused test A05); non-INR currency and non-positive amounts enforced at preview and schema validation boundaries"
+      "evidence": "CanonicalRefundDecisionAdmissionService.deriveCanonicalPreview validates reservation state (RESERVATION_NOT_CANCELLED), sealed V2 revision (SEALED_V2_REVISION_EXCLUDED), and excess approved amount (APPROVED_AMOUNT_INVALID) in focused test A05; nonpositive amounts and non-INR currency are schema/source boundaries not executed in focused test"
     },
     {
       "invariant": "Guarded idempotent replay returns existing admitted record with replayed = true",
