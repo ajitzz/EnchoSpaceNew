@@ -1,0 +1,267 @@
+{
+  "schemaVersion": "ENCHO_W4_Q1_LOCAL_WORKER_EVIDENCE_V1",
+  "classification": "LOCAL_WORKER_EVIDENCE_NOT_INDEPENDENT_ACCEPTANCE",
+  "recordedAtUtc": "2026-10-10T06:28:50.106912+00:00",
+  "productRepository": "ajitzz/EnchoSpaceNew",
+  "baseCommit": "26e279c19adbcc5554ed5a8cbf030e532f2cd113",
+  "workerBranch": "worker/antigravity/w4-q1-own-account-trip-projection",
+  "planEvidenceCommit": "ccc162e3512ba7165d58394696307e2ead6ee704",
+  "subjectIdentity": "The Git commit containing this receipt is the worker subject; no circular embedded commit or self-hash.",
+  "designFreeze": {
+    "entrypoint": "CanonicalTripService.list/detail in src/services/canonicalTripService.ts; internal only, no mounted caller.",
+    "ownership": "Only ENCHO_DIRECT with immutable holder_principal=user:<positive INT account ID>. Anonymous/session, external and null identities excluded. No Host/Admin override or ownership transfer.",
+    "authentication": "Constructor-injected TripAuthenticationPort resolves a trusted context and returns a signed read proof. PostgreSQL verifies it independently of request IDs, role flags or GUC. Only an explicitly trusted local fixture adapter exists; no production consumer authentication/revocation is claimed.",
+    "proofProtocol": "HMAC-SHA256/RFC2104, fixed 32-byte key; UTF-8 q1-trip-read-v1 LF keyId LF user:accountId LF integer expiry epoch seconds LF canonical PostgreSQL UUID text nonce. Maximum 300-second lifetime. Private keyring is empty in migration; no production key/configuration is introduced.",
+    "readCapability": "063 adds encho_trip_projection NOLOGIN/NOINHERIT SELECT-only definer, private helpers/keyring, two allowlisted public-schema executable functions for separately provisioned encho_trip_reader LOGIN/NOINHERIT. No runtime receives raw tables, effective views or 057 helpers. Roles have no memberships, superuser/BYPASSRLS, protected ownership, schema/database CREATE, raw DML or other public SECURITY DEFINER execution authority.",
+    "readiness": "Every call verifies actual attributes/ACLs, ownership, function settings, required relations/forced RLS and exact accepted 052-062 history fingerprints. A missing authority fails even for an empty account. No name-only or owner fallback.",
+    "snapshot": "One held connection, READ ONLY REPEATABLE READ; stable routines, controlled pg_catalog/pg_temp search_path, schema-qualified relations, parameterized queries, no writer locks or principal GUC. COMMIT/ROLLBACK cleanup; socket errors observed while leased and broken clients discarded.",
+    "dto": "Strict ENCHO_TRIP_V1; root inventory commitment, effective V1 or sealed successor snapshot, original paid composition, current original quote/hold payment evidence, accepted lifecycle view and exact release, qualified high-level refund evidence. No raw payload, approval packet, credential, tax total or mutable current listing price.",
+    "statusHonesty": "Matched capture alone is not paid composition. Original paid bridge remains historical truth through later reconciliation. V2 financial clearance is NOT_ESTABLISHED. Refund authorization is RECORDED_ONLY; execution/settlement NOT_ESTABLISHED, balance UNSUPPORTED, external history UNKNOWN. Check-in/fulfillment/dispute authority UNSUPPORTED.",
+    "bounds": {
+      "maximumPageSize": 50,
+      "lookaheadRows": 1,
+      "maximumAllocationNights": 366,
+      "statementTimeoutMs": 3000,
+      "lockTimeoutMs": 1000,
+      "cursorLifetimeSeconds": 900
+    },
+    "cursor": "Separate server HMAC key, exact UTC microsecond timestamp plus UUID keyset, bound to account and expiry. No unsigned/cross-account/tampered cursor adoption."
+  },
+  "sourceSha256": {
+    "src/migrations/063_internal_own_account_trip_projection.sql": "c055f81844cafc686c66f1ad8c6a58ccd73a4e0fe76abff70ca473c7f136d215",
+    "src/services/canonicalTripContract.ts": "c7df0eb6f3bb4b2856bb193dc3fc93c583b125ab6f44ab74a3325c5f3d45effc",
+    "src/services/canonicalTripService.ts": "7692f76a50a5dd5b26e4500a9ec3846c0074fc2d3be0b6356fbff3fe4edcd21e",
+    "src/test/harvo/helpers/q1TripFixture.ts": "6e3240cc0a583215618fd4a5c37cf2aee7a060bfd9ed1fd95c023433d38f3204",
+    "src/test/harvo/q1_canonical_trip_pg.test.ts": "668fb87b13fcd90542ad9699c99d8ce8b5c838d0cb9692404e41e5b59c28fb20"
+  },
+  "protectedMigrations": {
+    "src/migrations/052_canonical_reservation_hold_finalization.sql": {
+      "sha256": "7eaf74e71b15c6e1f6a0c6faf39edaeb7f2e0cebf76aa53ad9440ce684974102",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/053_canonical_payment_evidence_and_reconciliation.sql": {
+      "sha256": "2f0c7dcd03509ae26fb558f80a3f75d1ab466e1d16f14530434d16086053836a",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/054_canonical_payment_reservation_composition.sql": {
+      "sha256": "a44be4e15d45ceb7a641a68d7bbc13a922a3e9b718bbfef0ca177d71025a797d",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/055_canonical_reservation_lifecycle_authority.sql": {
+      "sha256": "ca2a0a338e54182ad0a779247ffc9504413212f2e0fe28b670fa16b4d24a47b2",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/056_canonical_cancellation_completion_authority.sql": {
+      "sha256": "5c6c2fee6af4c45461a46e931b771ea0fc8b7c5e4e249be19cb8111ae9a01168",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/057_canonical_reservation_revision_model.sql": {
+      "sha256": "a68802bf354cbf0069d42b282d49a8cb796f537acfafb09d837335d7f448624a",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/058_version_aware_cancellation_release.sql": {
+      "sha256": "f0d778624a369c5e58ecaebb2027932c7e53f54fbfa28902abfeeb9b5f73fe15",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/059_canonical_reservation_modification_request.sql": {
+      "sha256": "b0f928e141e104da23ada5eca745ae508a537a9d44f6dacdde3eb037e4a9df46",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/060_canonical_payment_composition_lock_order_hardening.sql": {
+      "sha256": "0823b6d434ebad6a6bce11196671a6ad8ff0a567049ca001fc7f4c3e9708548c",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/061_canonical_cancellation_refund_authorization.sql": {
+      "sha256": "bd33f749f07f27bd4f5ff40d7cffe8bd559fac0ca8dccca3da12bb495598d1c9",
+      "byteIdenticalToBase": true
+    },
+    "src/migrations/062_canonical_cancellation_refund_approval_admission.sql": {
+      "sha256": "dc122d6be813d0ee0fa210b8a96f149e04afa738efe04a24c3f93bbf34a5f30f",
+      "byteIdenticalToBase": true
+    }
+  },
+  "validation": {
+    "runtime": "Node v24.12.0, existing dependencies; PATH selected that existing runtime. Machine-specific absolute paths omitted; argv below are exact.",
+    "database": "PostgreSQL 18 native disposable Unix-socket-only clusters, private socket directories; no DATABASE_URL or shared target read. harvo_test owner bootstraps fixtures; actual restricted reader/worker logins prove runtime behavior. Partial predecessor fixture, not a full deployment/migrator-role rehearsal.",
+    "finalCommands": [
+      {
+        "argv": [
+          "npm",
+          "test",
+          "--",
+          "src/test/harvo/q1_canonical_trip_pg.test.ts",
+          "src/test/harvo/w3_canonical_reservation_pg.test.ts",
+          "src/test/harvo/w3b_canonical_payment_pg.test.ts",
+          "src/test/harvo/w3b_canonical_composition_pg.test.ts",
+          "src/test/harvo/w4a_canonical_lifecycle_pg.test.ts",
+          "src/test/harvo/w4b_canonical_cancellation_pg.test.ts",
+          "src/test/harvo/cr1_migration_runner.test.ts",
+          "--project=marketing",
+          "--silent"
+        ],
+        "exitCode": 0,
+        "testFilesPassed": 7,
+        "testsPassed": 236,
+        "testsFailed": 0,
+        "testsSkipped": 0,
+        "unhandledErrors": 0
+      },
+      {
+        "argv": [
+          "npm",
+          "run",
+          "typecheck"
+        ],
+        "exitCode": 0
+      },
+      {
+        "argv": [
+          "node",
+          "node_modules/typescript/bin/tsc",
+          "--noEmit",
+          "--strict",
+          "--target",
+          "ES2022",
+          "--module",
+          "ESNext",
+          "--moduleResolution",
+          "bundler",
+          "--esModuleInterop",
+          "--skipLibCheck",
+          "src/services/canonicalTripContract.ts",
+          "src/services/canonicalTripService.ts"
+        ],
+        "exitCode": 0
+      },
+      {
+        "argv": [
+          "node",
+          "node_modules/eslint/bin/eslint.js",
+          "src/services/canonicalTripContract.ts",
+          "src/services/canonicalTripService.ts",
+          "src/test/harvo/q1_canonical_trip_pg.test.ts",
+          "src/test/harvo/helpers/q1TripFixture.ts"
+        ],
+        "exitCode": 0
+      },
+      {
+        "argv": [
+          "npm",
+          "run",
+          "build:offline"
+        ],
+        "exitCode": 0,
+        "credentialFree": true,
+        "publicArtifactsVerified": 45,
+        "packagedSQLByteParity": true
+      },
+      {
+        "argv": [
+          "git",
+          "diff",
+          "--check"
+        ],
+        "exitCode": 0
+      }
+    ],
+    "countsBySuite": {
+      "src/test/harvo/q1_canonical_trip_pg.test.ts": 33,
+      "src/test/harvo/w3_canonical_reservation_pg.test.ts": 13,
+      "src/test/harvo/w3b_canonical_payment_pg.test.ts": 38,
+      "src/test/harvo/w3b_canonical_composition_pg.test.ts": 56,
+      "src/test/harvo/w4a_canonical_lifecycle_pg.test.ts": 34,
+      "src/test/harvo/w4b_canonical_cancellation_pg.test.ts": 52,
+      "src/test/harvo/cr1_migration_runner.test.ts": 10
+    },
+    "q1Coverage": [
+      "Own/foreign/nonexistent, Host/Admin no override, valid session/external/null exclusion; forged context/body/MAC/nonce/key/audience and expired/disabled proof denial; raw GUC/helper/key/issuer denial.",
+      "Inventory-only, matched capture without composition, no reservation from capture, valid paid bridge and immutable paid history through later conflict/reconciliation; authorization-only refund projection and data minimization.",
+      "V1, unsealed V2/V3 containment, sealed V2 room/allocation and unsupported financial clearance, invalid room/offer allocation/seal denial; controlled concurrent sealing after RR snapshot acquisition.",
+      "ACTIVE/request/CANCELLED distinctions, exact immutable V1 and version-aware V2 release, contradictory source fail-closed through actual restricted service; owner-only synthetic corruption restored and isolated.",
+      "PUBLIC/12 unintended runtimes, no raw reads/DML/CREATE/issuer/SET ROLE; broad membership, column privilege, BYPASSRLS, schema CREATE, noncanonical-named issuer EXECUTE and bad definer path drift rejected.",
+      "Missing source authority/forced RLS/history drift denied for empty account; one-connection two-account commits/rollbacks, actual lock timeout and backend termination; simulated COMMIT/ROLLBACK transport loss; no leaked principal/role/transaction state.",
+      "Bounded stable keyset with equal timestamp UUID ties, account/cursor tamper/expiry denial, strict DTO, immutable booked prices and no domain mutation; SQL/Node HMAC interoperability plus RFC4231 vector."
+    ],
+    "firstFailuresAndRepairs": [
+      {
+        "check": "Initial Q1 run",
+        "exitCode": 1,
+        "passed": 1,
+        "failed": 1,
+        "skipped": 24,
+        "suiteSetupFailed": 1,
+        "cause": "New SQL record variable authorization parsed as keyword; renamed. Main Q1 cases did not run."
+      },
+      {
+        "check": "Initial typecheck",
+        "exitCode": 2,
+        "cause": "Two test-spy Pool.connect overload typing errors; typed implementation fixed."
+      },
+      {
+        "check": "Next Q1 run",
+        "exitCode": 1,
+        "passed": 24,
+        "failed": 2,
+        "skipped": 0,
+        "cause": "Fixture used wrong accepted refund issuer UUID argument order/types; corrected from existing 061 signature. Focused rerun: 2 pass/24 deselected."
+      },
+      {
+        "check": "Expanded 32-case Q1 run",
+        "exitCode": 1,
+        "passed": 32,
+        "unhandledErrors": 1,
+        "cause": "Actual backend termination emitted separate unhandled pg client error. Service now observes leased client errors and discards broken connection. Recovery rerun: 4 pass/28 deselected, zero errors."
+      },
+      {
+        "check": "Scoped lint during expansion",
+        "exitCode": 1,
+        "cause": "Explicit throw in test fixture finally could replace original failure. Cleanup now preserves/aggregates errors and throws outside finally."
+      },
+      {
+        "check": "Repackage after SQL changed",
+        "exitCode": 1,
+        "cause": "MIGRATION_ASSET_EXISTING_MISMATCH correctly rejected stale generated SQL. Removed only worker-created ignored build/dist, rebuilt cleanly; final offline build and byte parity pass."
+      }
+    ],
+    "finalWarnings": [
+      "Existing imported workforce crypto fixture emits Web Crypto supports/ML-DSA experimental warnings.",
+      "Offline Vite build warns about existing chunks over 500 kB; no unrelated UI/chunk changes.",
+      "Static import boundary verifier excludes computed runtime loading."
+    ],
+    "cleanup": "All fixture pools/clusters close via finally/afterAll. Final process scan: zero harvo-pg disposable postmasters. Generated build/dist are ignored, not committed.",
+    "notRun": [
+      "W4-D2 independent/repair suites",
+      "Full unrelated historical suite",
+      "Live, shared, staging or production database/provider/deployment operations"
+    ]
+  },
+  "knownLimitations": [
+    "Production authentication adapter, R1-03 revocation, real reader/definer provisioning, protected key/cursor configuration and deployed grants/schema/TLS require separate acceptance before public adoption. Short-lived read proofs do not certify production revocation.",
+    "Fresh schema compatibility and restricted runtime roles are locally proved in targeted predecessors, not a full production schema/migration-role rehearsal. Privileged schema/key administrators remain trusted; no malicious-superuser defense is claimed.",
+    "Original paid composition is accepted database evidence, not live provider/legal/production certification. No complete external payment/refund history or remaining balance is established.",
+    "V2 fixtures prove sealed structural snapshots/C2 release, not a physical modification writer or financial clearance. Current original quote/hold payment condition is not successor financial authority.",
+    "No supported fulfillment, review, financial document or dispute producer is added. Oversized stays above the explicit allocation bound fail closed."
+  ],
+  "rollbackContainment": "No runtime/public caller is mounted and no external migration was applied. Do not integrate this subject if review fails. For a later authorized rollout, disable its trusted auth/key configuration or revoke only the new reader execute grants; preserve all historical/canonical data and accepted migrations. No destructive down migration is provided.",
+  "scopeCompliance": {
+    "publicRouteOrUI": false,
+    "anonymousTransfer": false,
+    "financialWriterAdded": false,
+    "marketingW5W6": false,
+    "liveDatabaseOrProvider": false,
+    "canonicalOrMainChanged": false,
+    "D2AcceptanceReopened": false,
+    "privateEvidencePublished": false,
+    "pullRequestCreated": false,
+    "agentDispatched": false
+  },
+  "acceptance": {
+    "locallyImplementedAndVerified": true,
+    "independentlyAccepted": false,
+    "canonicallyIntegrated": false,
+    "stagingVerified": false,
+    "externallyApproved": false,
+    "P2OrW4ExitClaimed": false
+  },
+  "disposition": "Q1_READY_FOR_INDEPENDENT_CODE_REVIEW"
+}
